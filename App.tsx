@@ -2740,39 +2740,39 @@ ${header}
                 </button>
             </div>
             <div className="flex items-center gap-2">
-                 <div className="hidden md:flex items-center gap-2">
+                 <div className="flex items-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide">
                      <button
                         onClick={undo}
                         disabled={!canUndo}
-                        className="p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
+                        className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                         title="Undo (Ctrl+Z)"
                     >
-                        <ArrowUturnLeftIcon className="h-5 w-5" />
+                        <ArrowUturnLeftIcon className="h-4 w-4 md:h-5 md:w-5" />
                     </button>
                     <button
                         onClick={redo}
                         disabled={!canRedo}
-                        className="p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
+                        className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                         title="Redo (Ctrl+Y)"
                     >
-                        <ArrowUturnRightIcon className="h-5 w-5" />
+                        <ArrowUturnRightIcon className="h-4 w-4 md:h-5 md:w-5" />
                     </button>
-                    <button onClick={handleSetFolder} className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors" title="Set Save Folder">
-                        <FolderOpenIcon className="h-4 w-4" />
-                        Set Folder
+                    <button onClick={handleSetFolder} className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0" title="Set Save Folder">
+                        <FolderOpenIcon className="h-3 w-3 md:h-4 md:w-4" />
+                        <span className="hidden sm:inline">Set Folder</span>
                     </button>
-                    <button onClick={handleLoadPipeline} className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors" title="Load Pipeline">
-                        <FolderOpenIcon className="h-4 w-4" />
-                        Load
+                    <button onClick={handleLoadPipeline} className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0" title="Load Pipeline">
+                        <FolderOpenIcon className="h-3 w-3 md:h-4 md:w-4" />
+                        <span className="hidden sm:inline">Load</span>
                     </button>
-                    <div className="relative" ref={sampleMenuRef}>
+                    <div className="relative flex-shrink-0" ref={sampleMenuRef}>
                         <button 
                             onClick={() => setIsSampleMenuOpen(!isSampleMenuOpen)} 
-                            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors" 
+                            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors" 
                             title="Load Sample Model"
                         >
-                            <SparklesIcon className="h-4 w-4" />
-                            Samples
+                            <SparklesIcon className="h-3 w-3 md:h-4 md:w-4" />
+                            <span className="hidden sm:inline">Samples</span>
                         </button>
                         {isSampleMenuOpen && (
                             <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-50 min-w-[200px]">
@@ -2791,11 +2791,11 @@ ${header}
                      <button 
                         onClick={handleSavePipeline} 
                         disabled={!isDirty}
-                        className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md font-semibold transition-colors ${!isDirty ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-gray-700 hover:bg-gray-600'}`} 
+                        className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs rounded-md font-semibold transition-colors flex-shrink-0 ${!isDirty ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-gray-700 hover:bg-gray-600'}`} 
                         title="Save Pipeline"
                     >
-                        {saveButtonText === 'Save' ? <CodeBracketIcon className="h-4 w-4" /> : <CheckIcon className="h-4 w-4" />}
-                        {saveButtonText}
+                        {saveButtonText === 'Save' ? <CodeBracketIcon className="h-3 w-3 md:h-4 md:w-4" /> : <CheckIcon className="h-3 w-3 md:h-4 md:w-4" />}
+                        <span className="hidden sm:inline">{saveButtonText}</span>
                     </button>
                 </div>
                  <button onClick={handleRunAll} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-500 rounded-md font-bold text-white transition-colors">
