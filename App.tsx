@@ -86,7 +86,9 @@ const App: React.FC = () => {
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [aiPlan, setAiPlan] = useState<string | null>(null);
   const [isSampleMenuOpen, setIsSampleMenuOpen] = useState(false);
+  const [sampleMenuPosition, setSampleMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const sampleMenuRef = useRef<HTMLDivElement>(null);
+  const sampleButtonRef = useRef<HTMLButtonElement>(null);
 
   const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(false);
   const [isRightPanelVisible, setIsRightPanelVisible] = useState(false);
@@ -797,10 +799,24 @@ ${header}
     setTimeout(() => handleFitToView(), 100);
   }, [resetModules, addLog, handleFitToView]);
 
+  // Update sample menu position when opened
+  useEffect(() => {
+    if (isSampleMenuOpen && sampleButtonRef.current) {
+      const rect = sampleButtonRef.current.getBoundingClientRect();
+      setSampleMenuPosition({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX
+      });
+    } else {
+      setSampleMenuPosition(null);
+    }
+  }, [isSampleMenuOpen]);
+
   // Close sample menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (sampleMenuRef.current && !sampleMenuRef.current.contains(event.target as Node)) {
+      if (sampleMenuRef.current && !sampleMenuRef.current.contains(event.target as Node) &&
+          sampleButtonRef.current && !sampleButtonRef.current.contains(event.target as Node)) {
         setIsSampleMenuOpen(false);
       }
     };
@@ -2763,8 +2779,9 @@ ${header}
                     <button onClick={() => setIsLeftPanelVisible(v => !v)} className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0" aria-label="Toggle modules panel" title="Toggle Modules Panel">
                         <Bars3Icon className="h-4 w-4 md:h-5 md:w-5"/>
                     </button>
-                    <div className="relative flex-shrink-0" ref={sampleMenuRef}>
+                    <div className="flex-shrink-0">
                         <button 
+                            ref={sampleButtonRef}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setIsSampleMenuOpen(!isSampleMenuOpen);
@@ -2775,27 +2792,34 @@ ${header}
                             <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
                             <span className="whitespace-nowrap">Samples</span>
                         </button>
-                        {isSampleMenuOpen && (
-                            <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-[9999] min-w-[200px] max-h-[300px] overflow-y-auto" style={{ position: 'absolute' }}>
-                                {SAMPLE_MODELS.length > 0 ? (
-                                    SAMPLE_MODELS.map((sample: any) => (
-                                        <button
-                                            key={sample.name}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleLoadSample(sample.name);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 first:rounded-t-md last:rounded-b-md transition-colors"
-                                        >
-                                            {sample.name}
-                                        </button>
-                                    ))
-                                ) : (
-                                    <div className="px-4 py-2 text-sm text-gray-500">No samples available</div>
-                                )}
-                            </div>
-                        )}
                     </div>
+                    {isSampleMenuOpen && sampleMenuPosition && (
+                        <div 
+                            ref={sampleMenuRef}
+                            className="fixed bg-gray-800 border border-gray-700 rounded-md shadow-lg z-[9999] min-w-[200px] max-h-[300px] overflow-y-auto"
+                            style={{
+                                top: `${sampleMenuPosition.top}px`,
+                                left: `${sampleMenuPosition.left}px`
+                            }}
+                        >
+                            {SAMPLE_MODELS.length > 0 ? (
+                                SAMPLE_MODELS.map((sample: any) => (
+                                    <button
+                                        key={sample.name}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleLoadSample(sample.name);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 first:rounded-t-md last:rounded-b-md transition-colors"
+                                    >
+                                        {sample.name}
+                                    </button>
+                                ))
+                            ) : (
+                                <div className="px-4 py-2 text-sm text-gray-500">No samples available</div>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-1 md:gap-2 ml-auto">
                     <button
