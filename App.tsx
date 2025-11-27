@@ -2780,34 +2780,36 @@ ${header}
                 </button>
             </div>
             
-            {/* 세 번째 줄: AI 버튼 2개 및 Run All, 햄버거, 설정 버튼 (가로로, 작은 크기) */}
-            <div className="flex items-center justify-end gap-1 md:gap-2 w-full mt-1 overflow-x-auto scrollbar-hide">
-                <button
-                    onClick={() => setIsGoalModalOpen(true)}
-                    className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition-colors flex-shrink-0"
-                    title="Generate pipeline from a goal"
-                >
-                    <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
-                    <span className="whitespace-nowrap">AI로 파이프라인 생성하기</span>
-                </button>
-                <button
-                    onClick={() => setIsDataModalOpen(true)}
-                    className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-indigo-600 hover:bg-indigo-700 rounded-md font-semibold transition-colors flex-shrink-0"
-                    title="Generate pipeline from data"
-                >
-                    <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
-                    <span className="whitespace-nowrap">AI로 데이터 분석 실행하기</span>
-                </button>
-                <button onClick={handleRunAll} className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[7px] md:text-xs bg-green-600 hover:bg-green-500 rounded-md font-bold text-white transition-colors flex-shrink-0">
-                    <PlayIcon className="h-2.5 w-2.5 md:h-3.5 md:w-3.5" />
-                    <span className="hidden sm:inline">Run All</span>
-                </button>
+            {/* 세 번째 줄: 햄버거 버튼(왼쪽) 및 AI 버튼 2개, Run All, 설정 버튼(오른쪽) */}
+            <div className="flex items-center justify-between gap-1 md:gap-2 w-full mt-1 overflow-x-auto scrollbar-hide">
                 <button onClick={() => setIsLeftPanelVisible(v => !v)} className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0" aria-label="Toggle modules panel" title="Toggle Modules Panel">
                     <Bars3Icon className="h-4 w-4 md:h-5 md:w-5"/>
                 </button>
-                <button onClick={handleToggleRightPanel} className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0" title="Toggle Properties Panel">
-                    <CogIcon className="h-4 w-4 md:h-5 md:w-5" />
-                </button>
+                <div className="flex items-center gap-1 md:gap-2 ml-auto">
+                    <button
+                        onClick={() => setIsGoalModalOpen(true)}
+                        className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition-colors flex-shrink-0"
+                        title="Generate pipeline from a goal"
+                    >
+                        <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
+                        <span className="whitespace-nowrap">AI로 파이프라인 생성하기</span>
+                    </button>
+                    <button
+                        onClick={() => setIsDataModalOpen(true)}
+                        className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-indigo-600 hover:bg-indigo-700 rounded-md font-semibold transition-colors flex-shrink-0"
+                        title="Generate pipeline from data"
+                    >
+                        <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
+                        <span className="whitespace-nowrap">AI로 데이터 분석 실행하기</span>
+                    </button>
+                    <button onClick={handleRunAll} className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[7px] md:text-xs bg-green-600 hover:bg-green-500 rounded-md font-bold text-white transition-colors flex-shrink-0">
+                        <PlayIcon className="h-2.5 w-2.5 md:h-3.5 md:w-3.5" />
+                        <span className="hidden sm:inline">Run All</span>
+                    </button>
+                    <button onClick={handleToggleRightPanel} className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0" title="Toggle Properties Panel">
+                        <CogIcon className="h-4 w-4 md:h-5 md:w-5" />
+                    </button>
+                </div>
             </div>
         </header>
 
