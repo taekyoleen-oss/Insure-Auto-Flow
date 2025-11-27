@@ -2724,18 +2724,18 @@ ${header}
              <div className="flex-1 px-2 md:px-8 flex flex-col items-center justify-center gap-2">
                 <button
                     onClick={() => setIsGoalModalOpen(true)}
-                    className="flex items-center gap-2 px-2 py-1 text-[10px] bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition-colors"
+                    className="flex items-center gap-2 px-2 py-1 text-[6.67px] md:text-[10px] bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition-colors"
                     title="Generate pipeline from a goal"
                 >
-                    <SparklesIcon className="h-3 w-3" />
+                    <SparklesIcon className="h-2 w-2 md:h-3 md:w-3" />
                     AI로 파이프라인 생성하기
                 </button>
                  <button
                     onClick={() => setIsDataModalOpen(true)}
-                    className="flex items-center gap-2 px-2 py-1 text-[10px] bg-indigo-600 hover:bg-indigo-700 rounded-md font-semibold transition-colors"
+                    className="flex items-center gap-2 px-2 py-1 text-[6.67px] md:text-[10px] bg-indigo-600 hover:bg-indigo-700 rounded-md font-semibold transition-colors"
                     title="Generate pipeline from data"
                 >
-                    <SparklesIcon className="h-3 w-3" />
+                    <SparklesIcon className="h-2 w-2 md:h-3 md:w-3" />
                     AI로 데이터 분석 실행하기
                 </button>
             </div>
@@ -2747,7 +2747,7 @@ ${header}
                         className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                         title="Undo (Ctrl+Z)"
                     >
-                        <ArrowUturnLeftIcon className="h-4 w-4 md:h-5 md:w-5" />
+                        <ArrowUturnLeftIcon className="h-[10.67px] w-[10.67px] md:h-5 md:w-5" />
                     </button>
                     <button
                         onClick={redo}
@@ -2755,23 +2755,23 @@ ${header}
                         className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                         title="Redo (Ctrl+Y)"
                     >
-                        <ArrowUturnRightIcon className="h-4 w-4 md:h-5 md:w-5" />
+                        <ArrowUturnRightIcon className="h-[10.67px] w-[10.67px] md:h-5 md:w-5" />
                     </button>
-                    <button onClick={handleSetFolder} className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0" title="Set Save Folder">
-                        <FolderOpenIcon className="h-3 w-3 md:h-4 md:w-4" />
+                    <button onClick={handleSetFolder} className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0" title="Set Save Folder">
+                        <FolderOpenIcon className="h-2 w-2 md:h-4 md:w-4" />
                         <span className="hidden sm:inline">Set Folder</span>
                     </button>
-                    <button onClick={handleLoadPipeline} className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0" title="Load Pipeline">
-                        <FolderOpenIcon className="h-3 w-3 md:h-4 md:w-4" />
+                    <button onClick={handleLoadPipeline} className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0" title="Load Pipeline">
+                        <FolderOpenIcon className="h-2 w-2 md:h-4 md:w-4" />
                         <span className="hidden sm:inline">Load</span>
                     </button>
                     <div className="relative flex-shrink-0" ref={sampleMenuRef}>
                         <button 
                             onClick={() => setIsSampleMenuOpen(!isSampleMenuOpen)} 
-                            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors" 
+                            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors" 
                             title="Load Sample Model"
                         >
-                            <SparklesIcon className="h-3 w-3 md:h-4 md:w-4" />
+                            <SparklesIcon className="h-2 w-2 md:h-4 md:w-4" />
                             <span className="hidden sm:inline">Samples</span>
                         </button>
                         {isSampleMenuOpen && (
@@ -2791,15 +2791,15 @@ ${header}
                      <button 
                         onClick={handleSavePipeline} 
                         disabled={!isDirty}
-                        className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs rounded-md font-semibold transition-colors flex-shrink-0 ${!isDirty ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-gray-700 hover:bg-gray-600'}`} 
+                        className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs rounded-md font-semibold transition-colors flex-shrink-0 ${!isDirty ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-gray-700 hover:bg-gray-600'}`} 
                         title="Save Pipeline"
                     >
-                        {saveButtonText === 'Save' ? <CodeBracketIcon className="h-3 w-3 md:h-4 md:w-4" /> : <CheckIcon className="h-3 w-3 md:h-4 md:w-4" />}
+                        {saveButtonText === 'Save' ? <CodeBracketIcon className="h-2 w-2 md:h-4 md:w-4" /> : <CheckIcon className="h-2 w-2 md:h-4 md:w-4" />}
                         <span className="hidden sm:inline">{saveButtonText}</span>
                     </button>
                 </div>
-                 <button onClick={handleRunAll} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-500 rounded-md font-bold text-white transition-colors">
-                    <PlayIcon className="h-4 w-4" />
+                 <button onClick={handleRunAll} className="flex items-center gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[9.33px] md:text-sm bg-green-600 hover:bg-green-500 rounded-md font-bold text-white transition-colors">
+                    <PlayIcon className="h-3 w-3 md:h-4 md:w-4" />
                     Run All
                 </button>
                 <button onClick={handleToggleRightPanel} className="p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors" title="Toggle Properties Panel">
