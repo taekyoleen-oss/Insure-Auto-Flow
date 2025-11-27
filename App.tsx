@@ -2733,7 +2733,7 @@ ${header}
             </div>
             
             {/* 두 번째 줄: Load, Save 등 버튼들 */}
-            <div className="flex items-center gap-1 md:gap-2 w-full overflow-x-auto scrollbar-hide mt-1">
+            <div className="flex items-center justify-end gap-1 md:gap-2 w-full overflow-x-auto scrollbar-hide mt-1">
                 <button
                     onClick={undo}
                     disabled={!canUndo}
@@ -2793,7 +2793,7 @@ ${header}
             </div>
             
             {/* 세 번째 줄: AI 버튼 2개 (가로로, 작은 크기) */}
-            <div className="flex items-center gap-1 md:gap-2 w-full mt-1 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center justify-end gap-1 md:gap-2 w-full mt-1 overflow-x-auto scrollbar-hide">
                 <button
                     onClick={() => setIsGoalModalOpen(true)}
                     className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition-colors flex-shrink-0"
