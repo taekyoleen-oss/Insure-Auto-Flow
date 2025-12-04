@@ -239,7 +239,7 @@ except Exception as e:
         await withTimeout(
             Promise.resolve(py.runPython(code)),
             timeoutMs,
-            'Python split_data 실행 타임아웃 (60초 초과)'
+            `Python split_data 실행 타임아웃 (${timeoutMs / 1000}초 초과)`
         );
         
         // 전역 변수에서 결과 가져오기
@@ -266,7 +266,10 @@ except Exception as e:
         // 정리
         py.globals.delete('js_data');
         py.globals.delete('js_result');
-        py.globals.delete('js_tuning_options');
+        // js_tuning_options는 Linear Regression에서만 사용되므로 존재할 때만 삭제
+        if (py.globals.has('js_tuning_options')) {
+            py.globals.delete('js_tuning_options');
+        }
         
         return {
             trainIndices: result.train_indices,
@@ -279,7 +282,10 @@ except Exception as e:
             if (py) {
                 py.globals.delete('js_data');
                 py.globals.delete('js_result');
-                py.globals.delete('js_tuning_options');
+                // js_tuning_options는 Linear Regression에서만 사용되므로 존재할 때만 삭제
+                if (py.globals.has('js_tuning_options')) {
+                    py.globals.delete('js_tuning_options');
+                }
             }
         } catch {}
         

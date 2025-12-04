@@ -1694,12 +1694,12 @@ ${header}
                 
                 let useNodeBackend = false;
                 let pyodideErrorForNode = '';
-                const totalTimeout = 90000; // 전체 타임아웃: 90초
+                const totalTimeout = 180000; // 전체 타임아웃: 180초 (3분)
                 const startTime = Date.now();
                 
                 try {
                     // Pyodide 동적 import
-                    addLog('INFO', 'Pyodide를 사용하여 Python으로 데이터 분할 중... (최대 90초)');
+                    addLog('INFO', 'Pyodide를 사용하여 Python으로 데이터 분할 중... (최대 3분)');
                     
                     const pyodideModule = await import('./utils/pyodideRunner');
                     const { splitDataPython } = pyodideModule;
@@ -1712,7 +1712,7 @@ ${header}
                         shuffle === 'True' || shuffle === true,
                         stratify === 'True' || stratify === true,
                         stratify_column || null,
-                        60000 // Python 실행 타임아웃: 60초
+                        120000 // Python 실행 타임아웃: 120초 (2분)
                     );
                     
                     // 전체 타임아웃 래퍼
@@ -1720,9 +1720,9 @@ ${header}
                         const elapsed = Date.now() - startTime;
                         const remaining = totalTimeout - elapsed;
                         if (remaining <= 0) {
-                            reject(new Error('전체 실행 타임아웃 (90초 초과)'));
+                            reject(new Error('전체 실행 타임아웃 (3분 초과)'));
                         } else {
-                            setTimeout(() => reject(new Error('전체 실행 타임아웃 (90초 초과)')), remaining);
+                            setTimeout(() => reject(new Error('전체 실행 타임아웃 (3분 초과)')), remaining);
                         }
                     });
                     
@@ -1777,9 +1777,9 @@ ${header}
                 // Node.js 백엔드로 전환
                 if (useNodeBackend) {
                     try {
-                        addLog('INFO', 'Node.js 백엔드를 통해 Python으로 데이터 분할 중...');
+                        addLog('INFO', 'Node.js 백엔드를 통해 Python으로 데이터 분할 중... (최대 2분)');
                         
-                        // Node.js 백엔드 API 호출 (타임아웃: 30초)
+                        // Node.js 백엔드 API 호출 (타임아웃: 120초)
                         const nodeBackendPromise = fetch('/api/split-data', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1794,7 +1794,7 @@ ${header}
                         });
                         
                         const nodeTimeoutPromise = new Promise<Response>((_, reject) => 
-                            setTimeout(() => reject(new Error('Node.js 백엔드 타임아웃 (30초 초과)')), 30000)
+                            setTimeout(() => reject(new Error('Node.js 백엔드 타임아웃 (2분 초과)')), 120000)
                         );
                         
                         const response = await Promise.race([nodeBackendPromise, nodeTimeoutPromise]);
@@ -1845,7 +1845,13 @@ ${header}
                             nodeErrorMsg = `Express 서버 오류: ${nodeErrorMessage}`;
                         }
                         
-                        throw new Error(`데이터 분할 실패: Pyodide와 Express 서버 모두 실패했습니다.\n\nPyodide 오류: ${pyodideErrorMsg}\n\nExpress 서버 오류: ${nodeErrorMsg}\n\n해결 방법:\n1. Express 서버 실행: "pnpm run server" 또는 "pnpm run dev:full"\n2. Python이 설치되어 있고 sklearn, pandas가 설치되어 있는지 확인: "pip install scikit-learn pandas"`);
+                        // js_tuning_options 관련 에러인 경우 더 명확한 메시지 제공
+                        let enhancedPyodideError = pyodideErrorMsg;
+                        if (pyodideErrorMsg.includes('js_tuning_options') || pyodideErrorMsg.includes('KeyError')) {
+                            enhancedPyodideError = `내부 오류 (이미 수정됨): ${pyodideErrorMsg}. 페이지를 새로고침하고 다시 시도해주세요.`;
+                        }
+                        
+                        throw new Error(`데이터 분할 실패: Pyodide와 Express 서버 모두 실패했습니다.\n\nPyodide 오류: ${enhancedPyodideError}\n\nExpress 서버 오류: ${nodeErrorMsg}\n\n해결 방법:\n1. 페이지를 새로고침하고 다시 시도\n2. Express 서버 실행: "pnpm run server" 또는 "pnpm run dev:full"\n3. Python이 설치되어 있고 sklearn, pandas가 설치되어 있는지 확인: "pip install scikit-learn pandas"`);
                     }
                 }
             } else if (module.type === ModuleType.Statistics) {
