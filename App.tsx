@@ -1999,6 +1999,9 @@ ${header}
                     throw new Error(`Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but only found ${X.length} valid rows.`);
                 }
 
+                // tuningSummary를 초기화 (모든 모델 타입에서 사용 가능하도록)
+                let tuningSummary: TrainedModelOutput['tuningSummary'] = undefined;
+                
                 if (modelIsRegression) {
                     // Pyodide를 사용하여 Python으로 Linear Regression 훈련
                     if (modelSourceModule.type === ModuleType.LinearRegression) {
@@ -2067,7 +2070,7 @@ ${header}
                                     throw new Error(`Missing coefficient for feature ${col} at index ${idx}.`);
                                 }
                             });
-                            const tuningSummary = fitResult.tuning ? {
+                            tuningSummary = fitResult.tuning ? {
                                 enabled: Boolean(fitResult.tuning.enabled),
                                 strategy: fitResult.tuning.strategy,
                                 bestParams: fitResult.tuning.bestParams,
