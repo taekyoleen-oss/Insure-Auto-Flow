@@ -2702,7 +2702,7 @@ ${header}
             </div>
         )}
 
-        <header className="flex flex-col px-4 py-1.5 bg-gray-900 border-b border-gray-700 flex-shrink-0 z-50 relative">
+        <header className="flex flex-col px-4 py-1.5 bg-gray-900 border-b border-gray-700 flex-shrink-0 z-20">
             {/* 첫 번째 줄: 제목 및 모델 이름 */}
             <div className="flex items-center w-full">
                 <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
@@ -2754,6 +2754,47 @@ ${header}
                 >
                     <ArrowUturnRightIcon className="h-[10.67px] w-[10.67px] md:h-5 md:w-5" />
                 </button>
+                <div className="flex-shrink-0">
+                    <button 
+                        ref={sampleButtonRef}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsSampleMenuOpen(!isSampleMenuOpen);
+                        }} 
+                        className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors" 
+                        title="Load Sample Model"
+                    >
+                        <SparklesIcon className="h-2 w-2 md:h-4 md:w-4" />
+                        <span className="hidden sm:inline">Samples</span>
+                    </button>
+                </div>
+                {isSampleMenuOpen && sampleMenuPosition && (
+                    <div 
+                        ref={sampleMenuRef}
+                        className="fixed bg-gray-800 border border-gray-700 rounded-md shadow-lg z-[9999] min-w-[200px] max-h-[300px] overflow-y-auto"
+                        style={{
+                            top: `${sampleMenuPosition.top}px`,
+                            left: `${sampleMenuPosition.left}px`
+                        }}
+                    >
+                        {SAMPLE_MODELS.length > 0 ? (
+                            SAMPLE_MODELS.map((sample: any) => (
+                                <button
+                                    key={sample.name}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleLoadSample(sample.name);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 first:rounded-t-md last:rounded-b-md transition-colors"
+                                >
+                                    {sample.name}
+                                </button>
+                            ))
+                        ) : (
+                            <div className="px-4 py-2 text-sm text-gray-500">No samples available</div>
+                        )}
+                    </div>
+                )}
                 <button onClick={handleSetFolder} className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0" title="Set Save Folder">
                     <FolderOpenIcon className="h-2 w-2 md:h-4 md:w-4" />
                     <span className="hidden sm:inline">Set Folder</span>
@@ -2775,52 +2816,9 @@ ${header}
             
             {/* 세 번째 줄: 햄버거 버튼(왼쪽) 및 AI 버튼 2개, Run All, 설정 버튼(오른쪽) */}
             <div className="flex items-center justify-between gap-1 md:gap-2 w-full mt-1 overflow-x-auto scrollbar-hide">
-                <div className="flex items-center gap-1 md:gap-2">
-                    <button onClick={() => setIsLeftPanelVisible(v => !v)} className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0" aria-label="Toggle modules panel" title="Toggle Modules Panel">
-                        <Bars3Icon className="h-4 w-4 md:h-5 md:w-5"/>
-                    </button>
-                    <div className="flex-shrink-0">
-                        <button 
-                            ref={sampleButtonRef}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setIsSampleMenuOpen(!isSampleMenuOpen);
-                            }} 
-                            className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors" 
-                            title="Load Sample Model"
-                        >
-                            <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
-                            <span className="whitespace-nowrap">Samples</span>
-                        </button>
-                    </div>
-                    {isSampleMenuOpen && sampleMenuPosition && (
-                        <div 
-                            ref={sampleMenuRef}
-                            className="fixed bg-gray-800 border border-gray-700 rounded-md shadow-lg z-[9999] min-w-[200px] max-h-[300px] overflow-y-auto"
-                            style={{
-                                top: `${sampleMenuPosition.top}px`,
-                                left: `${sampleMenuPosition.left}px`
-                            }}
-                        >
-                            {SAMPLE_MODELS.length > 0 ? (
-                                SAMPLE_MODELS.map((sample: any) => (
-                                    <button
-                                        key={sample.name}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleLoadSample(sample.name);
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 first:rounded-t-md last:rounded-b-md transition-colors"
-                                    >
-                                        {sample.name}
-                                    </button>
-                                ))
-                            ) : (
-                                <div className="px-4 py-2 text-sm text-gray-500">No samples available</div>
-                            )}
-                        </div>
-                    )}
-                </div>
+                <button onClick={() => setIsLeftPanelVisible(v => !v)} className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0" aria-label="Toggle modules panel" title="Toggle Modules Panel">
+                    <Bars3Icon className="h-4 w-4 md:h-5 md:w-5"/>
+                </button>
                 <div className="flex items-center gap-1 md:gap-2 ml-auto">
                     <button
                         onClick={() => setIsGoalModalOpen(true)}
