@@ -32,18 +32,21 @@ interface TuningChartProps {
 const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) => {
     if (!candidates || candidates.length === 0) return null;
 
-    // alpha 파라미터와 score 추출
+    // alpha 또는 C 파라미터와 score 추출
     const dataPoints = candidates
         .map(candidate => {
-            const alpha = candidate.params.alpha;
+            const paramValue = candidate.params.alpha ?? candidate.params.C;
             // score가 음수일 수 있으므로 절댓값 처리 (neg_mean_squared_error 등)
             const score = Math.abs(candidate.score);
-            return { alpha, score };
+            return { paramValue, score };
         })
-        .filter(point => typeof point.alpha === 'number' && !isNaN(point.alpha) && typeof point.score === 'number' && !isNaN(point.score))
-        .sort((a, b) => a.alpha - b.alpha);
+        .filter(point => typeof point.paramValue === 'number' && !isNaN(point.paramValue) && typeof point.score === 'number' && !isNaN(point.score))
+        .sort((a, b) => a.paramValue - b.paramValue);
 
     if (dataPoints.length === 0) return null;
+    
+    // 파라미터 이름 결정 (alpha 또는 C)
+    const paramName = candidates[0]?.params.alpha !== undefined ? 'alpha' : 'C';
 
     // 차트 크기
     const width = 600;
@@ -53,22 +56,22 @@ const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) 
     const chartHeight = height - padding.top - padding.bottom;
 
     // 데이터 범위 계산
-    const alphaMin = Math.min(...dataPoints.map(p => p.alpha));
-    const alphaMax = Math.max(...dataPoints.map(p => p.alpha));
+    const paramMin = Math.min(...dataPoints.map(p => p.paramValue));
+    const paramMax = Math.max(...dataPoints.map(p => p.paramValue));
     const scoreMin = Math.min(...dataPoints.map(p => p.score));
     const scoreMax = Math.max(...dataPoints.map(p => p.score));
 
     // 스케일 계산 (로그 스케일을 위한 변환)
-    const alphaRange = alphaMax - alphaMin || 1;
+    const paramRange = paramMax - paramMin || 1;
     const scoreRange = scoreMax - scoreMin || 1;
 
     // 좌표 변환 함수
-    const scaleX = (alpha: number) => {
+    const scaleX = (paramValue: number) => {
         // 로그 스케일 적용
-        const logMin = Math.log10(Math.max(alphaMin, 0.001));
-        const logMax = Math.log10(Math.max(alphaMax, 0.001));
-        const logAlpha = Math.log10(Math.max(alpha, 0.001));
-        return padding.left + ((logAlpha - logMin) / (logMax - logMin)) * chartWidth;
+        const logMin = Math.log10(Math.max(paramMin, 0.001));
+        const logMax = Math.log10(Math.max(paramMax, 0.001));
+        const logParam = Math.log10(Math.max(paramValue, 0.001));
+        return padding.left + ((logParam - logMin) / (logMax - logMin)) * chartWidth;
     };
 
     const scaleY = (score: number) => {
@@ -78,7 +81,7 @@ const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) 
     // 경로 생성
     const pathData = dataPoints
         .map((point, idx) => {
-            const x = scaleX(point.alpha);
+            const x = scaleX(point.paramValue);
             const y = scaleY(point.score);
             return idx === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
         })
@@ -86,8 +89,8 @@ const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) 
 
     // X축 눈금 (로그 스케일)
     const xTicks: number[] = [];
-    const logMin = Math.log10(Math.max(alphaMin, 0.001));
-    const logMax = Math.log10(Math.max(alphaMax, 0.001));
+    const logMin = Math.log10(Math.max(paramMin, 0.001));
+    const logMax = Math.log10(Math.max(paramMax, 0.001));
     const logRange = logMax - logMin;
     const numTicks = 5;
     for (let i = 0; i <= numTicks; i++) {
@@ -161,7 +164,7 @@ const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) 
 
                     {/* 데이터 포인트 */}
                     {dataPoints.map((point, idx) => {
-                        const x = scaleX(point.alpha);
+                        const x = scaleX(point.paramValue);
                         const y = scaleY(point.score);
                         return (
                             <circle
@@ -219,7 +222,7 @@ const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) 
                         fill="#374151"
                         fontWeight="bold"
                     >
-                        α
+                        {paramName === 'alpha' ? 'α' : 'C'}
                     </text>
 
                     {/* Y축 */}

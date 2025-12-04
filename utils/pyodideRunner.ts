@@ -312,6 +312,24 @@ interface LinearRegressionTuningPayload {
     candidates?: { params: Record<string, number>; score: number }[];
 }
 
+export interface LogisticRegressionTuningOptions {
+    enabled: boolean;
+    strategy?: 'GridSearch';
+    cCandidates?: number[];
+    l1RatioCandidates?: number[];
+    cvFolds?: number;
+    scoringMetric?: string;
+}
+
+interface LogisticRegressionTuningPayload {
+    enabled: boolean;
+    strategy?: 'grid';
+    bestParams?: Record<string, number>;
+    bestScore?: number;
+    scoringMetric?: string;
+    candidates?: { params: Record<string, number>; score: number }[];
+}
+
 /**
  * LinearRegression을 Python으로 실행합니다
  * 타임아웃: 60초
@@ -646,6 +664,310 @@ else:
             ? errorMessage 
             : `${error.toString()}\n${errorMessage}`;
         throw new Error(`Python LinearRegression error:\n${fullError}`);
+    }
+}
+
+/**
+ * LogisticRegression을 Python으로 실행합니다
+ * 타임아웃: 60초
+ */
+export async function fitLogisticRegressionPython(
+    X: number[][],
+    y: number[],
+    penalty: string = 'l2',
+    C: number = 1.0,
+    solver: string = 'lbfgs',
+    maxIter: number = 100,
+    featureColumns?: string[],
+    timeoutMs: number = 60000,
+    tuningOptions?: LogisticRegressionTuningOptions
+): Promise<{ coefficients: number[][], intercept: number[], metrics: Record<string, number>, tuning?: LogisticRegressionTuningPayload }> {
+    try {
+        // Pyodide 로드 (타임아웃: 30초)
+        const py = await withTimeout(
+            loadPyodide(30000),
+            30000,
+            'Pyodide 로딩 타임아웃 (30초 초과)'
+        );
+        
+        // 데이터를 Python에 전달
+        const dataRows: any[] = [];
+        for (let i = 0; i < X.length; i++) {
+            const row: any = {};
+            if (featureColumns) {
+                featureColumns.forEach((col, idx) => {
+                    row[col] = X[i][idx];
+                });
+            } else {
+                X[i].forEach((val, idx) => {
+                    row[`x${idx}`] = val;
+                });
+            }
+            row['y'] = y[i];
+            dataRows.push(row);
+        }
+        
+        py.globals.set('js_data', dataRows);
+        py.globals.set('js_feature_columns', featureColumns || X[0].map((_, idx) => `x${idx}`));
+        py.globals.set('js_label_column', 'y');
+        py.globals.set('js_tuning_options', tuningOptions ? tuningOptions : null);
+        
+        // Python 코드 실행
+        const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.model_selection import GridSearchCV
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    
+    # 데이터 검증
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    # 데이터 검증
+    if X_train.empty:
+        raise ValueError("X_train is empty")
+    if y_train.empty:
+        raise ValueError("y_train is empty")
+    if len(X_train) != len(y_train):
+        raise ValueError(f"X_train and y_train must have same number of samples: X_train.shape[0]={len(X_train)}, y_train.shape[0]={len(y_train)}")
+    if len(X_train) < 1:
+        raise ValueError(f"Need at least 1 sample, got {len(X_train)}")
+    
+    # 모델 생성
+    p_penalty = '${penalty}'
+    p_C = ${C}
+    p_solver = '${solver}'
+    p_max_iter = ${maxIter}
+    
+    # penalty와 solver 호환성 확인
+    if p_penalty == 'l1' and p_solver not in ('liblinear', 'saga'):
+        p_solver = 'liblinear'
+    elif p_penalty == 'elasticnet' and p_solver != 'saga':
+        p_solver = 'saga'
+    elif p_penalty == 'none' and p_solver not in ('lbfgs', 'newton-cg', 'sag', 'saga'):
+        p_solver = 'lbfgs'
+    
+    model = LogisticRegression(
+        penalty=p_penalty if p_penalty != 'none' else None,
+        C=p_C,
+        solver=p_solver,
+        max_iter=p_max_iter,
+        random_state=42
+    )
+    
+    # 튜닝 옵션 처리
+    tuning_options = None
+    tuning_enabled = False
+    if 'js_tuning_options' in globals() and js_tuning_options is not None:
+        try:
+            tuning_options = js_tuning_options.to_py()
+            tuning_enabled = bool(tuning_options.get('enabled'))
+        except Exception:
+            tuning_options = None
+            tuning_enabled = False
+
+    best_params = {}
+    best_score = None
+    cv_candidates = []
+    scoring_metric_value = 'accuracy'
+    if tuning_options and tuning_options.get('scoringMetric'):
+        scoring_metric_value = tuning_options.get('scoringMetric')
+
+    should_tune = tuning_enabled and tuning_options is not None
+
+    if should_tune:
+        c_candidates = tuning_options.get('cCandidates') or [p_C]
+        c_candidates = [float(c) for c in c_candidates if c is not None]
+        param_grid = {}
+        if c_candidates:
+            param_grid['C'] = c_candidates
+        if p_penalty == 'elasticnet':
+            l1_candidates = tuning_options.get('l1RatioCandidates') or [0.5]
+            l1_candidates = [float(a) for a in l1_candidates if a is not None]
+            if l1_candidates:
+                param_grid['l1_ratio'] = l1_candidates
+        if not param_grid:
+            param_grid = {'C': [float(p_C)]}
+        cv_folds = int(tuning_options.get('cvFolds', 5))
+        grid_search = GridSearchCV(
+            model,
+            param_grid,
+            cv=cv_folds,
+            scoring=scoring_metric_value,
+            n_jobs=None
+        )
+        grid_search.fit(X_train, y_train)
+        trained_model = grid_search.best_estimator_
+        best_params = {k: float(v) for k, v in grid_search.best_params_.items()}
+        best_score = float(grid_search.best_score_)
+        cv_candidates = [
+            {'params': params, 'score': float(score)}
+            for params, score in zip(grid_search.cv_results_['params'], grid_search.cv_results_['mean_test_score'])
+        ][:10]
+    else:
+        trained_model = model.fit(X_train, y_train)
+        best_params = {'C': float(p_C)}
+        if p_penalty == 'elasticnet':
+            best_params['l1_ratio'] = 0.5
+    
+    # 예측 및 평가
+    y_pred = trained_model.predict(X_train)
+    accuracy = accuracy_score(y_train, y_pred)
+    precision = precision_score(y_train, y_pred, average='weighted', zero_division=0)
+    recall = recall_score(y_train, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_train, y_pred, average='weighted', zero_division=0)
+    
+    # ROC AUC (이진 분류인 경우만)
+    roc_auc = None
+    unique_labels = np.unique(y_train)
+    if len(unique_labels) == 2:
+        try:
+            y_pred_proba = trained_model.predict_proba(X_train)[:, 1]
+            roc_auc = roc_auc_score(y_train, y_pred_proba)
+        except Exception:
+            roc_auc = None
+    
+    # 결과 준비 - coefficients는 다중 클래스의 경우 2D 배열
+    intercept = trained_model.intercept_.tolist()
+    coefficients_list = trained_model.coef_.tolist()
+    
+    # p_feature_columns 순서대로 coefficients 딕셔너리 생성
+    coefficients_dict = {}
+    if len(coefficients_list) == 1:
+        # 이진 분류
+        for idx, col in enumerate(p_feature_columns):
+            if idx < len(coefficients_list[0]):
+                coefficients_dict[col] = float(coefficients_list[0][idx])
+    else:
+        # 다중 클래스
+        for class_idx, coefs in enumerate(coefficients_list):
+            for idx, col in enumerate(p_feature_columns):
+                if idx < len(coefs):
+                    key = f"{col}_class_{class_idx}"
+                    coefficients_dict[key] = float(coefs[idx])
+    
+    metrics_dict = {
+        'Accuracy': float(accuracy),
+        'Precision': float(precision),
+        'Recall': float(recall),
+        'F1-Score': float(f1)
+    }
+    if roc_auc is not None:
+        metrics_dict['ROC-AUC'] = float(roc_auc)
+    
+    result = {
+        'coefficients': coefficients_list,
+        'coefficients_dict': coefficients_dict,
+        'intercept': intercept,
+        'metrics': metrics_dict,
+        'tuning': {
+            'enabled': bool(should_tune),
+            'strategy': 'grid' if should_tune else None,
+            'bestParams': best_params,
+            'bestScore': float(best_score) if best_score is not None else None,
+            'scoringMetric': scoring_metric_value if should_tune else None,
+            'candidates': cv_candidates
+        },
+        'feature_columns': p_feature_columns
+    }
+    
+    # 전역 변수에 저장
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    # 전역 변수에 저장
+    js_result = error_result
+`;
+        
+        // Python 코드 실행
+        await withTimeout(
+            Promise.resolve(py.runPython(code)),
+            timeoutMs,
+            'Python LogisticRegression 실행 타임아웃 (60초 초과)'
+        );
+        
+        // 전역 변수에서 결과 가져오기
+        const resultPyObj = py.globals.get('js_result');
+        
+        // 결과 객체 검증
+        if (!resultPyObj) {
+            throw new Error(`Python LogisticRegression error: Python code returned None or undefined.`);
+        }
+        
+        // Python 딕셔너리를 JavaScript 객체로 변환
+        const result = fromPython(resultPyObj);
+        
+        // 에러가 발생한 경우 처리
+        if (result.__error__) {
+            throw new Error(`Python LogisticRegression error:\n${result.error_traceback || result.error_message || 'Unknown error'}`);
+        }
+        
+        // 필수 속성 검증
+        if (!result.coefficients || !Array.isArray(result.coefficients)) {
+            throw new Error(`Python LogisticRegression error: Missing or invalid 'coefficients' in result.`);
+        }
+        if (!result.intercept || !Array.isArray(result.intercept)) {
+            throw new Error(`Python LogisticRegression error: Missing or invalid 'intercept' in result.`);
+        }
+        if (!result.metrics || typeof result.metrics !== 'object') {
+            throw new Error(`Python LogisticRegression error: Missing or invalid 'metrics' in result.`);
+        }
+        
+        // 정리
+        py.globals.delete('js_data');
+        py.globals.delete('js_feature_columns');
+        py.globals.delete('js_label_column');
+        py.globals.delete('js_result');
+        if (py.globals.has('js_tuning_options')) {
+            py.globals.delete('js_tuning_options');
+        }
+        
+        return {
+            coefficients: result.coefficients,
+            intercept: result.intercept,
+            metrics: result.metrics,
+            tuning: result.tuning
+        };
+    } catch (error: any) {
+        // 정리
+        try {
+            const py = pyodide;
+            if (py) {
+                py.globals.delete('js_data');
+                py.globals.delete('js_feature_columns');
+                py.globals.delete('js_label_column');
+                py.globals.delete('js_result');
+                if (py.globals.has('js_tuning_options')) {
+                    py.globals.delete('js_tuning_options');
+                }
+            }
+        } catch {}
+        
+        const errorMessage = error.message || String(error);
+        throw new Error(`Python LogisticRegression error:\n${errorMessage}`);
     }
 }
 

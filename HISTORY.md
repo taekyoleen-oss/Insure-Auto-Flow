@@ -1,3 +1,37 @@
+## [2025-12-04 18:30:00] - Logistic Regression 모듈 Python 실행 및 하이퍼파라미터 튜닝 추가
+
+변경 사항:
+
+- Logistic Regression 모듈을 Linear Regression과 동일한 구조로 수정
+- Python 실행 지원 추가 (Pyodide를 사용한 fitLogisticRegressionPython 함수 구현)
+- 하이퍼파라미터 튜닝 옵션 추가 (C candidates, L1 ratio candidates, CV folds, scoring metric)
+- PropertiesPanel에 Logistic Regression 하이퍼파라미터 튜닝 UI 추가
+- TrainedModelPreviewModal에서 Logistic Regression 튜닝 결과 표시 지원 (C 파라미터 차트 포함)
+- TrainModel의 Input Preview에 Logistic Regression 모델 타입 표시 (penalty, C 포함)
+- constants.ts에 Logistic Regression 기본 파라미터 업데이트
+
+영향받은 파일:
+
+- App.tsx
+- constants.ts
+- components/PropertiesPanel.tsx
+- components/TrainedModelPreviewModal.tsx
+- utils/pyodideRunner.ts
+- HISTORY.md
+
+커밋 해시: (커밋 후 업데이트)
+
+복구 방법:
+
+# 백업하고 복구
+git stash push -u -m "백업"
+git reset --hard <커밋해시>
+
+# 또는 직접 복구
+git reset --hard <커밋해시>
+
+---
+
 ## [2025-12-04 17:45:00] - Linear Regression 모듈 하이퍼파라미터 튜닝 추가
 
 변경 사항:

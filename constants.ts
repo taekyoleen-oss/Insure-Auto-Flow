@@ -169,7 +169,18 @@ export const DEFAULT_MODULES: Omit<CanvasModule, 'id' | 'position' | 'name'>[] =
   {
     type: ModuleType.LogisticRegression,
     status: ModuleStatus.Pending,
-    parameters: { penalty: 'l2', C: 1.0, solver: 'lbfgs', max_iter: 100 },
+    parameters: { 
+      penalty: 'l2', 
+      C: 1.0, 
+      solver: 'lbfgs', 
+      max_iter: 100,
+      tuning_enabled: 'False',
+      tuning_strategy: 'GridSearch',
+      c_candidates: '0.01,0.1,1,10,100',
+      l1_ratio_candidates: '0.2,0.5,0.8',
+      cv_folds: 5,
+      scoring_metric: 'accuracy'
+    },
     inputs: [],
     outputs: [{ name: 'model_out', type: 'model' }],
   },

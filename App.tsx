@@ -2115,15 +2115,127 @@ ${header}
                     }
 
                 } else if (modelIsClassification) {
-                    // For classification models, use simulation for now
-                    intercept = Math.random() - 0.5;
-                    ordered_feature_columns.forEach(col => {
-                        coefficients[col] = Math.random() * 2 - 1;
-                    });
-                    metrics['Accuracy'] = 0.75 + Math.random() * 0.2;
-                    metrics['Precision'] = 0.7 + Math.random() * 0.25;
-                    metrics['Recall'] = 0.7 + Math.random() * 0.25;
-                    metrics['F1-Score'] = 2 * (metrics['Precision'] * metrics['Recall']) / (metrics['Precision'] + metrics['Recall']);
+                    // Pyodide를 사용하여 Python으로 Logistic Regression 훈련
+                    if (modelSourceModule.type === ModuleType.LogisticRegression) {
+                        const penalty = modelSourceModule.parameters.penalty || 'l2';
+                        const C = parseFloat(modelSourceModule.parameters.C) || 1.0;
+                        const solver = modelSourceModule.parameters.solver || 'lbfgs';
+                        const maxIter = parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
+                        
+                        const parseCandidates = (raw: any, fallback: number[]): number[] => {
+                            if (Array.isArray(raw)) {
+                                const parsed = raw.map(val => {
+                                    const num = typeof val === 'number' ? val : parseFloat(val);
+                                    return isNaN(num) ? null : num;
+                                }).filter((num): num is number => num !== null);
+                                return parsed.length ? parsed : fallback;
+                            }
+                            if (typeof raw === 'string') {
+                                const parsed = raw.split(',').map(part => parseFloat(part.trim())).filter(num => !isNaN(num));
+                                return parsed.length ? parsed : fallback;
+                            }
+                            if (typeof raw === 'number' && !isNaN(raw)) {
+                                return [raw];
+                            }
+                            return fallback;
+                        };
+                        const tuningEnabled = modelSourceModule.parameters.tuning_enabled === 'True';
+                        const tuningOptions = tuningEnabled ? {
+                            enabled: true,
+                            strategy: 'GridSearch' as const,
+                            cCandidates: parseCandidates(modelSourceModule.parameters.c_candidates, [C]),
+                            l1RatioCandidates: penalty === 'elasticnet' ? parseCandidates(modelSourceModule.parameters.l1_ratio_candidates, [0.5]) : undefined,
+                            cvFolds: Math.max(2, parseInt(modelSourceModule.parameters.cv_folds, 10) || 5),
+                            scoringMetric: modelSourceModule.parameters.scoring_metric || 'accuracy'
+                        } : undefined;
+                        
+                        if (X.length < ordered_feature_columns.length) {
+                            throw new Error(`Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`);
+                        }
+                        
+                        try {
+                            addLog('INFO', `Pyodide를 사용하여 Python으로 Logistic Regression 모델 훈련 중...`);
+                            
+                            const pyodideModule = await import('./utils/pyodideRunner');
+                            const { fitLogisticRegressionPython } = pyodideModule;
+                            
+                            const fitResult = await fitLogisticRegressionPython(
+                                X,
+                                y,
+                                penalty,
+                                C,
+                                solver,
+                                maxIter,
+                                ordered_feature_columns,
+                                60000, // 타임아웃: 60초
+                                tuningOptions
+                            );
+                            
+                            // Logistic Regression은 다중 클래스를 지원하므로 coefficients가 2D 배열일 수 있음
+                            if (!fitResult.coefficients || !Array.isArray(fitResult.coefficients)) {
+                                throw new Error(`Invalid coefficients: expected array, got ${typeof fitResult.coefficients}.`);
+                            }
+                            
+                            // 이진 분류인 경우
+                            if (fitResult.coefficients.length === 1 && fitResult.coefficients[0].length === ordered_feature_columns.length) {
+                                intercept = fitResult.intercept[0];
+                                ordered_feature_columns.forEach((col, idx) => {
+                                    if (fitResult.coefficients[0][idx] !== undefined) {
+                                        coefficients[col] = fitResult.coefficients[0][idx];
+                                    } else {
+                                        throw new Error(`Missing coefficient for feature ${col} at index ${idx}.`);
+                                    }
+                                });
+                            } else {
+                                // 다중 클래스인 경우 첫 번째 클래스의 계수 사용
+                                intercept = fitResult.intercept[0] || 0;
+                                ordered_feature_columns.forEach((col, idx) => {
+                                    if (fitResult.coefficients[0] && fitResult.coefficients[0][idx] !== undefined) {
+                                        coefficients[col] = fitResult.coefficients[0][idx];
+                                    } else {
+                                        coefficients[col] = 0;
+                                    }
+                                });
+                            }
+                            
+                            tuningSummary = fitResult.tuning ? {
+                                enabled: Boolean(fitResult.tuning.enabled),
+                                strategy: fitResult.tuning.strategy,
+                                bestParams: fitResult.tuning.bestParams,
+                                bestScore: typeof fitResult.tuning.bestScore === 'number' ? fitResult.tuning.bestScore : undefined,
+                                scoringMetric: fitResult.tuning.scoringMetric,
+                                candidates: Array.isArray(fitResult.tuning.candidates) ? fitResult.tuning.candidates : undefined
+                            } : undefined;
+                            if (tuningSummary?.enabled && tuningSummary.bestParams) {
+                                addLog('INFO', `Hyperparameter tuning selected params: ${Object.entries(tuningSummary.bestParams).map(([k, v]) => `${k}=${v}`).join(', ')}.`);
+                            }
+
+                            // Python에서 계산된 메트릭 사용
+                            metrics['Accuracy'] = parseFloat((fitResult.metrics['Accuracy'] || 0).toFixed(4));
+                            metrics['Precision'] = parseFloat((fitResult.metrics['Precision'] || 0).toFixed(4));
+                            metrics['Recall'] = parseFloat((fitResult.metrics['Recall'] || 0).toFixed(4));
+                            metrics['F1-Score'] = parseFloat((fitResult.metrics['F1-Score'] || 0).toFixed(4));
+                            if (fitResult.metrics['ROC-AUC'] !== undefined) {
+                                metrics['ROC-AUC'] = parseFloat((fitResult.metrics['ROC-AUC']).toFixed(4));
+                            }
+                            
+                            addLog('SUCCESS', `Python으로 Logistic Regression 모델 훈련 완료`);
+                        } catch (error: any) {
+                            const errorMessage = error.message || String(error);
+                            addLog('ERROR', `Python LogisticRegression 훈련 실패: ${errorMessage}`);
+                            throw new Error(`모델 훈련 실패: ${errorMessage}`);
+                        }
+                    } else {
+                        // For other classification models, use simulation for now
+                        intercept = Math.random() - 0.5;
+                        ordered_feature_columns.forEach(col => {
+                            coefficients[col] = Math.random() * 2 - 1;
+                        });
+                        metrics['Accuracy'] = 0.75 + Math.random() * 0.2;
+                        metrics['Precision'] = 0.7 + Math.random() * 0.25;
+                        metrics['Recall'] = 0.7 + Math.random() * 0.25;
+                        metrics['F1-Score'] = 2 * (metrics['Precision'] * metrics['Recall']) / (metrics['Precision'] + metrics['Recall']);
+                    }
                 } else {
                     throw new Error(`Training simulation for model type '${modelSourceModule.type}' is not implemented, or its 'model_purpose' parameter is not set correctly.`);
                 }
