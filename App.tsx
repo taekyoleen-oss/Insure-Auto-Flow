@@ -7,7 +7,7 @@ import { PropertiesPanel } from './components/PropertiesPanel';
 // fix: Add missing 'Port' type to handle portType argument in getSingleInputData.
 import { CanvasModule, ModuleType, Connection, ModuleStatus, StatisticsOutput, DataPreview, ColumnInfo, SplitDataOutput, TrainedModelOutput, ModelDefinitionOutput, StatsModelsResultOutput, FittedDistributionOutput, ExposureCurveOutput, XoLPriceOutput, XolContractOutput, FinalXolPriceOutput, EvaluationOutput, KMeansOutput, HierarchicalClusteringOutput, PCAOutput, DBSCANOutput, MissingHandlerOutput, Port, EncoderOutput, NormalizerOutput } from './types';
 import { DEFAULT_MODULES, TOOLBOX_MODULES, SAMPLE_MODELS } from './constants';
-import { LogoIcon, PlayIcon, CodeBracketIcon, FolderOpenIcon, PlusIcon, MinusIcon, Bars3Icon, CogIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, SparklesIcon, ArrowsPointingOutIcon, Squares2X2Icon, CheckIcon } from './components/icons';
+import { LogoIcon, PlayIcon, CodeBracketIcon, FolderOpenIcon, PlusIcon, MinusIcon, Bars3Icon, CogIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, SparklesIcon, ArrowsPointingOutIcon, Squares2X2Icon, CheckIcon, ArrowPathIcon } from './components/icons';
 import useHistoryState from './hooks/useHistoryState';
 import { DataPreviewModal } from './components/DataPreviewModal';
 import { StatisticsPreviewModal } from './components/StatisticsPreviewModal';
@@ -325,6 +325,110 @@ Respond with ONLY the module type string, for example: 'ScoreModel'`;
     setScale(newScale);
     setPan({ x: newPanX, y: newPanY });
   }, [modules]);
+  
+  const handleRotateModules = useCallback(() => {
+    if (modules.length === 0) return;
+
+    const moduleWidth = 256; // w-64
+    const moduleHeight = 120; // approximate height
+
+    // Calculate bounding box
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    modules.forEach(module => {
+      minX = Math.min(minX, module.position.x);
+      minY = Math.min(minY, module.position.y);
+      maxX = Math.max(maxX, module.position.x + moduleWidth);
+      maxY = Math.max(maxY, module.position.y + moduleHeight);
+    });
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+
+    // Calculate center point
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Determine rotation direction based on aspect ratio
+    // 세로가 긴 경우: 90도 반시계방향 (counter-clockwise) -> 가로 모드로 변환
+    // 가로가 긴 경우: 90도 시계방향 (clockwise) -> 세로 모드로 변환
+    const isVertical = contentHeight > contentWidth;
+    const rotationAngle = isVertical ? -90 : 90; // -90 for counter-clockwise, 90 for clockwise
+    const isConvertingToHorizontal = isVertical; // 세로 -> 가로 변환
+    const spacingMultiplier = isConvertingToHorizontal ? 2 : 0.5; // 가로 모드: 2배 넓게, 세로 모드: 2배 작게
+
+    // Convert angle to radians
+    const angleRad = (rotationAngle * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+
+    // Rotate each module around the center point
+    const rotatedModules = modules.map(module => {
+      // Translate to origin (center)
+      const dx = module.position.x + moduleWidth / 2 - centerX;
+      const dy = module.position.y + moduleHeight / 2 - centerY;
+
+      // Rotate
+      const rotatedDx = dx * cos - dy * sin;
+      const rotatedDy = dx * sin + dy * cos;
+
+      // Translate back
+      const newX = centerX + rotatedDx - moduleWidth / 2;
+      const newY = centerY + rotatedDy - moduleHeight / 2;
+
+      return {
+        ...module,
+        position: { x: newX, y: newY }
+      };
+    });
+
+    // Calculate new bounding box after rotation
+    let newMinX = Infinity;
+    let newMinY = Infinity;
+    let newMaxX = -Infinity;
+    let newMaxY = -Infinity;
+
+    rotatedModules.forEach(module => {
+      newMinX = Math.min(newMinX, module.position.x);
+      newMinY = Math.min(newMinY, module.position.y);
+      newMaxX = Math.max(newMaxX, module.position.x + moduleWidth);
+      newMaxY = Math.max(newMaxY, module.position.y + moduleHeight);
+    });
+
+    const newCenterX = (newMinX + newMaxX) / 2;
+    const newCenterY = (newMinY + newMaxY) / 2;
+
+    // Adjust spacing: 가로 모드로 변환 시 간격을 넓히고, 세로 모드로 변환 시 간격을 좁힘
+    const adjustedModules = rotatedModules.map(module => {
+      // 모듈 중심점에서 새로운 중심점까지의 거리
+      const moduleCenterX = module.position.x + moduleWidth / 2;
+      const moduleCenterY = module.position.y + moduleHeight / 2;
+      
+      const offsetX = moduleCenterX - newCenterX;
+      const offsetY = moduleCenterY - newCenterY;
+
+      // 간격 조정 (중심점에서 멀어지거나 가까워지도록)
+      const adjustedOffsetX = offsetX * spacingMultiplier;
+      const adjustedOffsetY = offsetY * spacingMultiplier;
+
+      return {
+        ...module,
+        position: {
+          x: newCenterX + adjustedOffsetX - moduleWidth / 2,
+          y: newCenterY + adjustedOffsetY - moduleHeight / 2
+        }
+      };
+    });
+
+    setModules(adjustedModules);
+    setIsDirty(true);
+    
+    // Fit to view after rotation
+    setTimeout(() => handleFitToView(), 100);
+  }, [modules, setModules, handleFitToView]);
   
   const handleRearrangeModules = useCallback(() => {
     if (modules.length === 0) return;
@@ -760,59 +864,82 @@ ${header}
   }, [resetModules, addLog]);
 
   const handleLoadSample = useCallback((sampleName: string) => {
-    const sampleModel = SAMPLE_MODELS.find((m: any) => m.name === sampleName);
-    if (!sampleModel) {
-      addLog('ERROR', `Sample model "${sampleName}" not found.`);
-      return;
+    console.log('handleLoadSample called with:', sampleName);
+    console.log('SAMPLE_MODELS:', SAMPLE_MODELS);
+    try {
+      const sampleModel = SAMPLE_MODELS.find((m: any) => m.name === sampleName);
+      console.log('Found sample model:', sampleModel);
+      if (!sampleModel) {
+        console.error('Sample model not found:', sampleName);
+        addLog('ERROR', `Sample model "${sampleName}" not found.`);
+        return;
+      }
+
+      // Convert sample model format to app format
+      const newModules: CanvasModule[] = sampleModel.modules.map((m: any, index: number) => {
+        const moduleId = `module-${Date.now()}-${index}`;
+        const defaultModule = DEFAULT_MODULES.find(dm => dm.type === m.type);
+        if (!defaultModule) {
+          addLog('ERROR', `Module type "${m.type}" not found in DEFAULT_MODULES.`);
+          throw new Error(`Module type "${m.type}" not found`);
+        }
+        return {
+          ...defaultModule,
+          id: moduleId,
+          name: m.name || defaultModule.name,
+          position: m.position,
+          status: ModuleStatus.Pending,
+        };
+      });
+
+      const newConnections: Connection[] = sampleModel.connections.map((conn: any, index: number) => {
+        const fromModule = newModules[conn.fromModuleIndex];
+        const toModule = newModules[conn.toModuleIndex];
+        if (!fromModule || !toModule) {
+          addLog('ERROR', `Invalid connection at index ${index}.`);
+          throw new Error(`Invalid connection at index ${index}`);
+        }
+        return {
+          id: `connection-${Date.now()}-${index}`,
+          from: { moduleId: fromModule.id, portName: conn.fromPort },
+          to: { moduleId: toModule.id, portName: conn.toPort },
+        };
+      });
+
+      resetModules(newModules);
+      _setConnections(newConnections);
+      setSelectedModuleIds([]);
+      setIsDirty(false);
+      setProjectName(sampleName);
+      setIsSampleMenuOpen(false);
+      addLog('SUCCESS', `Sample model "${sampleName}" loaded successfully.`);
+      setTimeout(() => handleFitToView(), 100);
+    } catch (error: any) {
+      console.error('Error loading sample:', error);
+      addLog('ERROR', `Failed to load sample: ${error.message || 'Unknown error'}`);
+      setIsSampleMenuOpen(false);
     }
-
-    // Convert sample model format to app format
-    const newModules: CanvasModule[] = sampleModel.modules.map((m: any, index: number) => {
-      const moduleId = `module-${Date.now()}-${index}`;
-      const defaultModule = DEFAULT_MODULES.find(dm => dm.type === m.type);
-      return {
-        ...defaultModule!,
-        id: moduleId,
-        name: m.name || defaultModule!.name,
-        position: m.position,
-        status: ModuleStatus.Pending,
-      };
-    });
-
-    const newConnections: Connection[] = sampleModel.connections.map((conn: any, index: number) => {
-      const fromModule = newModules[conn.fromModuleIndex];
-      const toModule = newModules[conn.toModuleIndex];
-      return {
-        id: `connection-${Date.now()}-${index}`,
-        from: { moduleId: fromModule.id, portName: conn.fromPort },
-        to: { moduleId: toModule.id, portName: conn.toPort },
-      };
-    });
-
-    resetModules(newModules);
-    _setConnections(newConnections);
-    setSelectedModuleIds([]);
-    setIsDirty(false);
-    setProjectName(sampleName);
-    setIsSampleMenuOpen(false);
-    addLog('SUCCESS', `Sample model "${sampleName}" loaded successfully.`);
-    setTimeout(() => handleFitToView(), 100);
   }, [resetModules, addLog, handleFitToView]);
 
   // Close sample menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (sampleMenuRef.current && !sampleMenuRef.current.contains(event.target as Node)) {
+    if (!isSampleMenuOpen) return;
+
+    const handleClickOutside = (event: globalThis.MouseEvent) => {
+      const target = event.target as Node;
+      if (sampleMenuRef.current && !sampleMenuRef.current.contains(target)) {
         setIsSampleMenuOpen(false);
       }
     };
 
-    if (isSampleMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    // Longer delay to ensure button click completes first
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+    }, 200);
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      clearTimeout(timeoutId);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, [isSampleMenuOpen]);
   
@@ -2688,7 +2815,7 @@ ${header}
             </div>
         )}
 
-        <header className="flex flex-col px-4 py-1.5 bg-gray-900 border-b border-gray-700 flex-shrink-0 z-20">
+        <header className="flex flex-col px-4 py-1.5 bg-gray-900 border-b border-gray-700 flex-shrink-0 z-20 relative overflow-visible">
             {/* 첫 번째 줄: 제목 및 모델 이름 */}
             <div className="flex items-center w-full">
                 <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
@@ -2760,31 +2887,51 @@ ${header}
             </div>
             
             {/* 세 번째 줄: 햄버거 버튼(왼쪽) 및 AI 버튼 2개, Run All, 설정 버튼(오른쪽) */}
-            <div className="flex items-center justify-between gap-1 md:gap-2 w-full mt-1 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center justify-between gap-1 md:gap-2 w-full mt-1 overflow-visible">
                 <div className="flex items-center gap-1 md:gap-2">
                     <button onClick={() => setIsLeftPanelVisible(v => !v)} className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0" aria-label="Toggle modules panel" title="Toggle Modules Panel">
                         <Bars3Icon className="h-4 w-4 md:h-5 md:w-5"/>
                     </button>
-                    <div className="relative flex-shrink-0" ref={sampleMenuRef}>
+                    <div className="relative flex-shrink-0" ref={sampleMenuRef} style={{ zIndex: 1000 }}>
                         <button 
-                            onClick={() => setIsSampleMenuOpen(!isSampleMenuOpen)} 
-                            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors" 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                console.log('Samples button clicked, current state:', isSampleMenuOpen, 'SAMPLE_MODELS:', SAMPLE_MODELS);
+                                setIsSampleMenuOpen(prev => {
+                                    console.log('Toggling from', prev, 'to', !prev);
+                                    return !prev;
+                                });
+                            }} 
+                            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors cursor-pointer" 
                             title="Load Sample Model"
+                            type="button"
                         >
                             <SparklesIcon className="h-2 w-2 md:h-4 md:w-4" />
                             <span className="hidden sm:inline">Samples</span>
                         </button>
                         {isSampleMenuOpen && (
-                            <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-50 min-w-[200px]">
-                                {SAMPLE_MODELS.map((sample: any) => (
-                                    <button
-                                        key={sample.name}
-                                        onClick={() => handleLoadSample(sample.name)}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 first:rounded-t-md last:rounded-b-md transition-colors"
-                                    >
-                                        {sample.name}
-                                    </button>
-                                ))}
+                            <div 
+                                className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-xl min-w-[200px]"
+                                style={{ zIndex: 9999 }}
+                            >
+                                {SAMPLE_MODELS && SAMPLE_MODELS.length > 0 ? (
+                                    SAMPLE_MODELS.map((sample: any) => (
+                                        <button
+                                            key={sample.name}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                console.log('Sample clicked:', sample.name);
+                                                handleLoadSample(sample.name);
+                                            }}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 first:rounded-t-md last:rounded-b-md transition-colors cursor-pointer"
+                                            type="button"
+                                        >
+                                            {sample.name}
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div className="px-4 py-2 text-sm text-gray-400">No samples available</div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -2861,6 +3008,7 @@ ${header}
                 >
                     <button onClick={(e) => {e.stopPropagation(); adjustScale(-0.1)}} className="p-1.5 hover:bg-gray-700 rounded-md" title="Zoom Out"><MinusIcon className="w-5 h-5"/></button>
                     <button onClick={(e) => {e.stopPropagation(); handleRearrangeModules()}} className="p-1.5 hover:bg-gray-700 rounded-md" title="Rearrange Modules"><Squares2X2Icon className="w-5 h-5"/></button>
+                    <button onClick={(e) => {e.stopPropagation(); handleRotateModules()}} className="p-1.5 hover:bg-gray-700 rounded-md" title="Rotate Modules"><ArrowPathIcon className="w-5 h-5"/></button>
                     <button onClick={(e) => {e.stopPropagation(); handleFitToView()}} className="p-1.5 hover:bg-gray-700 rounded-md" title="Fit to View"><ArrowsPointingOutIcon className="w-5 h-5"/></button>
                     <button onClick={(e) => {e.stopPropagation(); setScale(1); setPan({ x: 0, y: 0 }); }} className="px-2 py-1 text-sm font-semibold hover:bg-gray-700 rounded-md" title="Reset View">{Math.round(scale * 100)}%</button>
                     <button onClick={(e) => {e.stopPropagation(); adjustScale(0.1)}} className="p-1.5 hover:bg-gray-700 rounded-md" title="Zoom In"><PlusIcon className="w-5 h-5"/></button>

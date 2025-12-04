@@ -376,14 +376,16 @@ export const ComponentRenderer: React.FC<ModuleNodeProps> = ({ module, isSelecte
                               return 'text-gray-600';
                           }
                       };
+                      const buttonColor = getRunButtonColor();
+                      const isDisabled = !canRun && status !== ModuleStatus.Success;
                       return (
                           <button
                               onClick={(e) => { e.stopPropagation(); onRunModule(module.id); }}
-                              disabled={!canRun}
+                              disabled={isDisabled}
                               className={`absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors z-10 ${
-                                  canRun 
-                                      ? `bg-gray-700 hover:bg-green-600 ${getRunButtonColor()} hover:text-white` 
-                                      : 'bg-gray-800 text-gray-600 cursor-not-allowed opacity-50'
+                                  isDisabled 
+                                      ? `bg-gray-800 ${buttonColor} cursor-not-allowed opacity-50` 
+                                      : `bg-gray-700 hover:bg-green-600 ${buttonColor} hover:text-white`
                               }`}
                               title={canRun ? "Run this module" : "Upstream modules must be executed first"}
                           >
