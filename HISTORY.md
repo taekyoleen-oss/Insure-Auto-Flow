@@ -12,7 +12,7 @@
 - components/Canvas.tsx
 - HISTORY.md
 
-커밋 해시: (커밋 후 업데이트)
+커밋 해시: aee39cd
 
 복구 방법:
 
