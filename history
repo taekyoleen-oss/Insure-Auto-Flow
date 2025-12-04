@@ -71,3 +71,19 @@
 설명: 메뉴가 제대로 표시되도록 z-index를 z-[9999]로 설정하고 이벤트 처리 개선
 파일: App.tsx
 ---
+[2025-12-04 17:30:00] Samples 버튼 작동 수정 및 실행 버튼 색상 변경
+위치: C:\cursor\insure-auto-flow
+명령: overflow-visible 설정 및 외부 클릭 감지 로직 개선
+설명: Samples 버튼이 정상 작동하도록 overflow 수정 및 실행 버튼 색상 로직 변경 (실행 불가능: 회색, 실행 가능: 파란색, 완료: 녹색)
+파일: App.tsx, components/ComponentRenderer.tsx, HISTORY.md, history
+커밋 해시: e7b6d1b
+복구 명령:
+```bash
+# 백업 후 복구
+git stash push -u -m "백업"
+git reset --hard e7b6d1be0c4fc994aabe1da50c7209d2e3545cec
+
+# 또는 직접 복구
+git reset --hard e7b6d1be0c4fc994aabe1da50c7209d2e3545cec
+```
+---
