@@ -103,3 +103,24 @@ git reset --hard e7b6d1be0c4fc994aabe1da50c7209d2e3545cec
 git reset --hard e7b6d1be0c4fc994aabe1da50c7209d2e3545cec
 ```
 ---
+[2025-12-04 19:45:00] Split Data 타임아웃 증가 및 js_tuning_options 에러 수정
+위치: C:\cursor\insure-auto-flow
+명령: Split Data의 Pyodide 타임아웃 증가 및 js_tuning_options KeyError 수정
+설명: 
+- Split Data Pyodide 타임아웃: 60초 → 120초 (2분)
+- 전체 타임아웃: 90초 → 180초 (3분)
+- Node.js 백엔드 타임아웃: 30초 → 120초 (2분)
+- js_tuning_options KeyError 수정 (존재 여부 확인 후 삭제)
+- 에러 메시지 개선
+파일: App.tsx, utils/pyodideRunner.ts
+커밋 해시: 79cff46
+복구 명령:
+```bash
+# 백업 후 복구
+git stash push -u -m "백업"
+git reset --hard 79cff4679c99c75a7465ebf0180cd0600a6c230a
+
+# 또는 직접 복구
+git reset --hard 79cff4679c99c75a7465ebf0180cd0600a6c230a
+```
+---
