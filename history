@@ -34,3 +34,9 @@
 설명: Samples 버튼을 두 번째 줄에서 세 번째 줄로 이동하여 햄버거 버튼 바로 우측에 배치
 파일: App.tsx
 ---
+[2025-12-04 14:44:03] Git 커밋 완료
+위치: C:\cursor\insure-auto-flow
+명령: git commit -m 'feat: Samples 버튼을 햄버거 버튼 우측으로 이동'
+설명: Samples 버튼 위치 변경 및 전체 코드 패널 기능 추가 커밋
+파일: App.tsx, components/PipelineCodePanel.tsx, utils/generatePipelineCode.ts 등
+---
