@@ -317,22 +317,47 @@ export function generateFullPipelineCode(
     // LoadData/XolLoading의 경우 fileContent 처리
     if (module.type === ModuleType.LoadData || module.type === ModuleType.XolLoading) {
       const fileContent = module.parameters.fileContent as string | undefined;
+      const source = module.parameters.source as string | undefined;
+      
       if (fileContent) {
-        // fileContent가 있으면 StringIO를 사용하도록 코드 수정
-        // 원본 코드의 구조를 유지하면서 file_path를 StringIO로 대체
-        if (!processedCode.includes('from io import StringIO')) {
-          processedCode = processedCode.replace(
-            /(import pandas as pd)/,
-            `$1\nfrom io import StringIO`
-          );
-        }
+        // fileContent가 있으면 파일 이름으로 대체
+        // csv_data 부분을 제거하고 file_path를 사용하도록 수정
+        const fileName = source || 'data.csv';
+        
+        // csv_data = """...""" 부분을 찾아서 제거
         processedCode = processedCode.replace(
-          /file_path\s*=\s*[^\n]+/,
-          `csv_data = """${fileContent.replace(/"""/g, '\\"\\"\\"')}"""`
+          /csv_data\s*=\s*"""[^"]*"""/gs,
+          ''
         );
         processedCode = processedCode.replace(
-          /pd\.read_csv\(file_path\)/g,
-          `pd.read_csv(StringIO(csv_data))`
+          /csv_data\s*=\s*'''[^']*'''/gs,
+          ''
+        );
+        
+        // file_path를 파일 이름으로 설정
+        processedCode = processedCode.replace(
+          /file_path\s*=\s*[^\n]+/,
+          `file_path = "${fileName}"`
+        );
+        
+        // StringIO 사용 부분을 일반 file_path로 변경
+        processedCode = processedCode.replace(
+          /pd\.read_csv\(StringIO\(csv_data\)\)/g,
+          `pd.read_csv(file_path)`
+        );
+        processedCode = processedCode.replace(
+          /pd\.read_csv\(StringIO\([^)]+\)\)/g,
+          `pd.read_csv(file_path)`
+        );
+        
+        // StringIO import 제거 (더 이상 필요 없음)
+        processedCode = processedCode.replace(
+          /from io import StringIO\n?/g,
+          ''
+        );
+        processedCode = processedCode.replace(
+          /import StringIO\n?/g,
+          ''
         );
       }
     }
