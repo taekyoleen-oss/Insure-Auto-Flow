@@ -140,3 +140,25 @@ git reset --hard 5a611bcd0c717ff4d8534bd1bf8eea62d001b5a9
 git reset --hard 5a611bcd0c717ff4d8534bd1bf8eea62d001b5a9
 ```
 ---
+[2025-12-04 20:00:00] 하이퍼파라미터 튜닝 성능 그래프 추가
+위치: C:\cursor\insure-auto-flow
+명령: Hyperparameter Tuning Results 하단에 성능 그래프 추가
+설명: 
+- SVG를 사용한 TuningChart 컴포넌트 추가
+- alpha 파라미터와 score(MAE/MSE) 관계 시각화
+- 파란색 원형 데이터 포인트와 빨간색 점선 연결
+- 로그 스케일 적용 (alpha 축)
+- "예상 성능" 한글 라벨 추가
+- 그리드 라인 및 축 라벨 포함
+파일: components/TrainedModelPreviewModal.tsx
+커밋 해시: 362243a
+복구 명령:
+```bash
+# 백업 후 복구
+git stash push -u -m "백업"
+git reset --hard 362243ae10b89511ae1fc183c118f332bb5ad463
+
+# 또는 직접 복구
+git reset --hard 362243ae10b89511ae1fc183c118f332bb5ad463
+```
+---
