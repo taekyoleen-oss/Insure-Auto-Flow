@@ -19,7 +19,7 @@
 - utils/pyodideRunner.ts
 - HISTORY.md
 
-커밋 해시: (커밋 후 업데이트)
+커밋 해시: 66d516f
 
 복구 방법:
 
