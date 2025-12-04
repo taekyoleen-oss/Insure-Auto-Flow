@@ -385,5 +385,3 @@ git reset --soft <커밋해시>
 git reset --hard <커밋해시>
 
 ---
-
-
