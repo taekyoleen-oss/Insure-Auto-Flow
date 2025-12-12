@@ -52,13 +52,16 @@ const unsupervisedModelTypes = [
 ];
 
 const traditionAnalysisTypes = [
+  ModuleType.OLSModel,
+  ModuleType.LogisticModel,
+  ModuleType.PoissonModel,
+  ModuleType.QuasiPoissonModel,
+  ModuleType.NegativeBinomialModel,
+  ModuleType.DiversionChecker,
   ModuleType.StatModels,
   ModuleType.ResultModel,
   ModuleType.PredictModel,
-  ModuleType.EvaluateStats,
-  ModuleType.PoissonRegression,
-  ModuleType.NegativeBinomialRegression,
-  ModuleType.DiversionChecker,
+  ModuleType.EvaluateStat,
 ];
 
 const reinsuranceTypes = [
@@ -131,7 +134,14 @@ const ToolboxItem: React.FC<{
     e: React.DragEvent<HTMLDivElement>,
     type: ModuleType
   ) => {
-    e.dataTransfer.setData("application/reactflow", type);
+    // Ensure type is a valid string
+    const typeString = String(type);
+    if (!typeString || typeString.trim() === '') {
+      console.error('Invalid module type for drag:', type);
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData("application/reactflow", typeString);
     e.dataTransfer.effectAllowed = "copy"; // Changed from 'move' to 'copy' for better UX when creating new items
   };
 
@@ -142,10 +152,10 @@ const ToolboxItem: React.FC<{
       onTouchEnd={(e) => onTouchEnd(type, e)}
       draggable
       title={description}
-      className="flex items-center px-1.5 py-2 rounded-lg cursor-grab bg-gray-800 hover:bg-gray-700 hover:text-blue-400 transition-colors"
+      className="flex items-center px-3 py-2 rounded-lg cursor-grab bg-gray-800 hover:bg-gray-700 hover:text-blue-400 transition-colors"
     >
-      <Icon className="h-3.5 w-3.5 mr-2 flex-shrink-0" />
-      <span className="text-[0.65rem] font-medium">{name}</span>
+      <Icon className="h-5 w-5 mr-3 flex-shrink-0" />
+      <span className="text-sm font-medium">{name}</span>
     </div>
   );
 };
@@ -218,7 +228,7 @@ export const Toolbox: React.FC<ToolboxProps> = ({
   return (
     <aside className="w-56 bg-gray-900 border-r border-gray-700 flex flex-col h-full">
       <div className="p-3 flex-shrink-0">
-        <h3 className="text-[0.7rem] font-semibold text-white">Modules</h3>
+        <h3 className="text-lg font-semibold text-white">Modules</h3>
       </div>
       <div className="flex-1 p-2 overflow-y-auto panel-scrollbar min-h-0">
         <div className="flex flex-col gap-2">
@@ -326,13 +336,13 @@ export const Toolbox: React.FC<ToolboxProps> = ({
             <div key={category.name}>
               <button
                 onClick={() => toggleCategory(category.name)}
-                className="w-full flex items-center justify-between p-2 rounded-lg text-left text-[0.63rem] font-semibold text-gray-300 hover:bg-gray-800 transition-colors"
+                className="w-full flex items-center justify-between p-2 rounded-lg text-left text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors"
               >
                 <span>{category.name}</span>
                 {expandedCategories[category.name] ? (
-                  <ChevronUpIcon className="w-3.5 h-3.5" />
+                  <ChevronUpIcon className="w-5 h-5" />
                 ) : (
-                  <ChevronDownIcon className="w-3.5 h-3.5" />
+                  <ChevronDownIcon className="w-5 h-5" />
                 )}
               </button>
               {expandedCategories[category.name] && (
@@ -354,13 +364,13 @@ export const Toolbox: React.FC<ToolboxProps> = ({
                     <div key={subCategory.name} className="pl-2">
                       <button
                         onClick={() => toggleCategory(subCategory.name)}
-                        className="w-full flex items-center justify-between py-1 rounded-md text-left text-[0.56rem] font-semibold text-gray-400 hover:bg-gray-800 transition-colors"
+                        className="w-full flex items-center justify-between py-1 rounded-md text-left text-xs font-semibold text-gray-400 hover:bg-gray-800 transition-colors"
                       >
                         <span>{subCategory.name}</span>
                         {expandedCategories[subCategory.name] ? (
-                          <ChevronUpIcon className="w-3 h-3" />
+                          <ChevronUpIcon className="w-4 h-4" />
                         ) : (
-                          <ChevronDownIcon className="w-3 h-3" />
+                          <ChevronDownIcon className="w-4 h-4" />
                         )}
                       </button>
                       {expandedCategories[subCategory.name] && (
@@ -389,7 +399,7 @@ export const Toolbox: React.FC<ToolboxProps> = ({
         </div>
       </div>
       <div className="p-2 border-t border-gray-700 flex-shrink-0">
-        <p className="text-[0.63rem] text-gray-400 text-center mb-2">
+        <p className="text-sm text-gray-400 text-center mb-2">
           Developed by TKLEEN
         </p>
         <a

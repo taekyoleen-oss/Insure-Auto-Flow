@@ -126,13 +126,13 @@ export const TOOLBOX_MODULES = [
     type: ModuleType.PoissonRegression,
     name: "Poisson Regression",
     icon: HashtagIcon,
-    description: "A regression model for count data.",
+    description: "A regression model for count data. (Deprecated: Use Poisson Model instead)",
   },
   {
     type: ModuleType.NegativeBinomialRegression,
     name: "Negative Binomial",
     icon: HashtagIcon,
-    description: "A regression model for overdispersed count data.",
+    description: "A regression model for overdispersed count data. (Deprecated: Use Negative Binomial Model instead)",
   },
   {
     type: ModuleType.DecisionTree,
@@ -203,12 +203,43 @@ export const TOOLBOX_MODULES = [
     description: "A technique for dimensionality reduction.",
   },
 
-  // Tradition Analysis
+  // Traditional Analysis - Statsmodels Models
+  {
+    type: ModuleType.OLSModel,
+    name: "OLS Model",
+    icon: BarChartIcon,
+    description: "Ordinary Least Squares regression model.",
+  },
+  {
+    type: ModuleType.LogisticModel,
+    name: "Logistic Model",
+    icon: PresentationChartLineIcon,
+    description: "Logistic regression model for binary classification.",
+  },
+  {
+    type: ModuleType.PoissonModel,
+    name: "Poisson Model",
+    icon: HashtagIcon,
+    description: "Poisson regression model for count data.",
+  },
+  {
+    type: ModuleType.QuasiPoissonModel,
+    name: "Quasi-Poisson Model",
+    icon: HashtagIcon,
+    description: "Quasi-Poisson regression model for overdispersed count data.",
+  },
+  {
+    type: ModuleType.NegativeBinomialModel,
+    name: "Negative Binomial Model",
+    icon: HashtagIcon,
+    description: "Negative Binomial regression model for overdispersed count data.",
+  },
+  // Tradition Analysis - Advanced Models
   {
     type: ModuleType.StatModels,
     name: "Stat Models",
     icon: CogIcon,
-    description: "Defines a statistical model (e.g., OLS, Logit).",
+    description: "Advanced statistical models (Gamma, Tweedie).",
   },
   {
     type: ModuleType.ResultModel,
@@ -223,17 +254,16 @@ export const TOOLBOX_MODULES = [
     description: "Generates predictions using a fitted statistical model.",
   },
   {
-    type: ModuleType.EvaluateStats,
-    name: "Evaluate Stats",
-    icon: CalculatorIcon,
-    description: "Evaluates statistical model performance with detailed metrics.",
-  },
-  {
     type: ModuleType.DiversionChecker,
     name: "Diversion Checker",
     icon: BeakerIcon,
-    description:
-      "Checks overdispersion and recommends appropriate count regression model.",
+    description: "Checks for overdispersion in count data and recommends appropriate regression models.",
+  },
+  {
+    type: ModuleType.EvaluateStat,
+    name: "Evaluate Stat",
+    icon: CalculatorIcon,
+    description: "Evaluates statistical model performance with various metrics.",
   },
 
   // Reinsurance (Distribution)
@@ -582,9 +612,44 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       outputs: [{ name: "evaluation_out", type: "evaluation" }],
     },
     {
+      type: ModuleType.OLSModel,
+      status: ModuleStatus.Pending,
+      parameters: {},
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
+      type: ModuleType.LogisticModel,
+      status: ModuleStatus.Pending,
+      parameters: {},
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
+      type: ModuleType.PoissonModel,
+      status: ModuleStatus.Pending,
+      parameters: { max_iter: 100 },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
+      type: ModuleType.QuasiPoissonModel,
+      status: ModuleStatus.Pending,
+      parameters: { max_iter: 100 },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
+      type: ModuleType.NegativeBinomialModel,
+      status: ModuleStatus.Pending,
+      parameters: { max_iter: 100, disp: 1.0 },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
       type: ModuleType.StatModels,
       status: ModuleStatus.Pending,
-      parameters: { model: "OLS" },
+      parameters: { model: "Gamma" },
       inputs: [],
       outputs: [{ name: "model_out", type: "model" }],
     },
@@ -609,16 +674,16 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       outputs: [{ name: "scored_data_out", type: "data" }],
     },
     {
-      type: ModuleType.EvaluateStats,
-      status: ModuleStatus.Pending,
-      parameters: { label_column: null, prediction_column: null },
-      inputs: [{ name: "data_in", type: "data" }],
-      outputs: [{ name: "evaluation_out", type: "evaluation" }],
-    },
-    {
       type: ModuleType.DiversionChecker,
       status: ModuleStatus.Pending,
-      parameters: { feature_columns: [], label_column: null },
+      parameters: { feature_columns: [], label_column: null, max_iter: 100 },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "result_out", type: "evaluation" }],
+    },
+    {
+      type: ModuleType.EvaluateStat,
+      status: ModuleStatus.Pending,
+      parameters: { label_column: null, prediction_column: null, model_type: null },
       inputs: [{ name: "data_in", type: "data" }],
       outputs: [{ name: "result_out", type: "evaluation" }],
     },

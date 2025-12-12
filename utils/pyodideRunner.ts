@@ -1210,7 +1210,9 @@ export async function runStatsModel(
   y: number[],
   modelType: string,
   featureColumns: string[],
-  timeoutMs: number = 120000
+  timeoutMs: number = 120000,
+  maxIter: number = 100,
+  disp: number = 1.0
 ): Promise<{
   summary: {
     coefficients: Record<
@@ -1247,6 +1249,8 @@ export async function runStatsModel(
     py.globals.set("js_y", y);
     py.globals.set("js_feature_columns", featureColumns);
     py.globals.set("js_model_type", modelType);
+    py.globals.set("js_max_iter", maxIter);
+    py.globals.set("js_disp", disp);
 
     const code = `
 import json
@@ -1418,11 +1422,9 @@ def fit_count_regression_statsmodels(df, distribution_type, feature_columns, lab
         raise
 
 # run_stats_model 함수 정의
-def run_stats_model(df, model_type, feature_columns, label_column):
+def run_stats_model(df, model_type, feature_columns, label_column, max_iter=100, disp=1.0):
     # Count regression 모델의 경우 fit_count_regression_statsmodels 사용
     if model_type in ['Poisson', 'NegativeBinomial', 'QuasiPoisson']:
-        max_iter = 100
-        disp = 1.0
         model_results = fit_count_regression_statsmodels(
             df, model_type, feature_columns, label_column, max_iter, disp
         )
@@ -1476,6 +1478,8 @@ X_array = js_X.to_py()
 y_array = js_y.to_py()
 feature_columns = js_feature_columns.to_py()
 model_type = str(js_model_type)  # 이미 문자열이므로 to_py() 불필요
+max_iter = int(js_max_iter)
+disp = float(js_disp)
 
 # DataFrame 생성
 df = pd.DataFrame(X_array, columns=feature_columns)
@@ -1486,7 +1490,9 @@ results_obj = run_stats_model(
     df=df,
     model_type=model_type,
     feature_columns=feature_columns,
-    label_column='label'
+    label_column='label',
+    max_iter=max_iter,
+    disp=disp
 )
 
 if results_obj is None:
@@ -2663,87 +2669,89 @@ metrics['Root Mean Squared Error (RMSE)'] = rmse
 metrics['Mean Absolute Error (MAE)'] = mae
 metrics['R-squared'] = r2
 
-# 모델 타입에 따른 추가 통계량
-if model_type in ['Poisson', 'NegativeBinomial', 'QuasiPoisson']:
-    # Count regression 모델 통계량
-    # Deviance 계산
-    if model_type == 'Poisson':
-        # Poisson deviance: 2 * sum(y * log(y/mu) - (y - mu))
-        mu = np.maximum(y_pred, 1e-10)  # 0 방지
-        deviance_val = 2 * np.sum(y_true * np.log(np.maximum(y_true, 1e-10) / mu) - (y_true - mu))
+# 모델 타입에 따른 추가 통계량 (선택적)
+# 모델 타입이 제공되면 해당 모델의 특수 통계량 계산
+if model_type and model_type != '' and model_type != 'None':
+    if model_type in ['Poisson', 'NegativeBinomial', 'QuasiPoisson']:
+        # Count regression 모델 통계량
+        # Deviance 계산
+        if model_type == 'Poisson':
+            # Poisson deviance: 2 * sum(y * log(y/mu) - (y - mu))
+            mu = np.maximum(y_pred, 1e-10)  # 0 방지
+            deviance_val = 2 * np.sum(y_true * np.log(np.maximum(y_true, 1e-10) / mu) - (y_true - mu))
+            deviance = float(deviance_val)
+            
+            # Pearson chi2
+            pearson_resid = (y_true - mu) / np.sqrt(mu)
+            pearson_chi2_val = np.sum(pearson_resid ** 2)
+            pearson_chi2 = float(pearson_chi2_val)
+            
+            # Dispersion (phi)
+            n = len(y_true)
+            p = 1  # 간단히 1로 가정 (실제로는 모델의 파라미터 수)
+            dispersion_val = pearson_chi2_val / (n - p) if (n - p) > 0 else 1.0
+            dispersion = float(dispersion_val)
+            
+            # Log-likelihood (Poisson)
+            log_likelihood_val = np.sum(stats.poisson.logpmf(y_true, mu))
+            log_likelihood = float(log_likelihood_val)
+            
+            # AIC, BIC (근사치)
+            aic = float(-2 * log_likelihood_val + 2 * p)
+            bic = float(-2 * log_likelihood_val + np.log(n) * p)
+            
+        elif model_type in ['NegativeBinomial', 'QuasiPoisson']:
+            # Negative Binomial / Quasi-Poisson 통계량
+            mu = np.maximum(y_pred, 1e-10)
+            deviance_val = 2 * np.sum(y_true * np.log(np.maximum(y_true, 1e-10) / mu) - (y_true - mu))
+            deviance = float(deviance_val)
+            
+            pearson_resid = (y_true - mu) / np.sqrt(mu)
+            pearson_chi2_val = np.sum(pearson_resid ** 2)
+            pearson_chi2 = float(pearson_chi2_val)
+            
+            n = len(y_true)
+            p = 1
+            dispersion_val = pearson_chi2_val / (n - p) if (n - p) > 0 else 1.0
+            dispersion = float(dispersion_val)
+
+    elif model_type in ['Logistic', 'Logit']:
+        # Logistic regression 통계량
+        # Deviance (binomial deviance)
+        y_pred_clipped = np.clip(y_pred, 1e-10, 1 - 1e-10)
+        y_true_clipped = np.clip(y_true, 1e-10, 1 - 1e-10)
+        deviance_val = -2 * np.sum(y_true * np.log(y_pred_clipped) + (1 - y_true) * np.log(1 - y_pred_clipped))
         deviance = float(deviance_val)
         
         # Pearson chi2
-        pearson_resid = (y_true - mu) / np.sqrt(mu)
+        pearson_resid = (y_true - y_pred) / np.sqrt(y_pred * (1 - y_pred) + 1e-10)
         pearson_chi2_val = np.sum(pearson_resid ** 2)
         pearson_chi2 = float(pearson_chi2_val)
         
-        # Dispersion (phi)
-        n = len(y_true)
-        p = 1  # 간단히 1로 가정 (실제로는 모델의 파라미터 수)
-        dispersion_val = pearson_chi2_val / (n - p) if (n - p) > 0 else 1.0
-        dispersion = float(dispersion_val)
-        
-        # Log-likelihood (Poisson)
-        log_likelihood_val = np.sum(stats.poisson.logpmf(y_true, mu))
+        # Log-likelihood
+        log_likelihood_val = np.sum(y_true * np.log(y_pred_clipped) + (1 - y_true) * np.log(1 - y_pred_clipped))
         log_likelihood = float(log_likelihood_val)
-        
-        # AIC, BIC (근사치)
-        aic = float(-2 * log_likelihood_val + 2 * p)
-        bic = float(-2 * log_likelihood_val + np.log(n) * p)
-        
-    elif model_type in ['NegativeBinomial', 'QuasiPoisson']:
-        # Negative Binomial / Quasi-Poisson 통계량
-        mu = np.maximum(y_pred, 1e-10)
-        deviance_val = 2 * np.sum(y_true * np.log(np.maximum(y_true, 1e-10) / mu) - (y_true - mu))
-        deviance = float(deviance_val)
-        
-        pearson_resid = (y_true - mu) / np.sqrt(mu)
-        pearson_chi2_val = np.sum(pearson_resid ** 2)
-        pearson_chi2 = float(pearson_chi2_val)
         
         n = len(y_true)
         p = 1
-        dispersion_val = pearson_chi2_val / (n - p) if (n - p) > 0 else 1.0
-        dispersion = float(dispersion_val)
+        aic = float(-2 * log_likelihood_val + 2 * p)
+        bic = float(-2 * log_likelihood_val + np.log(n) * p)
 
-elif model_type in ['Logistic', 'Logit']:
-    # Logistic regression 통계량
-    # Deviance (binomial deviance)
-    y_pred_clipped = np.clip(y_pred, 1e-10, 1 - 1e-10)
-    y_true_clipped = np.clip(y_true, 1e-10, 1 - 1e-10)
-    deviance_val = -2 * np.sum(y_true * np.log(y_pred_clipped) + (1 - y_true) * np.log(1 - y_pred_clipped))
-    deviance = float(deviance_val)
-    
-    # Pearson chi2
-    pearson_resid = (y_true - y_pred) / np.sqrt(y_pred * (1 - y_pred) + 1e-10)
-    pearson_chi2_val = np.sum(pearson_resid ** 2)
-    pearson_chi2 = float(pearson_chi2_val)
-    
-    # Log-likelihood
-    log_likelihood_val = np.sum(y_true * np.log(y_pred_clipped) + (1 - y_true) * np.log(1 - y_pred_clipped))
-    log_likelihood = float(log_likelihood_val)
-    
-    n = len(y_true)
-    p = 1
-    aic = float(-2 * log_likelihood_val + 2 * p)
-    bic = float(-2 * log_likelihood_val + np.log(n) * p)
-
-elif model_type == 'OLS':
-    # OLS 통계량
-    # Deviance (residual sum of squares)
-    deviance_val = np.sum((y_true - y_pred) ** 2)
-    deviance = float(deviance_val)
-    
-    # Log-likelihood (normal distribution)
-    n = len(y_true)
-    sigma2 = deviance_val / n if n > 0 else 1.0
-    log_likelihood_val = -0.5 * n * (np.log(2 * np.pi * sigma2) + 1)
-    log_likelihood = float(log_likelihood_val)
-    
-    p = 1
-    aic = float(-2 * log_likelihood_val + 2 * p)
-    bic = float(-2 * log_likelihood_val + np.log(n) * p)
+    elif model_type == 'OLS':
+        # OLS 통계량
+        # Deviance (residual sum of squares)
+        deviance_val = np.sum((y_true - y_pred) ** 2)
+        deviance = float(deviance_val)
+        
+        # Log-likelihood (normal distribution)
+        n = len(y_true)
+        sigma2 = deviance_val / n if n > 0 else 1.0
+        log_likelihood_val = -0.5 * n * (np.log(2 * np.pi * sigma2) + 1)
+        log_likelihood = float(log_likelihood_val)
+        
+        p = 1
+        aic = float(-2 * log_likelihood_val + 2 * p)
+        bic = float(-2 * log_likelihood_val + np.log(n) * p)
 
 # 메트릭에 추가
 if deviance is not None:
@@ -3446,5 +3454,163 @@ result
 
     const errorMessage = error.message || String(error);
     throw new Error(`Python TransformData error: ${errorMessage}`);
+  }
+}
+
+/**
+ * Diversion Checker (과대산포 검사)를 실행합니다
+ */
+export async function dispersionCheckerPython(
+  rows: Record<string, any>[],
+  featureColumns: string[],
+  labelColumn: string,
+  maxIter: number = 100,
+  timeoutMs: number = 120000
+): Promise<{
+  phi: number;
+  recommendation: "Poisson" | "QuasiPoisson" | "NegativeBinomial";
+  poissonAic: number | null;
+  negativeBinomialAic: number | null;
+  aicComparison: string | null;
+  cameronTrivediCoef: number;
+  cameronTrivediPvalue: number;
+  cameronTrivediConclusion: string;
+  methodsUsed: string[];
+  results: {
+    phi: number;
+    phi_interpretation: string;
+    recommendation: string;
+    poisson_aic: number | null;
+    negative_binomial_aic: number | null;
+    cameron_trivedi_coef: number;
+    cameron_trivedi_pvalue: number;
+    cameron_trivedi_conclusion: string;
+  };
+}> {
+  try {
+    const py = await loadPyodide(30000);
+
+    await withTimeout(
+      py.loadPackage(["statsmodels", "pandas", "numpy"]),
+      60000,
+      "statsmodels 패키지 설치 타임아웃 (60초 초과)"
+    );
+
+    // data_analysis_modules.py 파일을 로드
+    const response = await fetch("/data_analysis_modules.py");
+    const pythonCode = await response.text();
+    py.runPython(pythonCode);
+
+    py.globals.set("js_rows", rows);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_max_iter", maxIter);
+
+    const code = `
+import json
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import traceback
+import sys
+
+try:
+    # JavaScript에서 전달된 데이터를 DataFrame으로 변환
+    rows = js_rows.to_py()
+    feature_columns = js_feature_columns.to_py()
+    label_column = str(js_label_column)
+    max_iter = int(js_max_iter)
+    
+    if not rows or len(rows) == 0:
+        raise ValueError("입력 데이터가 비어있습니다.")
+    
+    df = pd.DataFrame(rows)
+    
+    # NaN 값 처리 (0으로 대체)
+    df = df.fillna(0)
+    
+    # dispersion_checker 함수 호출
+    result = dispersion_checker(df, feature_columns, label_column, max_iter)
+    
+    # 결과를 JavaScript로 전달할 형식으로 변환
+    js_result = {
+        'phi': float(result['phi']),
+        'recommendation': str(result['recommendation']),
+        'poisson_aic': float(result['poisson_aic']) if result['poisson_aic'] is not None else None,
+        'negative_binomial_aic': float(result['negative_binomial_aic']) if result['negative_binomial_aic'] is not None else None,
+        'aic_comparison': str(result['aic_comparison']) if result['aic_comparison'] is not None else None,
+        'cameron_trivedi_coef': float(result['cameron_trivedi_coef']),
+        'cameron_trivedi_pvalue': float(result['cameron_trivedi_pvalue']),
+        'cameron_trivedi_conclusion': str(result['cameron_trivedi_conclusion']),
+        'methods_used': result['methods_used'],
+        'results': result['results']
+    }
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      `Diversion Checker 실행 타임아웃 (${timeoutMs / 1000}초 초과)`
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error("Python 코드가 결과를 반환하지 않았습니다.");
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result.__error__) {
+      throw new Error(
+        `Python Diversion Checker error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    if (!result.phi || !result.recommendation) {
+      throw new Error("Python Diversion Checker error: Invalid result structure");
+    }
+
+    py.globals.delete("js_rows");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_max_iter");
+    py.globals.delete("js_result");
+
+    return {
+      phi: result.phi,
+      recommendation: result.recommendation as "Poisson" | "QuasiPoisson" | "NegativeBinomial",
+      poissonAic: result.poisson_aic,
+      negativeBinomialAic: result.negative_binomial_aic,
+      aicComparison: result.aic_comparison,
+      cameronTrivediCoef: result.cameron_trivedi_coef,
+      cameronTrivediPvalue: result.cameron_trivedi_pvalue,
+      cameronTrivediConclusion: result.cameron_trivedi_conclusion,
+      methodsUsed: result.methods_used,
+      results: result.results,
+    };
+  } catch (error: any) {
+    try {
+      if (pyodide) {
+        pyodide.globals.delete("js_rows");
+        pyodide.globals.delete("js_feature_columns");
+        pyodide.globals.delete("js_label_column");
+        pyodide.globals.delete("js_max_iter");
+        pyodide.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Diversion Checker error:\n${errorMessage}`);
   }
 }

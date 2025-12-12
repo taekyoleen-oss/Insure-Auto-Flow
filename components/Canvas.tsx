@@ -138,8 +138,24 @@ export const Canvas: React.FC<CanvasProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     onClearSuggestion();
-    const type = e.dataTransfer.getData('application/reactflow') as ModuleType;
-    if (typeof type === 'undefined' || !type || !canvasContainerRef.current) {
+    
+    if (!canvasContainerRef.current) {
+      console.error('Canvas container ref is not available');
+      return;
+    }
+    
+    const typeString = e.dataTransfer.getData('application/reactflow');
+    // Check if type is valid ModuleType (non-empty string)
+    if (!typeString || typeString.trim() === '') {
+      console.error('Invalid module type received from drag:', typeString);
+      return;
+    }
+    
+    // Validate that the type is a valid ModuleType enum value
+    const type = typeString as ModuleType;
+    const validTypes = Object.values(ModuleType);
+    if (!validTypes.includes(type)) {
+      console.error('Module type is not a valid ModuleType enum value:', type);
       return;
     }
     
@@ -155,15 +171,22 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // The animate function for rAF
   const animateDrag = useCallback(() => {
-      if (!dragInfoRef.current || !latestMousePosRef.current) {
+      if (!dragInfoRef.current || !latestMousePosRef.current || !canvasContainerRef.current) {
           return;
       }
 
       const { dragStartPoint, startPositions } = dragInfoRef.current;
       const currentMousePos = latestMousePosRef.current;
+      const canvasBounds = canvasContainerRef.current.getBoundingClientRect();
       
-      const dx = (currentMousePos.x - dragStartPoint.x) / scale;
-      const dy = (currentMousePos.y - dragStartPoint.y) / scale;
+      // Convert screen coordinates to canvas coordinates
+      const startCanvasX = (dragStartPoint.x - canvasBounds.left - pan.x) / scale;
+      const startCanvasY = (dragStartPoint.y - canvasBounds.top - pan.y) / scale;
+      const currentCanvasX = (currentMousePos.x - canvasBounds.left - pan.x) / scale;
+      const currentCanvasY = (currentMousePos.y - canvasBounds.top - pan.y) / scale;
+      
+      const dx = currentCanvasX - startCanvasX;
+      const dy = currentCanvasY - startCanvasY;
 
       const updates: { id: string, position: { x: number, y: number } }[] = [];
       startPositions.forEach((startPos, id) => {
@@ -181,7 +204,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
       
       requestRef.current = null;
-  }, [scale, updateModulePositions]);
+  }, [scale, pan, canvasContainerRef, updateModulePositions]);
 
   const handleDragMove = useCallback((e: globalThis.MouseEvent) => {
       if (!dragInfoRef.current) return;
@@ -246,7 +269,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Similar optimization for Touch events could be added, 
   // but sticking to mouse for now as per request priority.
   const handleTouchMove = useCallback((e: globalThis.TouchEvent) => {
-    if (!touchDragInfoRef.current) return;
+    if (!touchDragInfoRef.current || !canvasContainerRef.current) return;
     
     let currentTouch: Touch | null = null;
     for (let i = 0; i < e.touches.length; i++) {
@@ -260,8 +283,16 @@ export const Canvas: React.FC<CanvasProps> = ({
     e.preventDefault();
 
     const { dragStartPoint, startPositions } = touchDragInfoRef.current;
-    const dx = (currentTouch.clientX - dragStartPoint.x) / scale;
-    const dy = (currentTouch.clientY - dragStartPoint.y) / scale;
+    const canvasBounds = canvasContainerRef.current.getBoundingClientRect();
+    
+    // Convert screen coordinates to canvas coordinates
+    const startCanvasX = (dragStartPoint.x - canvasBounds.left - pan.x) / scale;
+    const startCanvasY = (dragStartPoint.y - canvasBounds.top - pan.y) / scale;
+    const currentCanvasX = (currentTouch.clientX - canvasBounds.left - pan.x) / scale;
+    const currentCanvasY = (currentTouch.clientY - canvasBounds.top - pan.y) / scale;
+    
+    const dx = currentCanvasX - startCanvasX;
+    const dy = currentCanvasY - startCanvasY;
 
     const updates: { id: string, position: { x: number, y: number } }[] = [];
     startPositions.forEach((startPos, id) => {
@@ -274,7 +305,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (updates.length > 0) {
         updateModulePositions(updates);
     }
-  }, [scale, updateModulePositions]);
+  }, [scale, pan, canvasContainerRef, updateModulePositions]);
 
   const handleTouchEnd = useCallback(() => {
     if (touchDragInfoRef.current) {

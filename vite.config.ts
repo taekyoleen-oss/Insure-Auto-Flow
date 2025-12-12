@@ -13,6 +13,11 @@ export default defineConfig(({ mode }) => {
             target: 'http://localhost:3001',
             changeOrigin: true,
             secure: false,
+          },
+          '/api/samples': {
+            target: 'http://localhost:3002',
+            changeOrigin: true,
+            secure: false,
           }
         }
       },

@@ -4,7 +4,6 @@ import React, {
   MouseEvent,
   useEffect,
   useRef,
-  useMemo,
 } from "react";
 import { Toolbox } from "./components/Toolbox";
 import { Canvas } from "./components/Canvas";
@@ -28,7 +27,6 @@ import {
   XolContractOutput,
   FinalXolPriceOutput,
   EvaluationOutput,
-  EvaluateStatsOutput,
   KMeansOutput,
   HierarchicalClusteringOutput,
   PCAOutput,
@@ -38,8 +36,21 @@ import {
   EncoderOutput,
   NormalizerOutput,
   DiversionCheckerOutput,
+  EvaluateStatOutput,
+  StatsModelFamily,
 } from "./types";
 import { DEFAULT_MODULES, TOOLBOX_MODULES, SAMPLE_MODELS } from "./constants";
+import { SAVED_SAMPLES } from "./savedSamples";
+
+// SAVED_SAMPLES가 없을 경우를 대비한 기본값
+const getSavedSamples = () => {
+  try {
+    return SAVED_SAMPLES || [];
+  } catch (error) {
+    console.error("Failed to load SAVED_SAMPLES:", error);
+    return [];
+  }
+};
 import {
   LogoIcon,
   PlayIcon,
@@ -56,7 +67,6 @@ import {
   Squares2X2Icon,
   CheckIcon,
   ArrowPathIcon,
-  XMarkIcon,
   StarIcon,
 } from "./components/icons";
 import useHistoryState from "./hooks/useHistoryState";
@@ -65,11 +75,11 @@ import { StatisticsPreviewModal } from "./components/StatisticsPreviewModal";
 import { SplitDataPreviewModal } from "./components/SplitDataPreviewModal";
 import { TrainedModelPreviewModal } from "./components/TrainedModelPreviewModal";
 import { StatsModelsResultPreviewModal } from "./components/StatsModelsResultPreviewModal";
+import { DiversionCheckerPreviewModal } from "./components/DiversionCheckerPreviewModal";
+import { EvaluateStatPreviewModal } from "./components/EvaluateStatPreviewModal";
 import { XoLPricePreviewModal } from "./components/XoLPricePreviewModal";
 import { FinalXolPricePreviewModal } from "./components/FinalXolPricePreviewModal";
 import { EvaluationPreviewModal } from "./components/EvaluationPreviewModal";
-import { EvaluateStatsPreviewModal } from "./components/EvaluateStatsPreviewModal";
-import { DiversionCheckerPreviewModal } from "./components/DiversionCheckerPreviewModal";
 import { AIPipelineFromGoalModal } from "./components/AIPipelineFromGoalModal";
 import { AIPipelineFromDataModal } from "./components/AIPipelineFromDataModal";
 import { AIPlanDisplayModal } from "./components/AIPlanDisplayModal";
@@ -88,6 +98,11 @@ type PropertiesTab = "properties" | "preview" | "code";
 // --- Helper Functions ---
 // Note: All mathematical/statistical calculations are now performed using Pyodide (Python)
 // JavaScript is only used for UI rendering and data structure transformations that don't modify Python results
+
+// Sigmoid function for logistic regression predictions
+const sigmoid = (x: number): number => {
+  return 1 / (1 + Math.exp(-x));
+};
 
 // Helper function to determine model type
 const isClassification = (
@@ -140,16 +155,16 @@ const App: React.FC = () => {
     useState<CanvasModule | null>(null);
   const [viewingStatsModelsResult, setViewingStatsModelsResult] =
     useState<CanvasModule | null>(null);
+  const [viewingDiversionChecker, setViewingDiversionChecker] =
+    useState<CanvasModule | null>(null);
+  const [viewingEvaluateStat, setViewingEvaluateStat] =
+    useState<CanvasModule | null>(null);
   const [viewingXoLPrice, setViewingXoLPrice] = useState<CanvasModule | null>(
     null
   );
   const [viewingFinalXolPrice, setViewingFinalXolPrice] =
     useState<CanvasModule | null>(null);
   const [viewingEvaluation, setViewingEvaluation] =
-    useState<CanvasModule | null>(null);
-  const [viewingEvaluateStats, setViewingEvaluateStats] =
-    useState<CanvasModule | null>(null);
-  const [viewingDiversionChecker, setViewingDiversionChecker] =
     useState<CanvasModule | null>(null);
 
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -158,265 +173,20 @@ const App: React.FC = () => {
   const [aiPlan, setAiPlan] = useState<string | null>(null);
   const [isSampleMenuOpen, setIsSampleMenuOpen] = useState(false);
   const sampleMenuRef = useRef<HTMLDivElement>(null);
-  const [userSamples, setUserSamples] = useState<any[]>([]);
-  const [showWelcomeScreen, setShowWelcomeScreen] = useState(false);
+  const [folderSamples, setFolderSamples] = useState<
+    Array<{ filename: string; name: string; data: any }>
+  >([]);
+  const [isLoadingSamples, setIsLoadingSamples] = useState(false);
+  const [isMyWorkMenuOpen, setIsMyWorkMenuOpen] = useState(false);
+  const myWorkMenuRef = useRef<HTMLDivElement>(null);
+  const [myWorkModels, setMyWorkModels] = useState<any[]>([]);
+
   const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(false);
   const [isRightPanelVisible, setIsRightPanelVisible] = useState(false);
   const [isCodePanelVisible, setIsCodePanelVisible] = useState(false);
   const [activePropertiesTab, setActivePropertiesTab] =
     useState<PropertiesTab>("properties");
-  const [rightPanelWidth, setRightPanelWidth] = useState(300); // 속성창 너비 축소
-
-  // addLog 함수를 먼저 정의 (다른 함수들에서 사용되기 전에)
-  // useCallback 대신 일반 함수로 정의하여 초기화 순서 문제 해결
-  const addLog = useCallback(
-    (level: TerminalLog["level"], message: string) => {
-      setTerminalLogs((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          level,
-          message,
-          timestamp: new Date().toLocaleTimeString(),
-        },
-      ]);
-      if (level === "ERROR" || level === "WARN") {
-        setIsRightPanelVisible(true);
-      }
-    },
-    [setIsRightPanelVisible]
-  );
-
-  // localStorage에서 사용자 샘플 로드
-  useEffect(() => {
-    const savedSamples = localStorage.getItem("userSamples");
-    if (savedSamples) {
-      try {
-        setUserSamples(JSON.parse(savedSamples));
-      } catch (e) {
-        console.error("Failed to load user samples:", e);
-      }
-    }
-  }, []);
-
-  // 초기 화면 로드 (앱 시작 시) - resetModules와 _setConnections가 정의된 후 실행
-  useEffect(() => {
-    const initialScreen = localStorage.getItem("initialScreen");
-    if (initialScreen && resetModules && _setConnections) {
-      try {
-        const initialModel = JSON.parse(initialScreen);
-        if (initialModel.modules && initialModel.modules.length > 0) {
-          // 초기 화면이 있으면 자동으로 로드 (parameters와 outputData 복원)
-          const newModules: CanvasModule[] = initialModel.modules.map(
-            (m: any, index: number) => {
-              const moduleId = `module-${Date.now()}-${index}`;
-              const defaultModule = DEFAULT_MODULES.find(
-                (dm) => dm.type === m.type
-              );
-              if (!defaultModule) {
-                throw new Error(`Module type "${m.type}" not found`);
-              }
-              return {
-                ...defaultModule,
-                id: moduleId,
-                name: m.name || defaultModule.name,
-                position: m.position,
-                // 저장된 parameters가 있으면 복원, 없으면 기본값 사용
-                parameters: m.parameters
-                  ? JSON.parse(JSON.stringify(m.parameters))
-                  : defaultModule.parameters,
-                // 저장된 outputData가 있으면 복원
-                outputData: m.outputData
-                  ? JSON.parse(JSON.stringify(m.outputData))
-                  : undefined,
-                // 저장된 status가 있으면 복원, 없으면 Pending
-                status: m.status || ModuleStatus.Pending,
-              };
-            }
-          );
-
-          const newConnections: Connection[] = initialModel.connections.map(
-            (conn: any, index: number) => {
-              const fromModule = newModules[conn.fromModuleIndex];
-              const toModule = newModules[conn.toModuleIndex];
-              if (!fromModule || !toModule) {
-                throw new Error(`Invalid connection at index ${index}`);
-              }
-              return {
-                id: `connection-${Date.now()}-${index}`,
-                from: { moduleId: fromModule.id, portName: conn.fromPort },
-                to: { moduleId: toModule.id, portName: conn.toPort },
-              };
-            }
-          );
-
-          resetModules(newModules);
-          _setConnections(newConnections);
-          setShowWelcomeScreen(false);
-          addLog("INFO", "초기 화면이 로드되었습니다.");
-        }
-      } catch (e) {
-        console.error("Failed to load initial screen:", e);
-      }
-    }
-  }, [resetModules, _setConnections, addLog]); // resetModules와 _setConnections가 준비된 후 실행
-
-  // 최초 실행시 welcome screen 표시 (초기 화면이 없을 때만)
-  useEffect(() => {
-    const initialScreen = localStorage.getItem("initialScreen");
-    if (!initialScreen && modules.length === 0 && connections.length === 0) {
-      setShowWelcomeScreen(true);
-    } else if (modules.length > 0 || connections.length > 0) {
-      setShowWelcomeScreen(false);
-    }
-  }, [modules.length, connections.length]);
-
-  // 현재 모델을 샘플로 저장 (현재 제목 사용)
-  const handleSaveCurrentAsSample = useCallback(() => {
-    if (modules.length === 0) {
-      addLog("WARN", "저장할 모듈이 없습니다.");
-      return;
-    }
-
-    const sampleName = projectName.trim() || "Untitled";
-
-    // 기본 샘플과 이름 중복 확인
-    const existingSample = [...SAMPLE_MODELS, ...userSamples].find(
-      (s: any) => s.name === sampleName
-    );
-
-    // 기본 샘플(SAMPLE_MODELS)에 같은 이름이 있으면 덮어쓸 수 없음
-    const isBuiltInSample = SAMPLE_MODELS.some(
-      (s: any) => s.name === sampleName
-    );
-    if (isBuiltInSample) {
-      addLog(
-        "WARN",
-        `"${sampleName}"은(는) 기본 샘플 이름입니다. 다른 이름을 사용해주세요.`
-      );
-      return;
-    }
-
-    // 사용자 샘플에 같은 이름이 있으면 덮어쓸지 확인
-    if (existingSample && existingSample.isUserSample) {
-      const shouldOverwrite = window.confirm(
-        `"${sampleName}" 샘플이 이미 존재합니다. 덮어쓰시겠습니까?`
-      );
-      if (!shouldOverwrite) {
-        addLog("INFO", "샘플 저장이 취소되었습니다.");
-        return;
-      }
-    }
-
-    // 현재 모듈과 연결을 샘플 형식으로 변환 (parameters와 outputData 포함)
-    const sampleModel = {
-      name: sampleName,
-      modules: modules.map((m) => ({
-        type: m.type,
-        position: m.position,
-        name: m.name,
-        parameters: m.parameters
-          ? JSON.parse(JSON.stringify(m.parameters))
-          : {},
-        outputData: m.outputData
-          ? JSON.parse(JSON.stringify(m.outputData))
-          : undefined,
-        status: m.status, // 상태도 저장
-      })),
-      connections: connections.map((conn) => {
-        const fromModuleIndex = modules.findIndex(
-          (m) => m.id === conn.from.moduleId
-        );
-        const toModuleIndex = modules.findIndex(
-          (m) => m.id === conn.to.moduleId
-        );
-        return {
-          fromModuleIndex,
-          fromPort: conn.from.portName,
-          toModuleIndex,
-          toPort: conn.to.portName,
-        };
-      }),
-      isUserSample: true, // 사용자 샘플 표시
-    };
-
-    // 기존 샘플이 있으면 덮어쓰기, 없으면 추가
-    let newUserSamples: any[];
-    if (existingSample && existingSample.isUserSample) {
-      newUserSamples = userSamples.map((s: any) =>
-        s.name === sampleName ? sampleModel : s
-      );
-      addLog("SUCCESS", `샘플 "${sampleName}"이 덮어쓰기 되었습니다.`);
-    } else {
-      newUserSamples = [...userSamples, sampleModel];
-      addLog("SUCCESS", `샘플 "${sampleName}"이 저장되었습니다.`);
-    }
-
-    setUserSamples(newUserSamples);
-    localStorage.setItem("userSamples", JSON.stringify(newUserSamples));
-  }, [projectName, modules, connections, userSamples, addLog]);
-
-  // 샘플 삭제
-  const handleDeleteSample = useCallback(
-    (sampleName: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (window.confirm(`"${sampleName}" 샘플을 삭제하시겠습니까?`)) {
-        const newUserSamples = userSamples.filter(
-          (s: any) => s.name !== sampleName
-        );
-        setUserSamples(newUserSamples);
-        localStorage.setItem("userSamples", JSON.stringify(newUserSamples));
-        addLog("SUCCESS", `샘플 "${sampleName}"이 삭제되었습니다.`);
-      }
-    },
-    [userSamples, addLog]
-  );
-
-  // 현재 모델을 초기 화면으로 저장
-  const handleSetAsInitialScreen = useCallback(() => {
-    if (modules.length === 0) {
-      addLog("WARN", "저장할 모듈이 없습니다.");
-      return;
-    }
-
-    // 현재 모듈과 연결을 초기 화면 형식으로 변환 (parameters와 outputData 포함)
-    const initialModel = {
-      modules: modules.map((m) => ({
-        type: m.type,
-        position: m.position,
-        name: m.name,
-        parameters: m.parameters
-          ? JSON.parse(JSON.stringify(m.parameters))
-          : {},
-        outputData: m.outputData
-          ? JSON.parse(JSON.stringify(m.outputData))
-          : undefined,
-        status: m.status, // 상태도 저장
-      })),
-      connections: connections.map((conn) => {
-        const fromModuleIndex = modules.findIndex(
-          (m) => m.id === conn.from.moduleId
-        );
-        const toModuleIndex = modules.findIndex(
-          (m) => m.id === conn.to.moduleId
-        );
-        return {
-          fromModuleIndex,
-          fromPort: conn.from.portName,
-          toModuleIndex,
-          toPort: conn.to.portName,
-        };
-      }),
-    };
-
-    localStorage.setItem("initialScreen", JSON.stringify(initialModel));
-    addLog("SUCCESS", "현재 모델이 초기 화면으로 저장되었습니다.");
-  }, [modules, connections, addLog]);
-
-  // 모든 샘플 가져오기 (기본 + 사용자)
-  const allSamples = useMemo(() => {
-    return [...SAMPLE_MODELS, ...userSamples];
-  }, [userSamples]);
+  const [rightPanelWidth, setRightPanelWidth] = useState(384); // w-96 in Tailwind is 384px
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const folderHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
@@ -485,6 +255,22 @@ const App: React.FC = () => {
     },
     [connections, modules, setModules]
   );
+
+  // fix: Moved 'addLog' before 'handleSuggestModule' to fix "used before its declaration" error.
+  const addLog = useCallback((level: TerminalLog["level"], message: string) => {
+    setTerminalLogs((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        level,
+        message,
+        timestamp: new Date().toLocaleTimeString(),
+      },
+    ]);
+    if (level === "ERROR" || level === "WARN") {
+      setIsRightPanelVisible(true);
+    }
+  }, []);
 
   const handleSuggestModule = useCallback(
     async (fromModuleId: string, fromPortName: string) => {
@@ -811,6 +597,12 @@ Respond with ONLY the module type string, for example: 'ScoreModel'`;
       ModuleType.HierarchicalClustering,
       ModuleType.DBSCAN,
       ModuleType.PrincipalComponentAnalysis,
+      // Traditional Analysis - Statsmodels Models
+      ModuleType.OLSModel,
+      ModuleType.LogisticModel,
+      ModuleType.PoissonModel,
+      ModuleType.QuasiPoissonModel,
+      ModuleType.NegativeBinomialModel,
       ModuleType.StatModels,
     ];
 
@@ -1203,22 +995,51 @@ ${header}
       });
       const fileName = `${projectName.replace(/[<>:"/\\|?*]/g, "_")}.mla`;
 
-      // fix: Cast window to `any` to access `showSaveFilePicker` which is not in default TS types.
+      // Try File System Access API first, fallback to download if it fails
+      let useDownload = true;
+
       if ((window as any).showSaveFilePicker) {
-        const handle = await (window as any).showSaveFilePicker({
-          suggestedName: fileName,
-          types: [
-            {
-              description: "ML Pipeline File",
-              accept: { "application/json": [".mla"] },
-            },
-          ],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-        addLog("SUCCESS", `Pipeline saved to '${handle.name}'.`);
-      } else {
+        try {
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: fileName,
+            types: [
+              {
+                description: "ML Pipeline File",
+                accept: { "application/json": [".mla"] },
+              },
+            ],
+          });
+
+          try {
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            addLog("SUCCESS", `Pipeline saved to '${handle.name}'.`);
+            useDownload = false;
+          } catch (writeError: any) {
+            // If createWritable fails, fallback to download
+            console.warn(
+              "File System Access API write failed, using download:",
+              writeError
+            );
+            useDownload = true;
+          }
+        } catch (pickerError: any) {
+          // If showSaveFilePicker fails (e.g., user cancelled or not allowed), fallback to download
+          if (pickerError.name === "AbortError") {
+            // User cancelled, don't show error
+            return;
+          }
+          console.warn(
+            "File System Access API not available, using download:",
+            pickerError
+          );
+          useDownload = true;
+        }
+      }
+
+      // Fallback to download method
+      if (useDownload) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -1290,10 +1111,87 @@ ${header}
   }, [resetModules, addLog]);
 
   const handleLoadSample = useCallback(
-    (sampleName: string) => {
-      console.log("handleLoadSample called with:", sampleName);
+    async (
+      sampleName: string,
+      source: "samples" | "mywork" | "folder" = "samples",
+      filename?: string
+    ) => {
+      console.log(
+        "handleLoadSample called with:",
+        sampleName,
+        "from:",
+        source,
+        "filename:",
+        filename
+      );
       try {
-        const sampleModel = allSamples.find((m: any) => m.name === sampleName);
+        let sampleModel: any = null;
+
+        if (source === "folder" && filename) {
+          // Samples 폴더에서 파일 로드
+          try {
+            // URL 인코딩 처리 (공백, 특수문자 등)
+            const encodedFilename = encodeURIComponent(filename);
+            const response = await fetch(
+              `http://localhost:3002/api/samples/${encodedFilename}`
+            );
+            if (response.ok) {
+              const text = await response.text();
+              if (text.trim()) {
+                try {
+                  sampleModel = JSON.parse(text);
+                } catch (parseError) {
+                  addLog("ERROR", `Failed to parse sample file: ${filename}`);
+                  return;
+                }
+              } else {
+                addLog("ERROR", `Empty response for sample file: ${filename}`);
+                return;
+              }
+            } else {
+              addLog(
+                "ERROR",
+                `Failed to load sample file: ${filename} (${response.status})`
+              );
+              return;
+            }
+          } catch (error: any) {
+            console.error("Error loading folder sample:", error);
+            addLog(
+              "ERROR",
+              `Error loading sample file: ${error.message || error}`
+            );
+            return;
+          }
+        } else if (source === "mywork") {
+          // My Work에서 찾기
+          const myWorkModelsStr = localStorage.getItem("myWorkModels");
+          if (myWorkModelsStr) {
+            try {
+              const myWorkModels = JSON.parse(myWorkModelsStr);
+              if (Array.isArray(myWorkModels)) {
+                sampleModel = myWorkModels.find(
+                  (m: any) => m.name === sampleName
+                );
+              }
+            } catch (error) {
+              console.error("Failed to parse my work models:", error);
+            }
+          }
+        } else {
+          // Samples에서 찾기
+          // 먼저 SAVED_SAMPLES에서 찾기
+          const savedSamples = getSavedSamples();
+          if (savedSamples && savedSamples.length > 0) {
+            sampleModel = savedSamples.find((m: any) => m.name === sampleName);
+          }
+
+          // SAVED_SAMPLES에 없으면 SAMPLE_MODELS에서 찾기
+          if (!sampleModel) {
+            sampleModel = SAMPLE_MODELS.find((m: any) => m.name === sampleName);
+          }
+        }
+
         console.log("Found sample model:", sampleModel);
         if (!sampleModel) {
           console.error("Sample model not found:", sampleName);
@@ -1301,7 +1199,7 @@ ${header}
           return;
         }
 
-        // Convert sample model format to app format (parameters와 outputData 복원)
+        // Convert sample model format to app format
         const newModules: CanvasModule[] = sampleModel.modules.map(
           (m: any, index: number) => {
             const moduleId = `module-${Date.now()}-${index}`;
@@ -1315,21 +1213,14 @@ ${header}
               );
               throw new Error(`Module type "${m.type}" not found`);
             }
+            const moduleInfo = TOOLBOX_MODULES.find((tm) => tm.type === m.type);
+            const defaultName = moduleInfo ? moduleInfo.name : m.type;
             return {
               ...defaultModule,
               id: moduleId,
-              name: m.name || defaultModule.name,
+              name: m.name || defaultName,
               position: m.position,
-              // 저장된 parameters가 있으면 복원, 없으면 기본값 사용
-              parameters: m.parameters
-                ? JSON.parse(JSON.stringify(m.parameters))
-                : defaultModule.parameters,
-              // 저장된 outputData가 있으면 복원
-              outputData: m.outputData
-                ? JSON.parse(JSON.stringify(m.outputData))
-                : undefined,
-              // 저장된 status가 있으면 복원, 없으면 Pending
-              status: m.status || ModuleStatus.Pending,
+              status: ModuleStatus.Pending,
             };
           }
         );
@@ -1356,56 +1247,8 @@ ${header}
         setIsDirty(false);
         setProjectName(sampleName);
         setIsSampleMenuOpen(false);
-        setShowWelcomeScreen(false);
         addLog("SUCCESS", `Sample model "${sampleName}" loaded successfully.`);
-        // modules가 업데이트된 후 fitToView를 호출하기 위해 약간의 지연
-        setTimeout(() => {
-          if (!canvasContainerRef.current) return;
-
-          const canvasRect = canvasContainerRef.current.getBoundingClientRect();
-
-          if (newModules.length === 0) {
-            setPan({ x: 0, y: 0 });
-            setScale(1);
-            return;
-          }
-
-          let minX = Infinity;
-          let minY = Infinity;
-          let maxX = -Infinity;
-          let maxY = -Infinity;
-          const moduleWidth = 256;
-          const moduleHeight = 120;
-
-          newModules.forEach((module) => {
-            minX = Math.min(minX, module.position.x);
-            minY = Math.min(minY, module.position.y);
-            maxX = Math.max(maxX, module.position.x + moduleWidth);
-            maxY = Math.max(maxY, module.position.y + moduleHeight);
-          });
-
-          const contentWidth = maxX - minX;
-          const contentHeight = maxY - minY;
-
-          if (contentWidth <= 0 || contentHeight <= 0) {
-            setPan({ x: 0, y: 0 });
-            setScale(1);
-            return;
-          }
-
-          const padding = 50;
-          const scaleX = (canvasRect.width - padding * 2) / contentWidth;
-          const scaleY = (canvasRect.height - padding * 2) / contentHeight;
-          const newScale = Math.min(scaleX, scaleY, 1);
-          const newPanX =
-            (canvasRect.width - contentWidth * newScale) / 2 - minX * newScale;
-          const newPanY =
-            (canvasRect.height - contentHeight * newScale) / 2 -
-            minY * newScale;
-
-          setScale(newScale);
-          setPan({ x: newPanX, y: newPanY });
-        }, 150);
+        setTimeout(() => handleFitToView(), 100);
       } catch (error: any) {
         console.error("Error loading sample:", error);
         addLog(
@@ -1413,20 +1256,136 @@ ${header}
           `Failed to load sample: ${error.message || "Unknown error"}`
         );
         setIsSampleMenuOpen(false);
-        setShowWelcomeScreen(false);
       }
     },
-    [resetModules, _setConnections, addLog, allSamples]
+    [resetModules, addLog, handleFitToView]
   );
 
-  // Close sample menu when clicking outside
+  // Samples 폴더의 파일 목록 가져오기
+  const loadFolderSamples = useCallback(async () => {
+    setIsLoadingSamples(true);
+    try {
+      const response = await fetch("http://localhost:3002/api/samples/list", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.warn(
+          `Samples server returned ${response.status}: ${response.statusText}`
+        );
+        setFolderSamples([]);
+        setIsLoadingSamples(false);
+        return;
+      }
+
+      const text = await response.text();
+      console.log("Samples server response:", text.substring(0, 200)); // 첫 200자만 로그
+
+      if (!text.trim()) {
+        console.log("Samples server returned empty response");
+        setFolderSamples([]);
+        setIsLoadingSamples(false);
+        return;
+      }
+
+      try {
+        const samples = JSON.parse(text);
+        console.log(
+          `Loaded ${samples.length} samples from server:`,
+          samples.map((s: any) => s.name || s.filename)
+        );
+
+        if (Array.isArray(samples) && samples.length > 0) {
+          console.log(`Setting ${samples.length} samples to state`);
+          setFolderSamples(samples);
+        } else if (Array.isArray(samples)) {
+          console.log("Samples array is empty");
+          setFolderSamples([]);
+        } else {
+          console.error("Samples response is not an array:", samples);
+          setFolderSamples([]);
+        }
+      } catch (parseError: any) {
+        console.error("Failed to parse samples response:", parseError);
+        console.error("Response text:", text);
+        setFolderSamples([]);
+      }
+    } catch (error: any) {
+      // 네트워크 오류 등
+      console.error("Error loading folder samples:", error);
+      console.error("Error details:", error.message, error.stack);
+      setFolderSamples([]);
+    } finally {
+      setIsLoadingSamples(false);
+    }
+  }, []);
+
+  // Samples 메뉴가 열릴 때마다 폴더 샘플 목록 새로고침
   useEffect(() => {
-    if (!isSampleMenuOpen) return;
+    if (isSampleMenuOpen) {
+      console.log("Samples menu opened, loading folder samples...");
+      // 약간의 지연을 두어 메뉴가 완전히 열린 후 로드
+      const timer = setTimeout(() => {
+        loadFolderSamples();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    // 메뉴가 닫혀도 상태는 유지 (다음에 열 때 빠르게 표시)
+  }, [isSampleMenuOpen, loadFolderSamples]);
+
+  // 디버깅: folderSamples 상태 변경 추적
+  useEffect(() => {
+    if (folderSamples.length > 0) {
+      console.log(
+        `folderSamples updated: ${folderSamples.length} samples`,
+        folderSamples.map((s) => s.name || s.filename)
+      );
+    } else if (isSampleMenuOpen && !isLoadingSamples) {
+      console.log("folderSamples is empty but menu is open and not loading");
+    }
+  }, [folderSamples, isSampleMenuOpen, isLoadingSamples]);
+
+  // My Work 모델 목록 로드
+  useEffect(() => {
+    const myWorkModelsStr = localStorage.getItem("myWorkModels");
+    if (myWorkModelsStr) {
+      try {
+        const models = JSON.parse(myWorkModelsStr);
+        setMyWorkModels(Array.isArray(models) ? models : []);
+      } catch (error) {
+        console.error("Failed to load my work models:", error);
+      }
+    }
+  }, []);
+
+  // 초기 화면 로드
+  useEffect(() => {
+    const initialModelStr = localStorage.getItem("initialModel");
+    if (initialModelStr && modules.length === 0) {
+      try {
+        const initialModel = JSON.parse(initialModelStr);
+        handleLoadSample(initialModel.name);
+      } catch (error) {
+        console.error("Failed to load initial model:", error);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 초기 마운트 시에만 실행
+
+  // Close sample menu and my work menu when clicking outside
+  useEffect(() => {
+    if (!isSampleMenuOpen && !isMyWorkMenuOpen) return;
 
     const handleClickOutside = (event: globalThis.MouseEvent) => {
       const target = event.target as Node;
       if (sampleMenuRef.current && !sampleMenuRef.current.contains(target)) {
         setIsSampleMenuOpen(false);
+      }
+      if (myWorkMenuRef.current && !myWorkMenuRef.current.contains(target)) {
+        setIsMyWorkMenuOpen(false);
       }
     };
 
@@ -1439,7 +1398,7 @@ ${header}
       clearTimeout(timeoutId);
       document.removeEventListener("click", handleClickOutside);
     };
-  }, [isSampleMenuOpen]);
+  }, [isSampleMenuOpen, isMyWorkMenuOpen]);
 
   // fix: Added missing handleSetFolder function to resolve "Cannot find name" error.
   const handleSetFolder = useCallback(async () => {
@@ -1556,7 +1515,14 @@ ${header}
       }
 
       const defaultData = DEFAULT_MODULES.find((m) => m.type === type);
-      if (!defaultData) return;
+      if (!defaultData) {
+        console.error(`No default data found for module type: ${type}`);
+        addLog(
+          "ERROR",
+          `Module type '${type}' is not supported. Please check if the module is properly defined.`
+        );
+        return;
+      }
 
       const moduleInfo = TOOLBOX_MODULES.find((m) => m.type === type);
       const baseName = moduleInfo ? moduleInfo.name : type;
@@ -1577,7 +1543,7 @@ ${header}
       setSelectedModuleIds([newModule.id]);
       setIsDirty(true);
     },
-    [modules, setModules, setSelectedModuleIds, clearSuggestion]
+    [modules, setModules, setSelectedModuleIds, clearSuggestion, addLog]
   );
 
   const handleModuleToolboxDoubleClick = useCallback(
@@ -1933,6 +1899,10 @@ ${header}
     if (module?.outputData) {
       if (module.outputData.type === "StatsModelsResultOutput") {
         setViewingStatsModelsResult(module);
+      } else if (module.outputData.type === "DiversionCheckerOutput") {
+        setViewingDiversionChecker(module);
+      } else if (module.outputData.type === "EvaluateStatOutput") {
+        setViewingEvaluateStat(module);
       } else if (module.outputData.type === "SplitDataOutput") {
         setViewingSplitDataForModule(module);
       } else if (module.outputData.type === "TrainedModelOutput") {
@@ -1943,10 +1913,6 @@ ${header}
         setViewingFinalXolPrice(module);
       } else if (module.outputData.type === "EvaluationOutput") {
         setViewingEvaluation(module);
-      } else if (module.outputData.type === "EvaluateStatsOutput") {
-        setViewingEvaluateStats(module);
-      } else if (module.outputData.type === "DiversionCheckerOutput") {
-        setViewingDiversionChecker(module);
       } else {
         setViewingDataForModule(module);
       }
@@ -1958,11 +1924,11 @@ ${header}
     setViewingSplitDataForModule(null);
     setViewingTrainedModel(null);
     setViewingStatsModelsResult(null);
+    setViewingDiversionChecker(null);
+    setViewingEvaluateStat(null);
     setViewingXoLPrice(null);
     setViewingFinalXolPrice(null);
     setViewingEvaluation(null);
-    setViewingEvaluateStats(null);
-    setViewingDiversionChecker(null);
   };
 
   // Model definition modules that should not be executed directly in Run All
@@ -1983,6 +1949,12 @@ ${header}
     ModuleType.HierarchicalClustering,
     ModuleType.DBSCAN,
     ModuleType.PrincipalComponentAnalysis,
+    // Traditional Analysis - Statsmodels Models
+    ModuleType.OLSModel,
+    ModuleType.LogisticModel,
+    ModuleType.PoissonModel,
+    ModuleType.QuasiPoissonModel,
+    ModuleType.NegativeBinomialModel,
     // Statistical Models
     ModuleType.StatModels,
   ];
@@ -3319,18 +3291,47 @@ ${header}
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
             } else if (
+              modelSourceModule.type === ModuleType.PoissonModel ||
+              modelSourceModule.type === ModuleType.QuasiPoissonModel ||
+              modelSourceModule.type === ModuleType.NegativeBinomialModel ||
               modelSourceModule.type === ModuleType.PoissonRegression ||
               modelSourceModule.type === ModuleType.NegativeBinomialRegression
             ) {
               // statsmodels를 사용한 포아송/음이항/Quasi-Poisson 회귀
-              const distributionType =
-                modelSourceModule.parameters.distribution_type ||
-                (modelSourceModule.type === ModuleType.PoissonRegression
-                  ? "Poisson"
-                  : "NegativeBinomial");
-              const maxIter =
-                parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
-              const disp = parseFloat(modelSourceModule.parameters.disp) || 1.0;
+              let distributionType: string;
+              let maxIter: number;
+              let disp: number;
+
+              if (modelSourceModule.type === ModuleType.PoissonModel) {
+                distributionType = "Poisson";
+                maxIter =
+                  parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
+                disp = 1.0;
+              } else if (
+                modelSourceModule.type === ModuleType.QuasiPoissonModel
+              ) {
+                distributionType = "QuasiPoisson";
+                maxIter =
+                  parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
+                disp = 1.0;
+              } else if (
+                modelSourceModule.type === ModuleType.NegativeBinomialModel
+              ) {
+                distributionType = "NegativeBinomial";
+                maxIter =
+                  parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
+                disp = parseFloat(modelSourceModule.parameters.disp) || 1.0;
+              } else {
+                // 기존 모듈 (deprecated)
+                distributionType =
+                  modelSourceModule.parameters.distribution_type ||
+                  (modelSourceModule.type === ModuleType.PoissonRegression
+                    ? "Poisson"
+                    : "NegativeBinomial");
+                maxIter =
+                  parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
+                disp = parseFloat(modelSourceModule.parameters.disp) || 1.0;
+              }
 
               try {
                 addLog(
@@ -3382,7 +3383,7 @@ ${header}
                   statsModelsResult: {
                     type: "StatsModelsResultOutput",
                     summary: fitResult.summary,
-                    modelType: distributionType,
+                    modelType: distributionType as StatsModelFamily,
                     labelColumn: label_column,
                     featureColumns: ordered_feature_columns,
                   },
@@ -4108,6 +4109,68 @@ ${header}
             addLog("ERROR", `Python EvaluateModel 실패: ${errorMessage}`);
             throw new Error(`모델 평가 실패: ${errorMessage}`);
           }
+        } else if (module.type === ModuleType.OLSModel) {
+          newOutputData = {
+            type: "ModelDefinitionOutput",
+            modelFamily: "statsmodels",
+            modelType: "OLS",
+            parameters: {},
+          };
+          addLog(
+            "INFO",
+            `모델 정의 모듈 '${module.name}' (OLS)이 생성되었습니다.`
+          );
+        } else if (module.type === ModuleType.LogisticModel) {
+          newOutputData = {
+            type: "ModelDefinitionOutput",
+            modelFamily: "statsmodels",
+            modelType: "Logit",
+            parameters: {},
+          };
+          addLog(
+            "INFO",
+            `모델 정의 모듈 '${module.name}' (Logistic)이 생성되었습니다.`
+          );
+        } else if (module.type === ModuleType.PoissonModel) {
+          newOutputData = {
+            type: "ModelDefinitionOutput",
+            modelFamily: "statsmodels",
+            modelType: "Poisson",
+            parameters: {
+              max_iter: module.parameters.max_iter || 100,
+            },
+          };
+          addLog(
+            "INFO",
+            `모델 정의 모듈 '${module.name}' (Poisson)이 생성되었습니다.`
+          );
+        } else if (module.type === ModuleType.QuasiPoissonModel) {
+          newOutputData = {
+            type: "ModelDefinitionOutput",
+            modelFamily: "statsmodels",
+            modelType: "QuasiPoisson",
+            parameters: {
+              max_iter: module.parameters.max_iter || 100,
+            },
+          };
+          addLog(
+            "INFO",
+            `모델 정의 모듈 '${module.name}' (Quasi-Poisson)이 생성되었습니다.`
+          );
+        } else if (module.type === ModuleType.NegativeBinomialModel) {
+          newOutputData = {
+            type: "ModelDefinitionOutput",
+            modelFamily: "statsmodels",
+            modelType: "NegativeBinomial",
+            parameters: {
+              max_iter: module.parameters.max_iter || 100,
+              disp: module.parameters.disp || 1.0,
+            },
+          };
+          addLog(
+            "INFO",
+            `모델 정의 모듈 '${module.name}' (Negative Binomial)이 생성되었습니다.`
+          );
         } else if (module.type === ModuleType.StatModels) {
           newOutputData = {
             type: "ModelDefinitionOutput",
@@ -4115,6 +4178,10 @@ ${header}
             modelType: module.parameters.model,
             parameters: {},
           };
+          addLog(
+            "INFO",
+            `모델 정의 모듈 '${module.name}' (${module.parameters.model})이 생성되었습니다.`
+          );
         } else if (module.type === ModuleType.ResultModel) {
           const modelInputConnection = connections.find(
             (c) => c.to.moduleId === module.id && c.to.portName === "model_in"
@@ -4127,75 +4194,104 @@ ${header}
               "Both 'model_in' and 'data_in' ports must be connected."
             );
 
-          let modelSourceModule = currentModules.find(
+          const modelSourceModule = currentModules.find(
             (m) => m.id === modelInputConnection.from.moduleId
           );
-          if (!modelSourceModule) {
-            throw new Error(
-              "A Stat Models module must be connected to the 'model_in' port."
-            );
-          }
-          if (modelSourceModule.type !== ModuleType.StatModels) {
-            throw new Error(
-              `The module connected to 'model_in' must be a Stat Models module. Found: ${modelSourceModule.type}`
-            );
-          }
+          if (!modelSourceModule)
+            throw new Error("Model source module not found.");
 
-          // StatModels 모듈이 실행되지 않았다면 자동으로 실행
-          if (modelSourceModule.status !== ModuleStatus.Success) {
-            addLog(
-              "INFO",
-              `Stat Models module [${modelSourceModule.name}] is being executed automatically...`
-            );
-            // StatModels 모듈 실행
-            const modelType = modelSourceModule.parameters.model || "OLS";
-            const statModelsOutputData: ModelDefinitionOutput = {
-              type: "ModelDefinitionOutput",
-              modelFamily: "statsmodels",
+          // 모델 정의 모듈이 output이 없으면 자동으로 생성
+          if (
+            MODEL_DEFINITION_TYPES.includes(modelSourceModule.type) &&
+            !modelSourceModule.outputData
+          ) {
+            // 모델 정의 output 자동 생성
+            let modelType: string;
+            let parameters: Record<string, any> = {};
+
+            if (modelSourceModule.type === ModuleType.OLSModel) {
+              modelType = "OLS";
+            } else if (modelSourceModule.type === ModuleType.LogisticModel) {
+              modelType = "Logit";
+            } else if (modelSourceModule.type === ModuleType.PoissonModel) {
+              modelType = "Poisson";
+              parameters = {
+                max_iter: modelSourceModule.parameters.max_iter || 100,
+              };
+            } else if (
+              modelSourceModule.type === ModuleType.QuasiPoissonModel
+            ) {
+              modelType = "QuasiPoisson";
+              parameters = {
+                max_iter: modelSourceModule.parameters.max_iter || 100,
+              };
+            } else if (
+              modelSourceModule.type === ModuleType.NegativeBinomialModel
+            ) {
+              modelType = "NegativeBinomial";
+              parameters = {
+                max_iter: modelSourceModule.parameters.max_iter || 100,
+                disp: modelSourceModule.parameters.disp || 1.0,
+              };
+            } else if (modelSourceModule.type === ModuleType.StatModels) {
+              modelType = modelSourceModule.parameters.model || "Gamma";
+            } else {
+              throw new Error(
+                `Unsupported model definition type: ${modelSourceModule.type}`
+              );
+            }
+
+            // 모델 정의 모듈의 output 생성
+            const modelDefinitionOutput = {
+              type: "ModelDefinitionOutput" as const,
+              modelFamily: "statsmodels" as const,
               modelType: modelType as any,
-              parameters: {},
+              parameters,
             };
 
-            // 모듈 상태 업데이트
-            const updatedStatModelsModule = {
-              ...modelSourceModule,
-              status: ModuleStatus.Success,
-              outputData: statModelsOutputData,
-            };
+            // 현재 모듈 목록 업데이트
             currentModules = currentModules.map((m) =>
-              m.id === modelSourceModule.id ? updatedStatModelsModule : m
+              m.id === modelSourceModule.id
+                ? {
+                    ...m,
+                    outputData: modelDefinitionOutput,
+                    status: ModuleStatus.Success,
+                  }
+                : m
             );
 
-            // UI 상태도 업데이트
-            setModules((prev) =>
-              prev.map((m) =>
-                m.id === modelSourceModule.id ? updatedStatModelsModule : m
+            // 상태 업데이트
+            setModules((prevModules) =>
+              prevModules.map((m) =>
+                m.id === modelSourceModule.id
+                  ? {
+                      ...m,
+                      outputData: modelDefinitionOutput,
+                      status: ModuleStatus.Success,
+                    }
+                  : m
               )
             );
 
-            // 업데이트된 모듈로 다시 찾기
-            const updatedModelSourceModule = currentModules.find(
-              (m) => m.id === modelInputConnection.from.moduleId
-            );
-            if (
-              !updatedModelSourceModule ||
-              updatedModelSourceModule.outputData?.type !==
-                "ModelDefinitionOutput"
-            ) {
-              throw new Error("Failed to execute Stat Models module.");
-            }
-            modelSourceModule = updatedModelSourceModule;
-          }
-
-          if (modelSourceModule.outputData?.type !== "ModelDefinitionOutput") {
-            throw new Error(
-              `The Stat Models module output is invalid. Expected ModelDefinitionOutput, got: ${
-                modelSourceModule.outputData?.type || "undefined"
-              }`
+            addLog(
+              "INFO",
+              `모델 정의 모듈 '${modelSourceModule.name}'의 output이 자동 생성되었습니다.`
             );
           }
 
-          const modelDefinition = modelSourceModule.outputData;
+          // 업데이트된 모듈에서 다시 찾기
+          const updatedModelSourceModule = currentModules.find(
+            (m) => m.id === modelInputConnection.from.moduleId
+          );
+
+          if (
+            !updatedModelSourceModule ||
+            updatedModelSourceModule.outputData?.type !==
+              "ModelDefinitionOutput"
+          )
+            throw new Error("A Stat Models module must be connected.");
+
+          const modelDefinition = updatedModelSourceModule.outputData;
           if (modelDefinition.modelFamily !== "statsmodels")
             throw new Error("Connected model is not a statsmodels type.");
 
@@ -4225,184 +4321,132 @@ ${header}
             .map((c) => c.name)
             .filter((name) => feature_columns.includes(name));
 
-          // Pyodide를 사용하여 Python으로 Stats Model 실행
+          const modelType = modelDefinition.modelType;
+          const modelParams = modelDefinition.parameters || {};
+
+          // 모든 모델 타입을 Python으로 실행
           try {
             addLog(
               "INFO",
-              `Pyodide를 사용하여 Python으로 ${modelDefinition.modelType} 모델 피팅 중...`
+              `Pyodide를 사용하여 Python으로 ${modelType} 모델 피팅 중 (statsmodels)...`
+            );
+
+            // 데이터 검증
+            if (!inputData.rows || inputData.rows.length === 0) {
+              throw new Error("입력 데이터가 비어있습니다.");
+            }
+            if (ordered_feature_columns.length === 0) {
+              throw new Error("특성 컬럼이 선택되지 않았습니다.");
+            }
+
+            const X = (inputData.rows || []).map((row) =>
+              ordered_feature_columns.map((col) => {
+                const val = row[col];
+                if (typeof val !== "number" || isNaN(val)) {
+                  addLog(
+                    "WARNING",
+                    `컬럼 '${col}'의 값이 숫자가 아니거나 NaN입니다. 0으로 대체합니다.`
+                  );
+                  return 0;
+                }
+                return val;
+              })
+            );
+            const y = (inputData.rows || []).map((row) => {
+              const val = row[label_column];
+              if (typeof val !== "number" || isNaN(val)) {
+                addLog(
+                  "WARNING",
+                  `레이블 컬럼 '${label_column}'의 값이 숫자가 아니거나 NaN입니다. 0으로 대체합니다.`
+                );
+                return 0;
+              }
+              return val;
+            });
+
+            // 데이터 크기 검증
+            if (X.length === 0 || y.length === 0) {
+              throw new Error("데이터가 비어있습니다.");
+            }
+            if (X.length !== y.length) {
+              throw new Error(
+                `X와 y의 길이가 일치하지 않습니다: X=${X.length}, y=${y.length}`
+              );
+            }
+            if (X[0].length === 0) {
+              throw new Error("특성 데이터가 비어있습니다.");
+            }
+
+            addLog(
+              "INFO",
+              `데이터 준비 완료: ${X.length}개 샘플, ${X[0].length}개 특성`
             );
 
             const pyodideModule = await import("./utils/pyodideRunner");
             const { runStatsModel } = pyodideModule;
 
-            // 데이터 준비
-            const X: number[][] = [];
-            const y: number[] = [];
+            // 모델 파라미터 추출
+            const maxIter = modelParams.max_iter || 100;
+            const disp = modelParams.disp || 1.0;
 
-            for (const row of inputData.rows || []) {
-              const xRow: number[] = [];
-              for (const col of ordered_feature_columns) {
-                const value = row[col];
-                if (
-                  value === null ||
-                  value === undefined ||
-                  isNaN(Number(value))
-                ) {
-                  throw new Error(
-                    `Feature column '${col}' contains invalid values.`
-                  );
-                }
-                xRow.push(Number(value));
-              }
-              X.push(xRow);
-
-              const labelValue = row[label_column];
-              if (
-                labelValue === null ||
-                labelValue === undefined ||
-                isNaN(Number(labelValue))
-              ) {
-                throw new Error(
-                  `Label column '${label_column}' contains invalid values.`
-                );
-              }
-              y.push(Number(labelValue));
-            }
-
-            if (X.length === 0 || y.length === 0) {
-              throw new Error("No valid data rows found.");
-            }
-
-            // Python 실행
-            const result = await runStatsModel(
+            const fitResult = await runStatsModel(
               X,
               y,
-              modelDefinition.modelType,
+              modelType === "Logit" ? "Logistic" : modelType,
               ordered_feature_columns,
-              120000
+              60000, // 타임아웃: 60초
+              maxIter,
+              disp
+            );
+
+            // 결과 변환
+            const summaryCoefficients: StatsModelsResultOutput["summary"]["coefficients"] =
+              {};
+            Object.entries(fitResult.summary.coefficients).forEach(
+              ([paramName, coefData]) => {
+                summaryCoefficients[paramName] = {
+                  coef: coefData.coef,
+                  "std err": coefData["std err"],
+                  t: coefData.t,
+                  z: coefData.z,
+                  "P>|t|": coefData["P>|t|"],
+                  "P>|z|": coefData["P>|z|"],
+                  "[0.025": coefData["[0.025"],
+                  "0.975]": coefData["0.975]"],
+                };
+              }
+            );
+
+            const metrics: StatsModelsResultOutput["summary"]["metrics"] = {};
+            Object.entries(fitResult.summary.metrics).forEach(
+              ([key, value]) => {
+                if (typeof value === "number") {
+                  metrics[key] = value.toFixed(6);
+                } else {
+                  metrics[key] = value;
+                }
+              }
             );
 
             newOutputData = {
               type: "StatsModelsResultOutput",
               modelType: modelDefinition.modelType,
-              summary: result.summary,
+              summary: { coefficients: summaryCoefficients, metrics },
               featureColumns: ordered_feature_columns,
               labelColumn: label_column,
             };
-          } catch (error: any) {
-            const errorMessage = error.message || String(error);
-            addLog("ERROR", `Stats Model 실행 실패: ${errorMessage}`);
-            throw new Error(`Stats Model 실행 실패: ${errorMessage}`);
-          }
-        } else if (module.type === ModuleType.DiversionChecker) {
-          const dataInputConnection = connections.find(
-            (c) => c.to.moduleId === module.id && c.to.portName === "data_in"
-          );
-          if (!dataInputConnection)
-            throw new Error("'data_in' port must be connected.");
 
-          const dataSourceModule = currentModules.find(
-            (m) => m.id === dataInputConnection.from.moduleId
-          );
-          if (!dataSourceModule || !dataSourceModule.outputData)
-            throw new Error("Data source module has no output.");
-
-          let inputData: DataPreview | null = null;
-          if (dataSourceModule.outputData.type === "DataPreview") {
-            inputData = dataSourceModule.outputData;
-          } else if (dataSourceModule.outputData.type === "SplitDataOutput") {
-            const portName = dataInputConnection.from.portName;
-            inputData =
-              portName === "train_data_out"
-                ? dataSourceModule.outputData.train
-                : dataSourceModule.outputData.test;
-          }
-          if (!inputData) throw new Error("Input data not available.");
-
-          const { feature_columns, label_column } = module.parameters;
-          const max_iter = 100; // 기본값 사용
-          if (!feature_columns || feature_columns.length === 0 || !label_column)
-            throw new Error("Feature and label columns must be configured.");
-
-          const ordered_feature_columns = inputData.columns
-            .map((c) => c.name)
-            .filter((name) => feature_columns.includes(name));
-
-          // Pyodide를 사용하여 Python으로 DiversionChecker 실행
-          try {
             addLog(
-              "INFO",
-              "Pyodide를 사용하여 Python으로 DiversionChecker 실행 중..."
+              "SUCCESS",
+              `Python으로 ${modelType} 모델 피팅 완료 (statsmodels)`
             );
-
-            const pyodideModule = await import("./utils/pyodideRunner");
-            const { runDiversionChecker } = pyodideModule;
-
-            // 데이터 준비
-            const X: number[][] = [];
-            const y: number[] = [];
-
-            for (const row of inputData.rows || []) {
-              const xRow: number[] = [];
-              for (const col of ordered_feature_columns) {
-                const value = row[col];
-                if (
-                  value === null ||
-                  value === undefined ||
-                  isNaN(Number(value))
-                ) {
-                  throw new Error(
-                    `Feature column '${col}' contains invalid values.`
-                  );
-                }
-                xRow.push(Number(value));
-              }
-              X.push(xRow);
-
-              const labelValue = row[label_column];
-              if (
-                labelValue === null ||
-                labelValue === undefined ||
-                isNaN(Number(labelValue))
-              ) {
-                throw new Error(
-                  `Label column '${label_column}' contains invalid values.`
-                );
-              }
-              y.push(Number(labelValue));
-            }
-
-            if (X.length === 0 || y.length === 0) {
-              throw new Error("No valid data rows found.");
-            }
-
-            // Python 실행
-            const result = await runDiversionChecker(
-              X,
-              y,
-              ordered_feature_columns,
-              label_column,
-              max_iter,
-              120000
-            );
-
-            newOutputData = {
-              type: "DiversionCheckerOutput",
-              phi: result.phi,
-              recommendation: result.recommendation,
-              poissonAic: result.poissonAic,
-              negativeBinomialAic: result.negativeBinomialAic,
-              aicComparison: result.aicComparison,
-              cameronTrivediCoef: result.cameronTrivediCoef,
-              cameronTrivediPvalue: result.cameronTrivediPvalue,
-              cameronTrivediConclusion: result.cameronTrivediConclusion,
-              methodsUsed: result.methodsUsed,
-              results: result.results,
-            };
           } catch (error: any) {
             const errorMessage = error.message || String(error);
-            addLog("ERROR", `DiversionChecker 실행 실패: ${errorMessage}`);
-            throw new Error(`DiversionChecker 실행 실패: ${errorMessage}`);
+            addLog(
+              "ERROR",
+              `Python ${modelType} 모델 피팅 실패: ${errorMessage}`
+            );
+            throw new Error(`모델 피팅 실패: ${errorMessage}`);
           }
         } else if (module.type === ModuleType.PredictModel) {
           const modelInputConnection = connections.find(
@@ -4456,114 +4500,250 @@ ${header}
             );
 
           const labelColumn = modelOutput.labelColumn;
-          const predictColName = `${labelColumn}_Predict`;
+          const predictColName = "y_pred_prob";
 
-          // Pyodide를 사용하여 Python으로 예측 수행
+          // Logistic, Poisson, Quasi-Poisson, Negative Binomial 모델의 경우 y_pred 열 추가
+          const needsRoundedColumn = [
+            "Logit",
+            "Logistic",
+            "Poisson",
+            "QuasiPoisson",
+            "NegativeBinomial",
+          ].includes(modelOutput.modelType);
+          const roundedColName = "y_pred";
+
+          const newColumns: ColumnInfo[] = [...inputData.columns];
+          if (!newColumns.some((c) => c.name === predictColName)) {
+            newColumns.push({ name: predictColName, type: "number" });
+          }
+          if (
+            needsRoundedColumn &&
+            !newColumns.some((c) => c.name === roundedColName)
+          ) {
+            newColumns.push({ name: roundedColName, type: "number" });
+          }
+          const inputRows = inputData.rows || [];
+
+          const newRows = inputRows.map((row) => {
+            let linearPredictor =
+              modelOutput.summary.coefficients["const"]?.coef ?? 0;
+
+            for (const feature of modelOutput.featureColumns) {
+              const featureValue = row[feature] as number;
+              const coefficient =
+                modelOutput.summary.coefficients[feature]?.coef;
+              if (
+                typeof featureValue === "number" &&
+                typeof coefficient === "number"
+              ) {
+                linearPredictor += featureValue * coefficient;
+              }
+            }
+
+            let prediction: number;
+            switch (modelOutput.modelType) {
+              case "OLS":
+                prediction = linearPredictor;
+                break;
+              case "Logit":
+              case "Logistic":
+                prediction = sigmoid(linearPredictor);
+                break;
+              case "Poisson":
+              case "QuasiPoisson":
+              case "NegativeBinomial":
+              case "Gamma":
+              case "Tweedie":
+                prediction = Math.exp(linearPredictor);
+                break;
+              default:
+                prediction = NaN;
+            }
+
+            const resultRow: Record<string, any> = {
+              ...row,
+              [predictColName]: parseFloat(prediction.toFixed(4)),
+            };
+
+            // Logistic, Poisson, Quasi-Poisson, Negative Binomial 모델의 경우 반올림된 정수 추가
+            if (needsRoundedColumn) {
+              resultRow[roundedColName] = Math.round(prediction);
+            }
+
+            return resultRow;
+          });
+
+          newOutputData = {
+            type: "DataPreview",
+            columns: newColumns,
+            totalRowCount: inputData.totalRowCount,
+            rows: newRows,
+          };
+        } else if (module.type === ModuleType.DiversionChecker) {
+          const dataInputConnection = connections.find(
+            (c) => c.to.moduleId === module.id && c.to.portName === "data_in"
+          );
+
+          if (!dataInputConnection) {
+            throw new Error("'data_in' port must be connected.");
+          }
+
+          const dataSourceModule = currentModules.find(
+            (m) => m.id === dataInputConnection.from.moduleId
+          );
+          if (!dataSourceModule || !dataSourceModule.outputData)
+            throw new Error("Data source module has no output.");
+
+          let inputData: DataPreview | null = null;
+          if (dataSourceModule.outputData.type === "DataPreview") {
+            inputData = dataSourceModule.outputData;
+          } else if (dataSourceModule.outputData.type === "SplitDataOutput") {
+            const portName = dataInputConnection.from.portName;
+            inputData =
+              portName === "train_data_out"
+                ? dataSourceModule.outputData.train
+                : dataSourceModule.outputData.test;
+          }
+          if (!inputData) throw new Error("Input data not available.");
+
+          const { feature_columns, label_column, max_iter } = module.parameters;
+          if (!feature_columns || feature_columns.length === 0 || !label_column)
+            throw new Error("Feature and label columns must be configured.");
+
           try {
             addLog(
               "INFO",
-              "Pyodide를 사용하여 Python으로 statsmodels 모델 예측 수행 중..."
+              "Pyodide를 사용하여 Python으로 Diversion Checker 실행 중..."
             );
 
-            const pyodideModule = await import("./utils/pyodideRunner");
-            const { predictWithStatsmodel } = pyodideModule;
+            const ordered_feature_columns = inputData.columns
+              .map((c) => c.name)
+              .filter((name) => feature_columns.includes(name));
 
-            const result = await predictWithStatsmodel(
-              inputData.rows || [],
-              modelOutput.featureColumns,
-              modelOutput.summary.coefficients,
-              modelOutput.modelType,
+            const X = (inputData.rows || []).map((row) =>
+              ordered_feature_columns.map((col) => {
+                const val = row[col];
+                return typeof val === "number" ? val : 0;
+              })
+            );
+            const y = (inputData.rows || []).map((row) => {
+              const val = row[label_column];
+              return typeof val === "number" ? val : 0;
+            });
+
+            // 데이터 검증
+            if (X.length === 0 || y.length === 0) {
+              throw new Error(
+                "입력 데이터가 비어있습니다. 데이터 소스를 확인해주세요."
+              );
+            }
+            if (X[0].length !== ordered_feature_columns.length) {
+              throw new Error("특성 컬럼 수가 데이터와 일치하지 않습니다.");
+            }
+            if (X.length !== y.length) {
+              throw new Error(
+                "특성 데이터와 레이블 데이터의 행 수가 일치하지 않습니다."
+              );
+            }
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { runDiversionChecker } = pyodideModule;
+
+            const result = await runDiversionChecker(
+              X,
+              y,
+              ordered_feature_columns,
+              label_column,
+              max_iter || 100,
               120000 // 타임아웃: 120초
             );
 
-            // Predict 컬럼 이름을 labelColumn_Predict로 변경
-            const newRows = result.rows.map((row: any) => {
-              const newRow = { ...row };
-              if (newRow.Predict !== undefined) {
-                newRow[predictColName] = newRow.Predict;
-                delete newRow.Predict;
-              }
-              // y_Pred 컬럼은 그대로 유지 (정수 예측값)
-              return newRow;
-            });
-
-            const newColumns: ColumnInfo[] = [...inputData.columns];
-            if (!newColumns.some((c) => c.name === predictColName)) {
-              newColumns.push({ name: predictColName, type: "number" });
-            }
-            // y_Pred 컬럼이 있으면 추가
-            if (newRows.length > 0 && newRows[0].y_Pred !== undefined) {
-              if (!newColumns.some((c) => c.name === "y_Pred")) {
-                newColumns.push({ name: "y_Pred", type: "number" });
-              }
-            }
-
+            // runDiversionChecker는 Python 결과를 그대로 반환하므로 snake_case를 사용
+            const pythonResults = result.results as any;
             newOutputData = {
-              type: "DataPreview",
-              columns: newColumns,
-              totalRowCount: inputData.totalRowCount,
-              rows: newRows,
-            };
+              type: "DiversionCheckerOutput",
+              phi: result.phi,
+              recommendation: result.recommendation,
+              poissonAic: result.poissonAic,
+              negativeBinomialAic: result.negativeBinomialAic,
+              aicComparison: result.aicComparison,
+              cameronTrivediCoef: result.cameronTrivediCoef,
+              cameronTrivediPvalue: result.cameronTrivediPvalue,
+              cameronTrivediConclusion: result.cameronTrivediConclusion,
+              methodsUsed: result.methodsUsed,
+              results: {
+                phi: pythonResults.phi,
+                phi_interpretation:
+                  pythonResults.phi_interpretation ||
+                  `φ = ${result.phi.toFixed(6)}`,
+                recommendation: pythonResults.recommendation,
+                poisson_aic: pythonResults.poisson_aic ?? null,
+                negative_binomial_aic:
+                  pythonResults.negative_binomial_aic ?? null,
+                cameron_trivedi_coef: pythonResults.cameron_trivedi_coef,
+                cameron_trivedi_pvalue: pythonResults.cameron_trivedi_pvalue,
+                cameron_trivedi_conclusion:
+                  pythonResults.cameron_trivedi_conclusion,
+              },
+            } as DiversionCheckerOutput;
 
-            addLog("SUCCESS", "Python으로 statsmodels 모델 예측 완료");
+            addLog("SUCCESS", "Diversion Checker 실행 완료");
           } catch (error: any) {
             const errorMessage = error.message || String(error);
-            addLog(
-              "ERROR",
-              `Python PredictModel 실행 실패: ${errorMessage}`
-            );
-            throw new Error(`PredictModel 실행 실패: ${errorMessage}`);
+            addLog("ERROR", `Diversion Checker 실행 실패: ${errorMessage}`);
+            throw new Error(`Diversion Checker 실행 실패: ${errorMessage}`);
           }
-        } else if (module.type === ModuleType.EvaluateStats) {
-          const inputData = getSingleInputData(module.id) as DataPreview;
-          if (!inputData)
-            throw new Error("Input data for evaluation not available.");
+        } else if (module.type === ModuleType.EvaluateStat) {
+          const dataInputConnection = connections.find(
+            (c) => c.to.moduleId === module.id && c.to.portName === "data_in"
+          );
 
-          const { label_column, prediction_column } = module.parameters;
+          if (!dataInputConnection) {
+            throw new Error("'data_in' port must be connected.");
+          }
 
+          const dataSourceModule = currentModules.find(
+            (m) => m.id === dataInputConnection.from.moduleId
+          );
+          if (!dataSourceModule || !dataSourceModule.outputData)
+            throw new Error("Data source module has no output.");
+
+          let inputData: DataPreview | null = null;
+          if (dataSourceModule.outputData.type === "DataPreview") {
+            inputData = dataSourceModule.outputData;
+          } else if (dataSourceModule.outputData.type === "SplitDataOutput") {
+            const portName = dataInputConnection.from.portName;
+            inputData =
+              portName === "train_data_out"
+                ? dataSourceModule.outputData.train
+                : dataSourceModule.outputData.test;
+          }
+          if (!inputData) throw new Error("Input data not available.");
+
+          const { label_column, prediction_column, model_type } =
+            module.parameters;
           if (!label_column || !prediction_column) {
             throw new Error(
-              "Both 'label_column' and 'prediction_column' must be specified."
+              "Label column and prediction column must be configured."
             );
           }
 
-          // 연결된 PredictModel에서 모델 타입 찾기
-          let modelType: StatsModelFamily = "OLS";
-          const inputConnection = connections.find(
-            (c) => c.to.moduleId === module.id
-          );
-          if (inputConnection) {
-            const sourceModule = currentModules.find(
-              (m) => m.id === inputConnection.from.moduleId
+          // 예측 컬럼이 데이터에 있는지 확인
+          if (!inputData.columns.some((c) => c.name === prediction_column)) {
+            throw new Error(
+              `Prediction column '${prediction_column}' not found in data.`
             );
-            if (sourceModule?.type === ModuleType.PredictModel) {
-              // PredictModel이 연결된 ResultModel 찾기
-              const modelInputConn = connections.find(
-                (c) =>
-                  c.to.moduleId === sourceModule.id &&
-                  c.to.portName === "model_in"
-              );
-              if (modelInputConn) {
-                const resultModelModule = currentModules.find(
-                  (m) => m.id === modelInputConn.from.moduleId
-                );
-                if (
-                  resultModelModule?.outputData?.type ===
-                  "StatsModelsResultOutput"
-                ) {
-                  modelType =
-                    (resultModelModule.outputData as StatsModelsResultOutput)
-                      .modelType || "OLS";
-                }
-              }
-            }
+          }
+          if (!inputData.columns.some((c) => c.name === label_column)) {
+            throw new Error(
+              `Label column '${label_column}' not found in data.`
+            );
           }
 
-          // Pyodide를 사용하여 Python으로 통계량 계산
           try {
             addLog(
               "INFO",
-              `Pyodide를 사용하여 Python으로 ${modelType} 모델 통계량 평가 중...`
+              "Pyodide를 사용하여 Python으로 Evaluate Stat 실행 중..."
             );
 
             const pyodideModule = await import("./utils/pyodideRunner");
@@ -4573,16 +4753,14 @@ ${header}
               inputData.rows || [],
               label_column,
               prediction_column,
-              modelType,
+              model_type || "",
               120000 // 타임아웃: 120초
             );
 
             newOutputData = {
-              type: "EvaluateStatsOutput",
-              modelType: modelType,
+              type: "EvaluateStatOutput",
+              modelType: model_type,
               metrics: result.metrics,
-              actualColumn: label_column,
-              predictedColumn: prediction_column,
               residuals: result.residuals,
               deviance: result.deviance,
               pearsonChi2: result.pearsonChi2,
@@ -4590,16 +4768,13 @@ ${header}
               aic: result.aic,
               bic: result.bic,
               logLikelihood: result.logLikelihood,
-            };
+            } as EvaluateStatOutput;
 
-            addLog("SUCCESS", "Python으로 통계량 평가 완료");
+            addLog("SUCCESS", "Evaluate Stat 실행 완료");
           } catch (error: any) {
             const errorMessage = error.message || String(error);
-            addLog(
-              "ERROR",
-              `Python EvaluateStats 실행 실패: ${errorMessage}`
-            );
-            throw new Error(`EvaluateStats 실행 실패: ${errorMessage}`);
+            addLog("ERROR", `Evaluate Stat 실행 실패: ${errorMessage}`);
+            throw new Error(`Evaluate Stat 실행 실패: ${errorMessage}`);
           }
         } else if (
           module.type === ModuleType.KMeans ||
@@ -5106,13 +5281,6 @@ ${header}
             if (viewingEvaluation && viewingEvaluation.id === moduleId) {
               setViewingEvaluation(finalModuleState);
             }
-            // viewingDiversionChecker가 열려있고 이 모듈이면 자동으로 업데이트
-            if (
-              viewingDiversionChecker &&
-              viewingDiversionChecker.id === moduleId
-            ) {
-              setViewingDiversionChecker(finalModuleState);
-            }
             return finalModuleState;
           }
           // Update connected model definition module status when TrainModel status changes
@@ -5500,80 +5668,362 @@ ${header}
               </button>
               {isSampleMenuOpen && (
                 <div
-                  className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-xl min-w-[250px]"
+                  className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-xl min-w-[200px] max-h-[600px] overflow-y-auto"
                   style={{ zIndex: 9999 }}
                 >
-                  {/* 저장 버튼 */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSaveCurrentAsSample();
-                      setIsSampleMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-t-md transition-colors cursor-pointer border-b border-gray-700"
-                    type="button"
-                  >
-                    <span className="flex items-center gap-2">
-                      <PlusIcon className="h-4 w-4" />
-                      현재 모델 저장
-                    </span>
-                  </button>
-
-                  {/* 초기 화면으로 설정 버튼 */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetAsInitialScreen();
-                      setIsSampleMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-green-400 hover:bg-gray-700 transition-colors cursor-pointer border-b border-gray-700"
-                    type="button"
-                  >
-                    <span className="flex items-center gap-2">
-                      <StarIcon className="h-4 w-4 text-yellow-400" />
-                      초기 화면으로 설정
-                    </span>
-                  </button>
-
-                  {/* 샘플 목록 */}
-                  {allSamples && allSamples.length > 0 ? (
-                    allSamples.map((sample: any, index: number) => (
-                      <div
-                        key={sample.name}
-                        className={`flex items-center justify-between group ${
-                          index === 0 && userSamples.length === 0
-                            ? "rounded-t-md"
-                            : ""
-                        } ${
-                          index === allSamples.length - 1 ? "rounded-b-md" : ""
-                        }`}
-                      >
+                  {/* Samples 폴더의 파일 목록 */}
+                  {isLoadingSamples ? (
+                    <div className="px-4 py-2 text-sm text-gray-400">
+                      Loading samples...
+                    </div>
+                  ) : folderSamples.length > 0 ? (
+                    <>
+                      <div className="px-4 py-2 text-xs text-gray-500 uppercase font-bold border-b border-gray-700">
+                        Samples Folder ({folderSamples.length})
+                      </div>
+                      {folderSamples.map((sample) => (
                         <button
+                          key={sample.filename}
                           onClick={(e) => {
                             e.stopPropagation();
-                            console.log("Sample clicked:", sample.name);
-                            handleLoadSample(sample.name);
+                            console.log(
+                              "Loading sample:",
+                              sample.name,
+                              "from file:",
+                              sample.filename
+                            );
+                            handleLoadSample(
+                              sample.name,
+                              "folder",
+                              sample.filename
+                            );
                           }}
-                          className="flex-1 text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
+                          className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
+                          type="button"
+                          title={sample.filename}
+                        >
+                          {sample.name}
+                        </button>
+                      ))}
+                      <div className="border-b border-gray-700 my-1"></div>
+                    </>
+                  ) : (
+                    <div className="px-4 py-2 text-xs text-gray-500">
+                      No samples in folder
+                    </div>
+                  )}
+
+                  {/* 공유 Samples 목록 */}
+                  {(() => {
+                    try {
+                      const savedSamples = getSavedSamples();
+                      if (savedSamples && savedSamples.length > 0) {
+                        return (
+                          <>
+                            <div className="px-4 py-2 text-xs text-gray-500 uppercase font-bold border-b border-gray-700">
+                              Shared Samples
+                            </div>
+                            {savedSamples.map((sample: any) => (
+                              <button
+                                key={sample.name}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLoadSample(sample.name, "samples");
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
+                                type="button"
+                              >
+                                {sample.name}
+                              </button>
+                            ))}
+                            <div className="border-b border-gray-700 my-1"></div>
+                          </>
+                        );
+                      }
+                      return null;
+                    } catch (error) {
+                      console.error("Error rendering saved samples:", error);
+                      return null;
+                    }
+                  })()}
+
+                  {/* 기본 Samples 목록 */}
+                  {SAMPLE_MODELS && SAMPLE_MODELS.length > 0 ? (
+                    <>
+                      <div className="px-4 py-2 text-xs text-gray-500 uppercase font-bold border-b border-gray-700">
+                        Default Samples
+                      </div>
+                      {SAMPLE_MODELS.map((sample: any) => (
+                        <button
+                          key={sample.name}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLoadSample(sample.name, "samples");
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 last:rounded-b-md transition-colors cursor-pointer"
                           type="button"
                         >
                           {sample.name}
                         </button>
-                        {sample.isUserSample && (
-                          <button
-                            onClick={(e) => handleDeleteSample(sample.name, e)}
-                            className="px-2 py-2 text-gray-400 hover:text-red-400 hover:bg-gray-700 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
-                            type="button"
-                            title="삭제"
-                          >
-                            <XMarkIcon className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="px-4 py-2 text-sm text-gray-400 last:rounded-b-md">
+                      No samples available
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* My Work 버튼 */}
+            <div
+              className="relative flex-shrink-0"
+              ref={myWorkMenuRef}
+              style={{ zIndex: 1000 }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMyWorkMenuOpen((prev) => !prev);
+                }}
+                className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition-colors cursor-pointer"
+                title="My Work"
+                type="button"
+              >
+                <FolderOpenIcon className="h-2 w-2 md:h-4 md:w-4" />
+                <span className="hidden sm:inline">My Work</span>
+              </button>
+              {isMyWorkMenuOpen && (
+                <div
+                  className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-xl min-w-[200px]"
+                  style={{ zIndex: 9999 }}
+                >
+                  {/* 파일에서 불러오기 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.accept = ".json,.mla";
+                      input.onchange = (event: Event) => {
+                        const target = event.target as HTMLInputElement;
+                        const file = target.files?.[0];
+                        if (!file) return;
+
+                        const reader = new FileReader();
+                        reader.onload = (e: ProgressEvent<FileReader>) => {
+                          try {
+                            const content = e.target?.result as string;
+                            if (!content) {
+                              addLog("ERROR", "파일이 비어있습니다.");
+                              return;
+                            }
+                            const savedState = JSON.parse(content);
+                            if (savedState.modules && savedState.connections) {
+                              resetModules(savedState.modules);
+                              _setConnections(savedState.connections);
+                              if (savedState.projectName) {
+                                setProjectName(savedState.projectName);
+                              }
+                              setSelectedModuleIds([]);
+                              setIsDirty(false);
+                              addLog(
+                                "SUCCESS",
+                                `파일 '${file.name}'을 불러왔습니다.`
+                              );
+                              setIsMyWorkMenuOpen(false);
+                            } else if (savedState.name && savedState.modules) {
+                              // Sample 형식인 경우
+                              handleLoadSample(savedState.name, "mywork");
+                              setIsMyWorkMenuOpen(false);
+                            } else {
+                              addLog("WARN", "올바르지 않은 파일 형식입니다.");
+                            }
+                          } catch (error) {
+                            console.error("Failed to load file:", error);
+                            addLog("ERROR", "파일을 불러오는데 실패했습니다.");
+                          }
+                        };
+                        reader.readAsText(file);
+                      };
+                      input.click();
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer flex items-center gap-2 border-b border-gray-700"
+                    type="button"
+                  >
+                    <FolderOpenIcon className="w-4 h-4 text-blue-400" />
+                    <span>파일에서 불러오기</span>
+                  </button>
+
+                  {/* 현재 모델 저장 (개인용) */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (modules.length === 0) {
+                        addLog(
+                          "WARN",
+                          "저장할 모델이 없습니다. 먼저 모듈을 추가해주세요."
+                        );
+                        setIsMyWorkMenuOpen(false);
+                        return;
+                      }
+
+                      const modelName = prompt(
+                        "모델 이름을 입력하세요:",
+                        projectName || "My Model"
+                      );
+                      if (!modelName || !modelName.trim()) {
+                        setIsMyWorkMenuOpen(false);
+                        return;
+                      }
+
+                      const trimmedName = modelName.trim();
+
+                      // 기존 모델 목록 가져오기
+                      const existingModelsStr =
+                        localStorage.getItem("myWorkModels");
+                      let existingModels: any[] = [];
+                      if (existingModelsStr) {
+                        try {
+                          existingModels = JSON.parse(existingModelsStr);
+                          if (!Array.isArray(existingModels)) {
+                            existingModels = [];
+                          }
+                        } catch (parseError) {
+                          console.error(
+                            "Failed to parse existing models:",
+                            parseError
+                          );
+                          existingModels = [];
+                        }
+                      }
+
+                      // 동일한 이름의 모델이 있는지 확인
+                      const existingModel = existingModels.find(
+                        (m: any) => m.name === trimmedName
+                      );
+                      if (existingModel) {
+                        const shouldOverwrite = window.confirm(
+                          `모델 "${trimmedName}"이 이미 존재합니다. 덮어쓰시겠습니까?`
+                        );
+                        if (!shouldOverwrite) {
+                          setIsMyWorkMenuOpen(false);
+                          return;
+                        }
+                      }
+
+                      const savedModel = {
+                        name: trimmedName,
+                        modules: modules.map((m) => ({
+                          type: m.type,
+                          position: m.position,
+                          name: m.name,
+                          parameters: m.parameters,
+                        })),
+                        connections: connections
+                          .map((c) => {
+                            const fromIndex = modules.findIndex(
+                              (m) => m.id === c.from.moduleId
+                            );
+                            const toIndex = modules.findIndex(
+                              (m) => m.id === c.to.moduleId
+                            );
+                            return {
+                              fromModuleIndex: fromIndex,
+                              fromPort: c.from.portName,
+                              toModuleIndex: toIndex,
+                              toPort: c.to.portName,
+                            };
+                          })
+                          .filter(
+                            (c) =>
+                              c.fromModuleIndex >= 0 && c.toModuleIndex >= 0
+                          ),
+                      };
+
+                      // 같은 이름의 모델이 있으면 제거하고 새로 추가
+                      const filteredModels = existingModels.filter(
+                        (m: any) => m.name !== trimmedName
+                      );
+                      const updatedModels = [...filteredModels, savedModel];
+
+                      localStorage.setItem(
+                        "myWorkModels",
+                        JSON.stringify(updatedModels)
+                      );
+                      setMyWorkModels(updatedModels);
+                      addLog(
+                        "SUCCESS",
+                        `모델 "${trimmedName}"이 저장되었습니다. (개인용)`
+                      );
+                      setIsMyWorkMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer flex items-center gap-2 border-b border-gray-700"
+                    type="button"
+                  >
+                    <PlusIcon className="w-4 h-4 text-blue-400" />
+                    <span>현재 모델 저장</span>
+                  </button>
+
+                  {/* 초기 화면으로 설정 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const currentModel = {
+                        name: projectName || "My Model",
+                        modules: modules.map((m) => ({
+                          type: m.type,
+                          position: m.position,
+                          name: m.name,
+                          parameters: m.parameters,
+                        })),
+                        connections: connections.map((c) => ({
+                          fromModuleIndex: modules.findIndex(
+                            (m) => m.id === c.from.moduleId
+                          ),
+                          fromPort: c.from.portName,
+                          toModuleIndex: modules.findIndex(
+                            (m) => m.id === c.to.moduleId
+                          ),
+                          toPort: c.to.portName,
+                        })),
+                      };
+                      localStorage.setItem(
+                        "initialModel",
+                        JSON.stringify(currentModel)
+                      );
+                      addLog("SUCCESS", "초기 화면으로 설정되었습니다.");
+                      setIsMyWorkMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer flex items-center gap-2 border-b border-gray-700"
+                    type="button"
+                  >
+                    <StarIcon className="w-4 h-4 text-yellow-400" />
+                    <span className="text-green-400">초기 화면으로 설정</span>
+                  </button>
+
+                  {/* 구분선 */}
+                  <div className="border-b border-gray-700 my-1"></div>
+
+                  {/* 저장된 모델 목록 */}
+                  {myWorkModels && myWorkModels.length > 0 ? (
+                    myWorkModels.map((saved: any) => (
+                      <button
+                        key={saved.name}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleLoadSample(saved.name, "mywork");
+                          setIsMyWorkMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 last:rounded-b-md transition-colors cursor-pointer"
+                        type="button"
+                      >
+                        {saved.name}
+                      </button>
                     ))
                   ) : (
-                    <div className="px-4 py-2 text-sm text-gray-400">
-                      No samples available
+                    <div className="px-4 py-2 text-sm text-gray-400 last:rounded-b-md">
+                      저장된 모델이 없습니다
                     </div>
                   )}
                 </div>
@@ -5628,39 +6078,6 @@ ${header}
       </header>
 
       <div className="flex-grow min-h-0 relative">
-        {/* Welcome Screen */}
-        {showWelcomeScreen && modules.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center z-50 bg-gray-900 bg-opacity-95">
-            <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4 border border-gray-700">
-              <h2 className="text-2xl font-bold text-white mb-4 text-center">
-                환영합니다!
-              </h2>
-              <p className="text-gray-300 mb-6 text-center">
-                새 모델을 시작하거나 샘플을 로드하세요.
-              </p>
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => {
-                    setShowWelcomeScreen(false);
-                  }}
-                  className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold transition-colors"
-                >
-                  새 모델 시작하기
-                </button>
-                <button
-                  onClick={() => {
-                    setIsSampleMenuOpen(true);
-                  }}
-                  className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-md font-semibold transition-colors flex items-center justify-center gap-2"
-                >
-                  <SparklesIcon className="h-5 w-5" />
-                  샘플 모델 로드하기
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <main
           ref={canvasContainerRef}
           className="w-full h-full canvas-bg relative overflow-hidden"
@@ -5885,6 +6302,20 @@ ${header}
           onClose={handleCloseModal}
         />
       )}
+      {viewingDiversionChecker && (
+        <DiversionCheckerPreviewModal
+          module={viewingDiversionChecker}
+          projectName={projectName}
+          onClose={handleCloseModal}
+        />
+      )}
+      {viewingEvaluateStat && (
+        <EvaluateStatPreviewModal
+          module={viewingEvaluateStat}
+          projectName={projectName}
+          onClose={handleCloseModal}
+        />
+      )}
       {viewingXoLPrice && (
         <XoLPricePreviewModal
           module={viewingXoLPrice}
@@ -5942,19 +6373,6 @@ ${header}
             />
           );
         })()}
-      {viewingEvaluateStats && (
-        <EvaluateStatsPreviewModal
-          module={viewingEvaluateStats}
-          onClose={handleCloseModal}
-        />
-      )}
-      {viewingDiversionChecker && (
-        <DiversionCheckerPreviewModal
-          module={viewingDiversionChecker}
-          projectName={projectName}
-          onClose={handleCloseModal}
-        />
-      )}
     </div>
   );
 };

@@ -1,0 +1,305 @@
+{
+  "modules": [
+    {
+      "type": "LoadData",
+      "status": "Pending",
+      "parameters": {
+        "source": "your-data-source.csv"
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "data_out",
+          "type": "data"
+        }
+      ],
+      "id": "module-1765533493466-0",
+      "name": "Load Data",
+      "position": {
+        "x": 94,
+        "y": 85
+      }
+    },
+    {
+      "type": "SelectData",
+      "status": "Pending",
+      "parameters": {
+        "columnSelections": {}
+      },
+      "inputs": [
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "data_out",
+          "type": "data"
+        }
+      ],
+      "id": "module-1765533493466-1",
+      "name": "Select Data 1",
+      "position": {
+        "x": 100,
+        "y": 250
+      }
+    },
+    {
+      "type": "SplitData",
+      "status": "Pending",
+      "parameters": {
+        "train_size": 0.7,
+        "random_state": 43,
+        "shuffle": "True",
+        "stratify": "False",
+        "stratify_column": null
+      },
+      "inputs": [
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "train_data_out",
+          "type": "data"
+        },
+        {
+          "name": "test_data_out",
+          "type": "data"
+        }
+      ],
+      "id": "module-1765533493466-2",
+      "name": "Split Data",
+      "position": {
+        "x": 100,
+        "y": 400
+      }
+    },
+    {
+      "type": "LinearRegression",
+      "status": "Pending",
+      "parameters": {
+        "model_type": "LinearRegression",
+        "alpha": 1,
+        "l1_ratio": 0.5,
+        "fit_intercept": "True",
+        "tuning_enabled": "False",
+        "tuning_strategy": "GridSearch",
+        "alpha_candidates": "0.01,0.1,1,10",
+        "l1_ratio_candidates": "0.2,0.5,0.8",
+        "cv_folds": 5,
+        "scoring_metric": "neg_mean_squared_error"
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model_out",
+          "type": "model"
+        }
+      ],
+      "id": "module-1765533493466-3",
+      "name": "Linear Regression",
+      "position": {
+        "x": 100,
+        "y": 550
+      }
+    },
+    {
+      "type": "Statistics",
+      "status": "Pending",
+      "parameters": {},
+      "inputs": [
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [],
+      "id": "module-1765533493466-4",
+      "name": "Statistics 1",
+      "position": {
+        "x": 397,
+        "y": 76
+      }
+    },
+    {
+      "type": "TrainModel",
+      "status": "Pending",
+      "parameters": {
+        "feature_columns": [],
+        "label_column": null
+      },
+      "inputs": [
+        {
+          "name": "model_in",
+          "type": "model"
+        },
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trained_model_out",
+          "type": "model"
+        }
+      ],
+      "id": "module-1765533493466-5",
+      "name": "Train Model",
+      "position": {
+        "x": 350,
+        "y": 550
+      }
+    },
+    {
+      "type": "ScoreModel",
+      "status": "Pending",
+      "parameters": {},
+      "inputs": [
+        {
+          "name": "model_in",
+          "type": "model"
+        },
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "scored_data_out",
+          "type": "data"
+        }
+      ],
+      "id": "module-1765533493466-6",
+      "name": "Score Model",
+      "position": {
+        "x": 600,
+        "y": 550
+      }
+    },
+    {
+      "type": "EvaluateModel",
+      "status": "Pending",
+      "parameters": {
+        "label_column": null,
+        "prediction_column": null,
+        "model_type": "regression",
+        "threshold": 0.5
+      },
+      "inputs": [
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "evaluation_out",
+          "type": "evaluation"
+        }
+      ],
+      "id": "module-1765533493466-7",
+      "name": "Evaluate Model",
+      "position": {
+        "x": 850,
+        "y": 550
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "connection-1765533493466-0",
+      "from": {
+        "moduleId": "module-1765533493466-0",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-1",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1765533493466-1",
+      "from": {
+        "moduleId": "module-1765533493466-0",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-4",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1765533493466-2",
+      "from": {
+        "moduleId": "module-1765533493466-1",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-2",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1765533493466-3",
+      "from": {
+        "moduleId": "module-1765533493466-2",
+        "portName": "train_data_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-5",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1765533493466-4",
+      "from": {
+        "moduleId": "module-1765533493466-2",
+        "portName": "test_data_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-6",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1765533493466-5",
+      "from": {
+        "moduleId": "module-1765533493466-3",
+        "portName": "model_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-5",
+        "portName": "model_in"
+      }
+    },
+    {
+      "id": "connection-1765533493466-6",
+      "from": {
+        "moduleId": "module-1765533493466-5",
+        "portName": "trained_model_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-6",
+        "portName": "model_in"
+      }
+    },
+    {
+      "id": "connection-1765533493466-7",
+      "from": {
+        "moduleId": "module-1765533493466-6",
+        "portName": "scored_data_out"
+      },
+      "to": {
+        "moduleId": "module-1765533493466-7",
+        "portName": "data_in"
+      }
+    }
+  ],
+  "projectName": "Linear Regression-1"
+}

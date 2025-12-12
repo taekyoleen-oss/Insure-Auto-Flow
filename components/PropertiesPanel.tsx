@@ -89,7 +89,7 @@ const ExplanationRenderer: React.FC<{ text: string }> = ({ text }) => {
         parts.push(
           <code
             key={result.index}
-            className="bg-gray-700 text-purple-300 px-1 py-0.5 rounded text-[0.525rem]"
+            className="bg-gray-700 text-purple-300 px-1 py-0.5 rounded text-xs"
           >
             {result[4]}
           </code>
@@ -107,14 +107,14 @@ const ExplanationRenderer: React.FC<{ text: string }> = ({ text }) => {
   };
 
   return (
-    <div className="text-gray-300 space-y-2 text-[0.6125rem]">
+    <div className="text-gray-300 space-y-2 text-sm">
       {text.split("\n").map((line, index) => {
         const trimmedLine = line.trim();
         if (trimmedLine.startsWith("### ")) {
           return (
             <h4
               key={index}
-              className="text-[0.7rem] font-semibold mt-3 mb-1 text-gray-200"
+              className="text-md font-semibold mt-3 mb-1 text-gray-200"
             >
               {renderLine(trimmedLine.substring(4))}
             </h4>
@@ -124,7 +124,7 @@ const ExplanationRenderer: React.FC<{ text: string }> = ({ text }) => {
           return (
             <h3
               key={index}
-              className="text-[0.7875rem] font-semibold mt-4 mb-2 text-gray-100"
+              className="text-lg font-semibold mt-4 mb-2 text-gray-100"
             >
               {renderLine(trimmedLine.substring(3))}
             </h3>
@@ -132,7 +132,7 @@ const ExplanationRenderer: React.FC<{ text: string }> = ({ text }) => {
         }
         if (trimmedLine.startsWith("* ")) {
           return (
-            <div key={index} className="flex items-start pl-1">
+            <div key={index} className="flex items-start pl-2">
               <span className="mr-2 mt-1">•</span>
               <div className="flex-1">
                 {renderLine(trimmedLine.substring(2))}
@@ -201,7 +201,7 @@ const AIModuleExplanation: React.FC<{ module: CanvasModule }> = ({
         "model" in module.parameters
       ) {
         optionsContext =
-          "\n\n**옵션 컨텍스트:**\n'model' 파라미터는 ['OLS', 'Logit', 'Poisson', 'NegativeBinomial', 'QuasiPoisson', 'Gamma', 'Tweedie'] 옵션을 가집니다. 각 모델의 용도를 간략히 설명해 주세요.";
+          "\n\n**옵션 컨텍스트:**\n'model' 파라미터는 ['OLS', 'Logit', 'Poisson', 'NegativeBinomial', 'Gamma', 'Tweedie'] 옵션을 가집니다. 각 모델의 용도를 간략히 설명해 주세요.";
       }
 
       const prompt = `
@@ -246,7 +246,7 @@ ${optionsContext}
       <button
         onClick={handleExplain}
         disabled={isLoading}
-        className="flex items-center justify-center gap-2 w-full px-2 py-1.5 text-[0.525rem] bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-md font-semibold text-white transition-colors"
+        className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-md font-semibold text-white transition-colors"
       >
         <SparklesIcon className="h-4 w-4" />
         {isLoading
@@ -256,9 +256,9 @@ ${optionsContext}
           : "AI로 파라미터 설명 보기"}
       </button>
       {show && (
-        <div className="mt-2 p-2 bg-gray-700 rounded-lg">
+        <div className="mt-2 p-3 bg-gray-700 rounded-lg">
           {isLoading && (
-            <p className="text-[0.6125rem] text-gray-400">
+            <p className="text-sm text-gray-400">
               AI 설명을 생성하고 있습니다...
             </p>
           )}
@@ -348,7 +348,7 @@ You are an expert data scientist AI assistant. Your task is to recommend the opt
       <button
         onClick={handleRecommend}
         disabled={isLoading}
-        className="flex items-center justify-center gap-2 w-full px-2 py-1.5 text-[0.525rem] bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 rounded-md font-semibold text-white transition-colors"
+        className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 rounded-md font-semibold text-white transition-colors"
       >
         <SparklesIcon className="h-4 w-4" />
         {isLoading ? "분석 중..." : "AI 추천"}
@@ -363,10 +363,8 @@ const PropertyGroup: React.FC<{
   module: CanvasModule;
 }> = ({ title, children, module }) => (
   <div className="mb-4">
-    <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
-      {title}
-    </h4>
-    <div className="bg-gray-800 p-2 rounded-lg">
+    <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">{title}</h4>
+    <div className="bg-gray-800 p-3 rounded-lg">
       {children}
       <AIModuleExplanation module={module} />
     </div>
@@ -381,7 +379,7 @@ const PropertyInput: React.FC<{
   step?: string;
 }> = ({ label, value, onChange, type = "text", step }) => (
   <div className="mb-3 last:mb-0">
-    <label className="block text-[0.6125rem] text-gray-400 mb-1">{label}</label>
+    <label className="block text-sm text-gray-400 mb-1">{label}</label>
     <input
       type={type}
       value={value}
@@ -391,7 +389,7 @@ const PropertyInput: React.FC<{
           type === "number" ? parseFloat(e.target.value) : e.target.value
         )
       }
-      className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-[0.6125rem] focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
   </div>
 );
@@ -403,11 +401,11 @@ const PropertySelect: React.FC<{
   options: (string | { label: string; value: string })[];
 }> = ({ label, value, onChange, options }) => (
   <div className="mb-3 last:mb-0">
-    <label className="block text-[0.6125rem] text-gray-400 mb-1">{label}</label>
+    <label className="block text-sm text-gray-400 mb-1">{label}</label>
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-[0.6125rem] focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
     >
       {options.map((opt) => {
         const optionValue = typeof opt === "string" ? opt : opt.value;
@@ -427,8 +425,8 @@ const PropertyDisplay: React.FC<{ label: string; value: React.ReactNode }> = ({
   value,
 }) => (
   <div className="mb-3 last:mb-0">
-    <label className="block text-[0.6125rem] text-gray-400 mb-1">{label}</label>
-    <div className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-[0.6125rem] text-gray-300">
+    <label className="block text-sm text-gray-400 mb-1">{label}</label>
+    <div className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-300">
       {value}
     </div>
   </div>
@@ -541,26 +539,24 @@ const renderParameters = (
 
       return (
         <div>
-          <label className="block text-[0.6125rem] text-gray-400 mb-1">
-            Source
-          </label>
+          <label className="block text-sm text-gray-400 mb-1">Source</label>
           <div className="flex gap-2">
             <input
               type="text"
               value={module.parameters.source}
               onChange={(e) => onParamChange("source", e.target.value)}
-              className="flex-grow bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-[0.6125rem] focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-grow bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="No file selected"
             />
             <button
               onClick={handleBrowseClick}
-              className="px-2 py-1.5 text-[0.6125rem] bg-gray-600 hover:bg-gray-500 rounded-md font-semibold text-white transition-colors"
+              className="px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 rounded-md font-semibold text-white transition-colors"
             >
               Browse...
             </button>
           </div>
           <div className="mt-4">
-            <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+            <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
               Examples
             </h4>
             <div className="bg-gray-700 p-2 rounded-md space-y-1">
@@ -568,7 +564,7 @@ const renderParameters = (
                 <div
                   key={sample.name}
                   onDoubleClick={() => onSampleLoad(sample)}
-                  className="px-2 py-1.5 text-[0.6125rem] text-gray-300 rounded-md hover:bg-gray-600 cursor-pointer"
+                  className="px-2 py-1.5 text-sm text-gray-300 rounded-md hover:bg-gray-600 cursor-pointer"
                   title="Double-click to load"
                 >
                   {sample.name}
@@ -623,7 +619,7 @@ const renderParameters = (
 
       if (inputColumns.length === 0) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source module to configure columns.
           </p>
         );
@@ -634,25 +630,23 @@ const renderParameters = (
           <div className="flex justify-end gap-2 mb-2">
             <button
               onClick={() => handleSelectAll(true)}
-              className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
             >
               Select All
             </button>
             <button
               onClick={() => handleSelectAll(false)}
-              className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
             >
               Deselect All
             </button>
           </div>
-          <div className="space-y-2 pr-1">
+          <div className="space-y-2 pr-2">
             <div className="grid grid-cols-3 gap-2 items-center sticky top-0 bg-gray-800 py-1">
-              <span className="text-[0.525rem] font-bold text-gray-400 col-span-2">
+              <span className="text-xs font-bold text-gray-400 col-span-2">
                 Column Name
               </span>
-              <span className="text-[0.525rem] font-bold text-gray-400">
-                Data Type
-              </span>
+              <span className="text-xs font-bold text-gray-400">Data Type</span>
             </div>
             {inputColumns.map((col) => {
               const selection = currentSelections[col.name] || {
@@ -665,7 +659,7 @@ const renderParameters = (
                   className="grid grid-cols-3 gap-2 items-center"
                 >
                   <label
-                    className="flex items-center gap-2 text-[0.6125rem] truncate col-span-2"
+                    className="flex items-center gap-2 text-sm truncate col-span-2"
                     title={col.name}
                   >
                     <input
@@ -687,7 +681,7 @@ const renderParameters = (
                     onChange={(e) =>
                       handleSelectionChange(col.name, "type", e.target.value)
                     }
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-[0.525rem] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                     {availableDataTypes.map((type) => (
                       <option key={type} value={type}>
@@ -766,13 +760,13 @@ const renderParameters = (
 
       if (!sourceData)
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source to 'data_in'.
           </p>
         );
       if (!handler)
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a handler (e.g., Prep Missing) to 'handler_in'.
           </p>
         );
@@ -811,25 +805,25 @@ const renderParameters = (
           />
           <div className="mt-4">
             <div className="flex justify-between items-center mb-2">
-              <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold">
+              <h5 className="text-xs text-gray-500 uppercase font-bold">
                 Columns to Transform
               </h5>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleSelectAll(true)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Select All
                 </button>
                 <button
                   onClick={() => handleSelectAll(false)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Deselect All
                 </button>
               </div>
             </div>
-            <div className="space-y-2 max-h-60 overflow-y-auto panel-scrollbar pr-1">
+            <div className="space-y-2 max-h-60 overflow-y-auto panel-scrollbar pr-2">
               {allColumns.map((col) => {
                 let isDisabled = false;
                 let disabledTooltip = "";
@@ -853,7 +847,7 @@ const renderParameters = (
                 return (
                   <label
                     key={col.name}
-                    className={`flex items-center gap-2 text-[0.6125rem] truncate ${
+                    className={`flex items-center gap-2 text-sm truncate ${
                       isDisabled ? "opacity-50 cursor-not-allowed" : ""
                     }`}
                     title={disabledTooltip}
@@ -896,14 +890,14 @@ const renderParameters = (
 
       if (!sourceData) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source to see available columns.
           </p>
         );
       }
       if (categoricalColumns.length === 0) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             No categorical (string) columns found in input data.
           </p>
         );
@@ -941,7 +935,7 @@ const renderParameters = (
 
           {method === "ordinal" && (
             <div className="mt-3 pt-3 border-t border-gray-700">
-              <label className="block text-[0.6125rem] text-gray-400 mb-1">
+              <label className="block text-sm text-gray-400 mb-1">
                 Ordinal Mapping (JSON)
               </label>
               <textarea
@@ -950,9 +944,9 @@ const renderParameters = (
                   onParamChange("ordinal_mapping", e.target.value)
                 }
                 placeholder={'{\n  "column_name": ["low", "medium", "high"]\n}'}
-                className="w-full h-24 p-2 font-mono text-[0.525rem] bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-24 p-2 font-mono text-xs bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-[0.525rem] text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 Define the order of categories for each column. Unmapped columns
                 will be ordered alphabetically.
               </p>
@@ -960,17 +954,17 @@ const renderParameters = (
           )}
 
           <div className="mt-4">
-            <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
               COLUMNS TO ENCODE
             </h5>
-            <p className="text-[0.525rem] text-gray-500 mb-2">
+            <p className="text-xs text-gray-500 mb-2">
               If none are selected, all string columns will be encoded.
             </p>
-            <div className="space-y-2 max-h-48 overflow-y-auto panel-scrollbar pr-1">
+            <div className="space-y-2 max-h-48 overflow-y-auto panel-scrollbar pr-2">
               {categoricalColumns.map((col) => (
                 <label
                   key={col.name}
-                  className="flex items-center gap-2 text-[0.6125rem] truncate"
+                  className="flex items-center gap-2 text-sm truncate"
                   title={col.name}
                 >
                   <input
@@ -1027,34 +1021,34 @@ const renderParameters = (
           />
 
           {inputColumns.length === 0 ? (
-            <p className="text-[0.6125rem] text-gray-500 mt-4">
+            <p className="text-sm text-gray-500 mt-4">
               Connect a data source module to configure columns.
             </p>
           ) : (
             <div className="mt-4">
-              <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+              <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
                 COLUMNS TO NORMALIZE
               </h5>
               <div className="flex justify-end gap-2 mb-2">
                 <button
                   onClick={() => handleSelectAll(true)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Select All Numeric
                 </button>
                 <button
                   onClick={() => handleSelectAll(false)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Deselect All
                 </button>
               </div>
-              <div className="space-y-2 pr-1">
+              <div className="space-y-2 pr-2">
                 <div className="grid grid-cols-5 gap-2 items-center sticky top-0 bg-gray-800 py-1">
-                  <span className="text-[0.525rem] font-bold text-gray-400 col-span-3">
+                  <span className="text-xs font-bold text-gray-400 col-span-3">
                     Column Name
                   </span>
-                  <span className="text-[0.525rem] font-bold text-gray-400 col-span-2">
+                  <span className="text-xs font-bold text-gray-400 col-span-2">
                     Data Type
                   </span>
                 </div>
@@ -1069,7 +1063,7 @@ const renderParameters = (
                       className="grid grid-cols-5 gap-2 items-center"
                     >
                       <label
-                        className="flex items-center gap-2 text-[0.6125rem] truncate col-span-3"
+                        className="flex items-center gap-2 text-sm truncate col-span-3"
                         title={col.name}
                       >
                         <input
@@ -1090,7 +1084,7 @@ const renderParameters = (
                         </span>
                       </label>
                       <div className="col-span-2">
-                        <span className="text-[0.525rem] bg-gray-700 text-gray-300 px-2 py-1 rounded-md">
+                        <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded-md">
                           {col.type}
                         </span>
                       </div>
@@ -1117,7 +1111,7 @@ const renderParameters = (
 
       if (!sourceData) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source module to configure columns.
           </p>
         );
@@ -1128,7 +1122,7 @@ const renderParameters = (
       return (
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold">
+            <h5 className="text-xs text-gray-500 uppercase font-bold">
               Column Transformations
             </h5>
             <div title={formulaTooltip}>
@@ -1136,7 +1130,7 @@ const renderParameters = (
             </div>
           </div>
           {numericColumns.length === 0 ? (
-            <p className="text-[0.6125rem] text-gray-500">
+            <p className="text-sm text-gray-500">
               No numeric columns found in the input data.
             </p>
           ) : (
@@ -1146,7 +1140,7 @@ const renderParameters = (
                   key={col.name}
                   className="grid grid-cols-2 gap-2 items-center"
                 >
-                  <label className="text-[0.6125rem] truncate" title={col.name}>
+                  <label className="text-sm truncate" title={col.name}>
                     {col.name}
                   </label>
                   <select
@@ -1154,7 +1148,7 @@ const renderParameters = (
                     onChange={(e) =>
                       handleTransformChange(col.name, e.target.value)
                     }
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-[0.525rem] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                     <option value="None">None</option>
                     <option value="Log">Log</option>
@@ -1175,7 +1169,7 @@ const renderParameters = (
 
       if (inputColumns.length === 0) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source to configure resampling.
           </p>
         );
@@ -1206,7 +1200,7 @@ const renderParameters = (
 
       if (inputColumns.length === 0 && !sourceData) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source module to configure parameters.
           </p>
         );
@@ -1343,7 +1337,7 @@ const renderParameters = (
 
       if (inputColumns.length === 0) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source to the 'data_in' port to configure.
           </p>
         );
@@ -1390,13 +1384,13 @@ const renderParameters = (
             updateModuleParameters={updateModuleParameters}
           />
           <div className="mb-4">
-            <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
               Label Column
             </h5>
             <select
               value={label_column || ""}
               onChange={(e) => handleLabelChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-[0.6125rem] focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">공백</option>
               {inputColumns.map((col) => (
@@ -1408,29 +1402,29 @@ const renderParameters = (
           </div>
           <div>
             <div className="flex justify-between items-center mb-2">
-              <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold">
+              <h5 className="text-xs text-gray-500 uppercase font-bold">
                 Feature Columns
               </h5>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleSelectAllFeatures(true)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Select All
                 </button>
                 <button
                   onClick={() => handleSelectAllFeatures(false)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Deselect All
                 </button>
               </div>
             </div>
-            <div className="space-y-2 pr-1">
+            <div className="space-y-2 pr-2">
               {inputColumns.map((col) => (
                 <label
                   key={col.name}
-                  className="flex items-center gap-2 text-[0.6125rem] truncate"
+                  className="flex items-center gap-2 text-sm truncate"
                   title={col.name}
                 >
                   <input
@@ -1450,6 +1444,201 @@ const renderParameters = (
         </div>
       );
     }
+    case ModuleType.DiversionChecker: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source to the 'data_in' port to configure.
+          </p>
+        );
+      }
+
+      const { feature_columns = [], label_column = null, max_iter = 100 } = module.parameters;
+
+      const handleFeatureChange = (colName: string, isChecked: boolean) => {
+        const newFeatures = isChecked
+          ? [...feature_columns, colName]
+          : feature_columns.filter((c: string) => c !== colName);
+        onParamChange("feature_columns", newFeatures);
+      };
+
+      const handleLabelChange = (colName: string) => {
+        const newLabel = colName === "" ? null : colName;
+        onParamChange("label_column", newLabel);
+        // If the new label was a feature, unselect it as a feature
+        if (newLabel && feature_columns.includes(newLabel)) {
+          onParamChange(
+            "feature_columns",
+            feature_columns.filter((c: string) => c !== newLabel)
+          );
+        }
+      };
+
+      const handleSelectAllFeatures = (selectAll: boolean) => {
+        if (selectAll) {
+          const allFeatureCols = inputColumns
+            .map((col) => col.name)
+            .filter((name) => name !== label_column);
+          onParamChange("feature_columns", allFeatureCols);
+        } else {
+          onParamChange("feature_columns", []);
+        }
+      };
+
+      return (
+        <div>
+          <AIParameterRecommender
+            module={module}
+            inputColumns={inputColumns.map((c) => c.name)}
+            projectName={projectName}
+            updateModuleParameters={updateModuleParameters}
+          />
+          <div className="mb-4">
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Label Column
+            </h5>
+            <select
+              value={label_column || ""}
+              onChange={(e) => handleLabelChange(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">공백</option>
+              {inputColumns.map((col) => (
+                <option key={col.name} value={col.name}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h5 className="text-xs text-gray-500 uppercase font-bold">
+                Feature Columns
+              </h5>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSelectAllFeatures(true)}
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => handleSelectAllFeatures(false)}
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2 pr-2">
+              {inputColumns.map((col) => (
+                <label
+                  key={col.name}
+                  className="flex items-center gap-2 text-sm truncate"
+                  title={col.name}
+                >
+                  <input
+                    type="checkbox"
+                    checked={feature_columns.includes(col.name)}
+                    onChange={(e) =>
+                      handleFeatureChange(col.name, e.target.checked)
+                    }
+                    disabled={col.name === label_column}
+                    className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className="truncate">{col.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="mt-4">
+            <PropertyInput
+              label="Max Iterations"
+              type="number"
+              value={max_iter}
+              onChange={(v) => onParamChange("max_iter", v)}
+            />
+          </div>
+        </div>
+      );
+    }
+    case ModuleType.EvaluateStat: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source to the 'data_in' port to configure.
+          </p>
+        );
+      }
+
+      const { label_column = null, prediction_column = null, model_type = null } = module.parameters;
+
+      const handleLabelChange = (colName: string) => {
+        const newLabel = colName === "" ? null : colName;
+        onParamChange("label_column", newLabel);
+      };
+
+      const handlePredictionChange = (colName: string) => {
+        const newPrediction = colName === "" ? null : colName;
+        onParamChange("prediction_column", newPrediction);
+      };
+
+      return (
+        <div>
+          <div className="mb-4">
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Label Column
+            </h5>
+            <select
+              value={label_column || ""}
+              onChange={(e) => handleLabelChange(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">공백</option>
+              {inputColumns.map((col) => (
+                <option key={col.name} value={col.name}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-4">
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Prediction Column
+            </h5>
+            <select
+              value={prediction_column || ""}
+              onChange={(e) => handlePredictionChange(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">공백</option>
+              {inputColumns.map((col) => (
+                <option key={col.name} value={col.name}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-4">
+            <PropertySelect
+              label="Model Type (Optional)"
+              value={model_type || ""}
+              onChange={(v) => onParamChange("model_type", v || null)}
+              options={["", "OLS", "Logistic", "Logit", "Poisson", "QuasiPoisson", "NegativeBinomial", "Gamma", "Tweedie"]}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              모델 타입을 선택하면 해당 모델의 특수 통계량(Deviance, AIC, BIC 등)이 계산됩니다. 선택하지 않으면 기본 통계량만 계산됩니다.
+            </p>
+          </div>
+        </div>
+      );
+    }
     // ... [Rest of module types: KMeans, DBSCAN, LogisticRegression, DecisionTree, etc. remain unchanged] ...
     case ModuleType.KMeans:
     case ModuleType.HierarchicalClustering:
@@ -1462,7 +1651,7 @@ const renderParameters = (
 
       if (inputColumns.length === 0) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a data source with numeric columns to configure.
           </p>
         );
@@ -1496,32 +1685,32 @@ const renderParameters = (
           ))}
           <div>
             <div className="flex justify-between items-center mb-2">
-              <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold">
+              <h5 className="text-xs text-gray-500 uppercase font-bold">
                 Feature Columns
               </h5>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleSelectAllFeatures(true)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Select All
                 </button>
                 <button
                   onClick={() => handleSelectAllFeatures(false)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
                 >
                   Deselect All
                 </button>
               </div>
             </div>
-            <p className="text-[0.525rem] text-gray-500 mb-2">
+            <p className="text-xs text-gray-500 mb-2">
               If none are selected, all numeric columns will be used.
             </p>
-            <div className="space-y-2 pr-1 max-h-40 overflow-y-auto panel-scrollbar">
+            <div className="space-y-2 pr-2 max-h-40 overflow-y-auto panel-scrollbar">
               {inputColumns.map((col) => (
                 <label
                   key={col}
-                  className="flex items-center gap-2 text-[0.6125rem] truncate"
+                  className="flex items-center gap-2 text-sm truncate"
                   title={col}
                 >
                   <input
@@ -1567,55 +1756,95 @@ const renderParameters = (
             value={module.parameters.max_iter || 100}
             onChange={(v) => onParamChange("max_iter", v)}
           />
-        </>
-      );
-    case ModuleType.PoissonRegression:
-      return (
-        <>
-          <PropertyDisplay
-            label="Model Purpose"
-            value="Regression (Count Data)"
-          />
+          case ModuleType.PoissonRegression: return{" "}
+          <>
+            <PropertyDisplay
+              label="Model Purpose"
+              value="Regression (Count Data)"
+            />
+            <PropertySelect
+              label="Distribution Type"
+              value={module.parameters.distribution_type || "Poisson"}
+              onChange={(v) => onParamChange("distribution_type", v)}
+              options={["Poisson", "QuasiPoisson"]}
+            />
+            <PropertyInput
+              label="Max Iterations"
+              type="number"
+              value={module.parameters.max_iter || 100}
+              onChange={(v) => onParamChange("max_iter", v)}
+            />
+          </>
+          ; case ModuleType.NegativeBinomialRegression: return{" "}
+          <>
+            <PropertyDisplay
+              label="Model Purpose"
+              value="Regression (Overdispersed Count Data)"
+            />
+            <PropertySelect
+              label="Distribution Type"
+              value={module.parameters.distribution_type || "NegativeBinomial"}
+              onChange={(v) => onParamChange("distribution_type", v)}
+              options={["NegativeBinomial", "QuasiPoisson"]}
+            />
+            <PropertyInput
+              label="Max Iterations"
+              type="number"
+              value={module.parameters.max_iter || 100}
+              onChange={(v) => onParamChange("max_iter", v)}
+            />
+            <PropertyInput
+              label="Dispersion (alpha)"
+              type="number"
+              value={module.parameters.disp || 1.0}
+              onChange={(v) => onParamChange("disp", v)}
+              step="0.1"
+            />
+          </>
+          ;
           <PropertySelect
-            label="Distribution Type"
-            value={module.parameters.distribution_type || "Poisson"}
-            onChange={(v) => onParamChange("distribution_type", v)}
-            options={["Poisson", "QuasiPoisson"]}
+            label="Hyperparameter Tuning"
+            value={module.parameters.tuning_enabled || "False"}
+            onChange={(v) => onParamChange("tuning_enabled", v)}
+            options={["False", "True"]}
           />
-          <PropertyInput
-            label="Max Iterations"
-            type="number"
-            value={module.parameters.max_iter || 100}
-            onChange={(v) => onParamChange("max_iter", v)}
-          />
-        </>
-      );
-    case ModuleType.NegativeBinomialRegression:
-      return (
-        <>
-          <PropertyDisplay
-            label="Model Purpose"
-            value="Regression (Overdispersed Count Data)"
-          />
-          <PropertySelect
-            label="Distribution Type"
-            value={module.parameters.distribution_type || "NegativeBinomial"}
-            onChange={(v) => onParamChange("distribution_type", v)}
-            options={["NegativeBinomial", "QuasiPoisson"]}
-          />
-          <PropertyInput
-            label="Max Iterations"
-            type="number"
-            value={module.parameters.max_iter || 100}
-            onChange={(v) => onParamChange("max_iter", v)}
-          />
-          <PropertyInput
-            label="Dispersion (alpha)"
-            type="number"
-            value={module.parameters.disp || 1.0}
-            onChange={(v) => onParamChange("disp", v)}
-            step="0.1"
-          />
+          {module.parameters.tuning_enabled === "True" && (
+            <>
+              <PropertySelect
+                label="Tuning Strategy"
+                value={module.parameters.tuning_strategy || "GridSearch"}
+                onChange={(v) => onParamChange("tuning_strategy", v)}
+                options={["GridSearch"]}
+              />
+              <PropertyInput
+                label="C Candidates (comma-separated)"
+                type="text"
+                value={module.parameters.c_candidates || "0.01,0.1,1,10,100"}
+                onChange={(v) => onParamChange("c_candidates", v)}
+              />
+              {module.parameters.penalty === "elasticnet" && (
+                <PropertyInput
+                  label="L1 Ratio Candidates (comma-separated)"
+                  type="text"
+                  value={module.parameters.l1_ratio_candidates || "0.2,0.5,0.8"}
+                  onChange={(v) => onParamChange("l1_ratio_candidates", v)}
+                />
+              )}
+              <PropertyInput
+                label="CV Folds"
+                type="number"
+                min="2"
+                value={module.parameters.cv_folds ?? 5}
+                onChange={(v) => onParamChange("cv_folds", v)}
+              />
+              <PropertySelect
+                label="Scoring Metric"
+                value={module.parameters.scoring_metric || "accuracy"}
+                onChange={(v) => onParamChange("scoring_metric", v)}
+                options={["accuracy", "precision", "recall", "f1", "roc_auc"]}
+              />
+            </>
+          )}
         </>
       );
     case ModuleType.NaiveBayes:
@@ -1765,7 +1994,7 @@ const renderParameters = (
 
       if (inputColumns.length === 0) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             Connect a scored data module to configure evaluation.
           </p>
         );
@@ -1865,171 +2094,68 @@ const renderParameters = (
         </>
       );
     }
+    case ModuleType.OLSModel:
+      return (
+        <p className="text-sm text-gray-500">
+          OLS (Ordinary Least Squares) 모델입니다. 파라미터 설정이 필요 없습니다.
+        </p>
+      );
+    case ModuleType.LogisticModel:
+      return (
+        <p className="text-sm text-gray-500">
+          Logistic 회귀 모델입니다. 파라미터 설정이 필요 없습니다.
+        </p>
+      );
+    case ModuleType.PoissonModel:
+      return (
+        <PropertyInput
+          label="Max Iterations"
+          type="number"
+          value={module.parameters.max_iter || 100}
+          onChange={(v) => onParamChange("max_iter", v)}
+        />
+      );
+    case ModuleType.QuasiPoissonModel:
+      return (
+        <PropertyInput
+          label="Max Iterations"
+          type="number"
+          value={module.parameters.max_iter || 100}
+          onChange={(v) => onParamChange("max_iter", v)}
+        />
+      );
+    case ModuleType.NegativeBinomialModel:
+      return (
+        <>
+          <PropertyInput
+            label="Max Iterations"
+            type="number"
+            value={module.parameters.max_iter || 100}
+            onChange={(v) => onParamChange("max_iter", v)}
+          />
+          <PropertyInput
+            label="Dispersion"
+            type="number"
+            value={module.parameters.disp || 1.0}
+            onChange={(v) => onParamChange("disp", v)}
+            step="0.1"
+          />
+        </>
+      );
     case ModuleType.StatModels:
       return (
         <PropertySelect
           label="Model Type"
           value={module.parameters.model}
           onChange={(v) => onParamChange("model", v)}
-          options={[
-            "OLS",
-            "Logistic",
-            "Poisson",
-            "NegativeBinomial",
-            "QuasiPoisson",
-            "Gamma",
-            "Tweedie",
-          ]}
+          options={["Gamma", "Tweedie"]}
         />
       );
-    case ModuleType.EvaluateStats: {
-      const sourceData = getConnectedDataSource(module.id);
-      const inputColumns = sourceData?.columns?.map((c) => c.name) || [];
-
-      if (inputColumns.length === 0) {
-        return (
-          <p className="text-[0.6125rem] text-gray-500">
-            Connect a predicted data module to configure evaluation.
-          </p>
-        );
-      }
-
-      const params = module.parameters || {};
-
-      return (
-        <>
-          <PropertySelect
-            label="Actual Label Column"
-            value={params.label_column || ""}
-            onChange={(v) => onParamChange("label_column", v)}
-            options={["", ...inputColumns]}
-          />
-          <PropertySelect
-            label="Prediction Column"
-            value={params.prediction_column || ""}
-            onChange={(v) => onParamChange("prediction_column", v)}
-            options={["", ...inputColumns]}
-          />
-        </>
-      );
-    }
-    case ModuleType.DiversionChecker: {
-      const sourceData = getConnectedDataSource(module.id);
-      const inputColumns = sourceData?.columns || [];
-
-      if (inputColumns.length === 0) {
-        return (
-          <p className="text-[0.6125rem] text-gray-500">
-            Connect a data source to the 'data_in' port to configure.
-          </p>
-        );
-      }
-
-      const { feature_columns = [], label_column = null } = module.parameters;
-
-      const handleFeatureChange = (colName: string, isChecked: boolean) => {
-        const newFeatures = isChecked
-          ? [...feature_columns, colName]
-          : feature_columns.filter((c: string) => c !== colName);
-        onParamChange("feature_columns", newFeatures);
-      };
-
-      const handleLabelChange = (colName: string) => {
-        const newLabel = colName === "" ? null : colName;
-        onParamChange("label_column", newLabel);
-        // If the new label was a feature, unselect it as a feature
-        if (newLabel && feature_columns.includes(newLabel)) {
-          onParamChange(
-            "feature_columns",
-            feature_columns.filter((c: string) => c !== newLabel)
-          );
-        }
-      };
-
-      const handleSelectAllFeatures = (selectAll: boolean) => {
-        if (selectAll) {
-          const allFeatureCols = inputColumns
-            .map((col) => col.name)
-            .filter((name) => name !== label_column);
-          onParamChange("feature_columns", allFeatureCols);
-        } else {
-          onParamChange("feature_columns", []);
-        }
-      };
-
-      return (
-        <div>
-          <AIParameterRecommender
-            module={module}
-            inputColumns={inputColumns.map((c) => c.name)}
-            projectName={projectName}
-            updateModuleParameters={updateModuleParameters}
-          />
-          <div className="mb-4">
-            <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
-              Label Column
-            </h5>
-            <select
-              value={label_column || ""}
-              onChange={(e) => handleLabelChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-[0.6125rem] focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">공백</option>
-              {inputColumns.map((col) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold">
-                Feature Columns
-              </h5>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSelectAllFeatures(true)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={() => handleSelectAllFeatures(false)}
-                  className="px-2 py-1 text-[0.525rem] bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
-                >
-                  Deselect All
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2 pr-1">
-              {inputColumns.map((col) => (
-                <label
-                  key={col.name}
-                  className="flex items-center gap-2 text-[0.6125rem] truncate"
-                  title={col.name}
-                >
-                  <input
-                    type="checkbox"
-                    checked={feature_columns.includes(col.name)}
-                    onChange={(e) =>
-                      handleFeatureChange(col.name, e.target.checked)
-                    }
-                    className="rounded"
-                  />
-                  <span className="truncate">{col.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
     default:
       const hasParams = Object.keys(module.parameters).length > 0;
       if (!hasParams) {
         return (
-          <p className="text-[0.6125rem] text-gray-500">
+          <p className="text-sm text-gray-500">
             This module has no configurable parameters.
           </p>
         );
@@ -2077,7 +2203,7 @@ const StatRow: React.FC<{ label: string; value: React.ReactNode }> = ({
   label,
   value,
 }) => (
-  <div className="flex justify-between items-center text-[0.6125rem] py-1.5 px-2 border-b border-gray-700 last:border-b-0">
+  <div className="flex justify-between items-center text-sm py-1.5 px-2 border-b border-gray-700 last:border-b-0">
     <span className="text-gray-400">{label}</span>
     <span
       className="font-mono text-gray-200 font-medium truncate"
@@ -2092,7 +2218,7 @@ const ColumnInfoTable: React.FC<{
   columns: ColumnInfo[];
   highlights?: Record<string, { color?: string; strikethrough?: boolean }>;
 }> = ({ columns, highlights = {} }) => (
-  <div className="text-[0.6125rem]">
+  <div className="text-sm">
     {columns.map((col) => {
       const highlight = highlights[col.name] || {};
       const colorClass = highlight.color
@@ -2130,7 +2256,7 @@ const DataStatsSummary: React.FC<{ data: DataPreview; title?: string }> = ({
   return (
     <div>
       {title && (
-        <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+        <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
           {title}
         </h4>
       )}
@@ -2149,10 +2275,8 @@ const DataStatsSummary: React.FC<{ data: DataPreview; title?: string }> = ({
           );
           return (
             <div key={col.name} className="bg-gray-800 p-2 rounded">
-              <p className="font-semibold text-[0.6125rem] truncate">
-                {col.name}
-              </p>
-              <div className="grid grid-cols-2 gap-x-2 text-[0.525rem]">
+              <p className="font-semibold text-sm truncate">{col.name}</p>
+              <div className="grid grid-cols-2 gap-x-2 text-xs">
                 <StatRow label="Mean" value={mean.toFixed(2)} />
                 <StatRow label="Std Dev" value={stdDev.toFixed(2)} />
               </div>
@@ -2182,17 +2306,17 @@ const MissingValueSummary: React.FC<{ data: DataPreview; title?: string }> = ({
   return (
     <div>
       {title && (
-        <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+        <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
           {title}
         </h4>
       )}
       <StatRow label="Total Rows" value={data.totalRowCount.toLocaleString()} />
       <StatRow label="Total Columns" value={data.columns.length} />
-      <h5 className="text-[0.525rem] text-gray-500 uppercase font-bold my-2">
+      <h5 className="text-xs text-gray-500 uppercase font-bold my-2">
         Missing Values per Column
       </h5>
       {missingCounts.length > 0 ? (
-        <div className="max-h-96 overflow-y-auto panel-scrollbar pr-1">
+        <div className="max-h-96 overflow-y-auto panel-scrollbar pr-2">
           {missingCounts.map(([name, count]) => {
             const percentage =
               data.totalRowCount > 0
@@ -2208,7 +2332,7 @@ const MissingValueSummary: React.FC<{ data: DataPreview; title?: string }> = ({
           })}
         </div>
       ) : (
-        <p className="text-[0.6125rem] text-gray-500 text-center p-2">
+        <p className="text-sm text-gray-500 text-center p-2">
           No columns in input data.
         </p>
       )}
@@ -2258,7 +2382,7 @@ const DataTableStats: React.FC<{
       <div className="bg-gray-900 rounded-lg overflow-hidden">
         <div className="text-gray-200">
           {/* Header */}
-          <div className="grid grid-cols-5 gap-2.5 px-2.5 py-2 border-b border-gray-600 font-semibold text-[0.6125rem] text-gray-400">
+          <div className="grid grid-cols-5 gap-4 px-4 py-2 border-b border-gray-600 font-semibold text-sm text-gray-400">
             <div className="col-span-1">Column</div>
             <div className="text-right">Mean</div>
             <div className="text-right">Std Dev</div>
@@ -2273,7 +2397,7 @@ const DataTableStats: React.FC<{
               return (
                 <div
                   key={colName}
-                  className="grid grid-cols-5 gap-2.5 px-2.5 py-2.5 text-[0.6125rem] border-b border-gray-800 last:border-b-0"
+                  className="grid grid-cols-5 gap-4 px-4 py-2.5 text-sm border-b border-gray-800 last:border-b-0"
                 >
                   <div
                     className={`font-mono truncate ${
@@ -2299,7 +2423,7 @@ const DataTableStats: React.FC<{
               );
             })}
             {Object.keys(colStats).length === 0 && (
-              <p className="text-[0.6125rem] text-gray-500 text-center p-2.5">
+              <p className="text-sm text-gray-500 text-center p-4">
                 No numeric columns to display stats for.
               </p>
             )}
@@ -2317,7 +2441,7 @@ const PanelModelMetrics: React.FC<{
     <h3 className="text-md font-semibold mb-2 text-gray-300">
       Performance Metrics
     </h3>
-    <div className="bg-gray-800 rounded-lg p-2 space-y-2">
+    <div className="bg-gray-800 rounded-lg p-3 space-y-2">
       {Object.entries(metrics).map(([key, value]) => (
         <StatRow
           key={key}
@@ -2454,7 +2578,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
-  const codeSnippet = useMemo(() => getModuleCode(module), [module]);
+  const codeSnippet = useMemo(() => getModuleCode(module, modules, connections), [module, modules, connections]);
 
   const handleCopyCode = useCallback(() => {
     if (codeSnippet) {
@@ -2511,14 +2635,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (module.type === ModuleType.TransformData) {
       if (!handler) {
         return (
-          <div className="text-center text-gray-500 p-2.5">
+          <div className="text-center text-gray-500 p-4">
             Connect a handler module to 'handler_in'.
           </div>
         );
       }
       return (
         <div>
-          <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+          <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
             Input Handler
           </h4>
           <StatRow label="Type" value={handlerSourceModule?.name} />
@@ -2546,7 +2670,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const modelSource = getConnectedModelSource(module.id);
       if (!modelSource) {
         return (
-          <div className="text-center text-gray-500 p-2.5">
+          <div className="text-center text-gray-500 p-4">
             Connect a model module to 'model_in'.
           </div>
         );
@@ -2572,7 +2696,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const inputData = getConnectedDataSource(module.id);
     if (!inputData) {
       return (
-        <div className="text-center text-gray-500 p-2.5">
+        <div className="text-center text-gray-500 p-4">
           Input data not available. Connect a preceding module.
         </div>
       );
@@ -2583,7 +2707,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const targetColumn = module.parameters.target_column;
         if (!targetColumn)
           return (
-            <p className="text-[0.6125rem] text-gray-500">
+            <p className="text-sm text-gray-500">
               Select a target column to see value counts.
             </p>
           );
@@ -2596,7 +2720,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
         return (
           <div>
-            <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+            <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
               Value Counts for '{targetColumn}'
             </h4>
             {Object.keys(counts).length > 0 ? (
@@ -2604,9 +2728,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <StatRow key={key} label={key} value={value} />
               ))
             ) : (
-              <p className="text-[0.6125rem] text-gray-500">
-                No data to count.
-              </p>
+              <p className="text-sm text-gray-500">No data to count.</p>
             )}
           </div>
         );
@@ -2620,13 +2742,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         );
         return (
           <div>
-            <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+            <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
               Categorical Columns Found
             </h4>
             {categoricalColumns.length > 0 ? (
               <ColumnInfoTable columns={categoricalColumns} />
             ) : (
-              <p className="text-[0.6125rem] text-gray-500">
+              <p className="text-sm text-gray-500">
                 No string columns to encode.
               </p>
             )}
@@ -2662,7 +2784,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       !module.outputData
     ) {
       return (
-        <div className="text-center text-gray-500 p-2.5">
+        <div className="text-center text-gray-500 p-4">
           Run the module successfully to see the output.
         </div>
       );
@@ -2724,7 +2846,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <div className="bg-gray-900 rounded-lg overflow-hidden">
                   <div className="text-gray-200">
                     {/* Header */}
-                    <div className="grid grid-cols-4 gap-2.5 px-2.5 py-2 border-b border-gray-600 font-semibold text-[0.6125rem] text-gray-400">
+                    <div className="grid grid-cols-4 gap-4 px-4 py-2 border-b border-gray-600 font-semibold text-sm text-gray-400">
                       <div>Column</div>
                       <div className="text-right">Mean</div>
                       <div className="text-right">Median</div>
@@ -2737,7 +2859,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         return (
                           <div
                             key={col}
-                            className="grid grid-cols-4 gap-2.5 px-2.5 py-2.5 text-[0.6125rem] border-b border-gray-800 last:border-b-0"
+                            className="grid grid-cols-4 gap-4 px-4 py-2.5 text-sm border-b border-gray-800 last:border-b-0"
                           >
                             <div className="font-mono truncate" title={col}>
                               {col}
@@ -2796,7 +2918,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           const targetColumn = module.parameters.target_column;
           if (!targetColumn)
             return (
-              <p className="text-[0.6125rem] text-gray-500">
+              <p className="text-sm text-gray-500">
                 Select a target column to see value counts.
               </p>
             );
@@ -2808,7 +2930,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           });
           return (
             <div>
-              <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+              <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
                 Value Counts for '{targetColumn}'
               </h4>
               {Object.keys(counts).length > 0 ? (
@@ -2816,9 +2938,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   <StatRow key={key} label={key} value={value} />
                 ))
               ) : (
-                <p className="text-[0.6125rem] text-gray-500">
-                  No data to count.
-                </p>
+                <p className="text-sm text-gray-500">No data to count.</p>
               )}
             </div>
           );
@@ -2883,10 +3003,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div className="space-y-4">
                 {formulaParts.length > 0 && (
                   <div>
-                    <h4 className="text-[0.525rem] text-gray-500 uppercase font-bold mb-2">
+                    <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
                       Model Equation
                     </h4>
-                    <div className="bg-gray-900/50 p-2 rounded-lg font-mono text-[0.525rem] text-green-700 whitespace-normal break-words">
+                    <div className="bg-gray-900/50 p-3 rounded-lg font-mono text-xs text-green-700 whitespace-normal break-words">
                       <span>{formulaParts[0]}</span>
                       {formulaParts.slice(1).map((part, i) => (
                         <span key={i}>{part}</span>
@@ -2904,11 +3024,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             return <PanelModelMetrics metrics={outputData.metrics} />;
           }
           break;
-        case ModuleType.EvaluateStats:
-          if (outputData.type === "EvaluateStatsOutput") {
-            return <PanelModelMetrics metrics={outputData.metrics} />;
-          }
-          break;
         default:
           if (outputData.type === "DataPreview") {
             return (
@@ -2921,7 +3036,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           break;
       }
       return (
-        <div className="text-center text-gray-500 p-2.5">
+        <div className="text-center text-gray-500 p-4">
           No specific preview for this module's output.
         </div>
       );
@@ -2934,7 +3049,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <div className="mt-4 border-t border-gray-700 pt-4">
             <button
               onClick={() => onViewDetails(module.id)}
-              className="w-full px-2 py-2 text-[0.6125rem] bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-white transition-colors"
+              className="w-full px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-white transition-colors"
             >
               View Details
             </button>
@@ -2957,7 +3072,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         className="hidden"
       />
       <div className="flex-grow flex flex-col min-h-0">
-        <div className="p-2 border-b border-gray-700 flex-shrink-0">
+        <div className="p-3 border-b border-gray-700 flex-shrink-0">
           <input
             type="text"
             value={localModuleName}
@@ -2968,7 +3083,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             placeholder="Module Name"
             disabled={!module}
           />
-          <p className="text-[0.525rem] text-gray-500 mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             {module ? module.type : "No module selected"}
           </p>
         </div>
@@ -2978,7 +3093,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div className="flex">
               <button
                 onClick={() => setActiveTab("properties")}
-                className={`flex-1 flex items-center justify-center gap-2 p-2 text-[0.6125rem] font-semibold ${
+                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
                   activeTab === "properties"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
@@ -2988,7 +3103,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab("preview")}
-                className={`flex-1 flex items-center justify-center gap-2 p-2 text-[0.6125rem] font-semibold ${
+                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
                   activeTab === "preview"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
@@ -2998,7 +3113,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab("code")}
-                className={`flex-1 flex items-center justify-center gap-2 p-2 text-[0.6125rem] font-semibold ${
+                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
                   activeTab === "code"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
@@ -3010,7 +3125,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
         )}
 
-        <div className="flex-grow overflow-y-auto panel-scrollbar p-2">
+        <div className="flex-grow overflow-y-auto panel-scrollbar p-3">
           {!module ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-gray-500">
@@ -3039,7 +3154,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   <div className="flex mb-3 rounded-md bg-gray-700 p-1">
                     <button
                       onClick={() => setActivePreviewTab("Input")}
-                      className={`flex-1 text-center text-[0.6125rem] py-1 rounded-md transition-colors ${
+                      className={`flex-1 text-center text-sm py-1 rounded-md transition-colors ${
                         activePreviewTab === "Input"
                           ? "bg-gray-600 font-semibold"
                           : "hover:bg-gray-600/50"
@@ -3049,7 +3164,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     </button>
                     <button
                       onClick={() => setActivePreviewTab("Output")}
-                      className={`flex-1 text-center text-[0.6125rem] py-1 rounded-md transition-colors ${
+                      className={`flex-1 text-center text-sm py-1 rounded-md transition-colors ${
                         activePreviewTab === "Output"
                           ? "bg-gray-600 font-semibold"
                           : "hover:bg-gray-600/50"
@@ -3058,7 +3173,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       Output
                     </button>
                   </div>
-                  <div className="bg-gray-900/50 p-2 rounded-lg">
+                  <div className="bg-gray-900/50 p-3 rounded-lg">
                     {activePreviewTab === "Input"
                       ? renderInputPreview()
                       : renderOutputPreview()}
@@ -3079,7 +3194,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         <ClipboardIcon className="w-4 h-4" />
                       )}
                     </button>
-                    <pre className="p-2.5 text-[0.525rem] text-gray-300 overflow-x-auto">
+                    <pre className="p-4 text-xs text-gray-300 overflow-x-auto">
                       <code>{codeSnippet}</code>
                     </pre>
                   </div>
@@ -3101,13 +3216,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         />
         <div className="p-2 border-b border-gray-700 bg-gray-900/50 flex items-center gap-2">
           <CommandLineIcon className="w-5 h-5 text-gray-400" />
-          <h3 className="text-[0.6125rem] font-semibold text-gray-300">
-            Terminal
-          </h3>
+          <h3 className="text-sm font-semibold text-gray-300">Terminal</h3>
         </div>
         <div
           ref={logContainerRef}
-          className="flex-grow overflow-y-auto bg-gray-900 text-[0.525rem] font-mono p-2 space-y-1"
+          className="flex-grow overflow-y-auto bg-gray-900 text-xs font-mono p-2 space-y-1"
           onContextMenu={(e) => {
             // 텍스트가 선택되어 있으면 컨텍스트 메뉴에서 복사 가능하도록
             const selection = window.getSelection();

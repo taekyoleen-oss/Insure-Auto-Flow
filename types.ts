@@ -34,12 +34,19 @@ export enum ModuleType {
   DBSCAN = "DBSCAN",
   PrincipalComponentAnalysis = "PrincipalComponentAnalysis",
 
-  // Legacy/StatModels - Keeping for now
+  // Traditional Analysis - Statsmodels Models
+  OLSModel = "OLSModel",
+  LogisticModel = "LogisticModel",
+  PoissonModel = "PoissonModel",
+  QuasiPoissonModel = "QuasiPoissonModel",
+  NegativeBinomialModel = "NegativeBinomialModel",
+  DiversionChecker = "DiversionChecker",
+  EvaluateStat = "EvaluateStat",
+
+  // Legacy/StatModels - Keeping for advanced models (Gamma, Tweedie)
   StatModels = "StatModels",
   ResultModel = "ResultModel",
   PredictModel = "PredictModel",
-  EvaluateStats = "EvaluateStats",
-  DiversionChecker = "DiversionChecker",
 
   // Reinsurance Modules
   FitLossDistribution = "FitLossDistribution",
@@ -158,9 +165,10 @@ export interface TrainedModelOutput {
 export type StatsModelFamily =
   | "OLS"
   | "Logistic"
+  | "Logit"
   | "Poisson"
-  | "NegativeBinomial"
   | "QuasiPoisson"
+  | "NegativeBinomial"
   | "Gamma"
   | "Tweedie";
 
@@ -235,14 +243,27 @@ export interface DiversionCheckerOutput {
   methodsUsed: string[];
   results: {
     phi: number;
-    phiInterpretation: string;
+    phi_interpretation: string;
     recommendation: string;
-    poissonAic: number | null;
-    negativeBinomialAic: number | null;
-    cameronTrivediCoef: number;
-    cameronTrivediPvalue: number;
-    cameronTrivediConclusion: string;
+    poisson_aic: number | null;
+    negative_binomial_aic: number | null;
+    cameron_trivedi_coef: number;
+    cameron_trivedi_pvalue: number;
+    cameron_trivedi_conclusion: string;
   };
+}
+
+export interface EvaluateStatOutput {
+  type: "EvaluateStatOutput";
+  modelType: string;
+  metrics: Record<string, number | string>;
+  residuals?: number[];
+  deviance?: number;
+  pearsonChi2?: number;
+  dispersion?: number;
+  aic?: number;
+  bic?: number;
+  logLikelihood?: number;
 }
 
 // --- New Unsupervised Learning Outputs ---
@@ -375,7 +396,8 @@ export interface CanvasModule {
     | XolContractOutput
     | FinalXolPriceOutput
     | EvaluationOutput
-    | EvaluateStatsOutput
+    | DiversionCheckerOutput
+    | EvaluateStatOutput
     | KMeansOutput
     | HierarchicalClusteringOutput
     | PCAOutput
@@ -387,6 +409,9 @@ export interface CanvasModule {
   shapeData?: {
     // For TextBox
     text?: string;
+    width?: number;
+    height?: number;
+    fontSize?: number;
     // For GroupBox
     moduleIds?: string[]; // IDs of modules in this group
     bounds?: { x: number; y: number; width: number; height: number }; // Bounding box of the group

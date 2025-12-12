@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "server": "node server/split-data-server.js",
-    "dev:full": "concurrently \"npm run server\" \"npm run dev\""
+    "samples-server": "node server/samples-server.js",
+    "dev:full": "concurrently \"npm run server\" \"npm run samples-server\" \"npm run dev\""
   },
   "dependencies": {
     "react": "^19.1.1",

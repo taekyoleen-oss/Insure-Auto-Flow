@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { CanvasModule, ColumnInfo, DataPreview, ModuleType } from '../types';
+import { CanvasModule, ColumnInfo, DataPreview } from '../types';
 import { XCircleIcon, ChevronUpIcon, ChevronDownIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -145,7 +145,7 @@ const ScatterPlot: React.FC<{ rows: Record<string, any>[], xCol: string, yCol: s
     );
 };
 
-const ColumnStatistics: React.FC<{ data: (string | number | null)[]; columnName: string | null; isNumeric: boolean; module?: CanvasModule; }> = ({ data, columnName, isNumeric, module }) => {
+const ColumnStatistics: React.FC<{ data: (string | number | null)[]; columnName: string | null; isNumeric: boolean; }> = ({ data, columnName, isNumeric }) => {
     const stats = useMemo(() => {
         const isNull = (v: any) => v === null || v === undefined || v === '';
         const nonNullValues = data.filter(v => !isNull(v));
@@ -222,14 +222,9 @@ const ColumnStatistics: React.FC<{ data: (string | number | null)[]; columnName:
         ? ['Count', 'Mean', 'Std Dev', 'Median', 'Min', 'Max', '25%', '75%', 'Mode', 'Null', 'Skew', 'Kurt']
         : ['Count', 'Null', 'Mode'];
 
-    // PredictModel의 _Predict 컬럼 표시 이름을 y_pred_prob로 변경
-    const displayColumnName = module?.type === ModuleType.PredictModel && columnName?.endsWith('_Predict') 
-        ? 'y_pred_prob' 
-        : columnName;
-
     return (
         <div className="w-full p-4 border border-gray-200 rounded-lg">
-            <h4 className="font-semibold text-gray-700 mb-3">Statistics for {displayColumnName}</h4>
+            <h4 className="font-semibold text-gray-700 mb-3">Statistics for {columnName}</h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
                 {statOrder.map(key => {
                     const value = (stats as Record<string, any>)[key];
@@ -267,32 +262,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
     const [yAxisCol, setYAxisCol] = useState<string | null>(null);
 
     const columns = data?.columns || [];
-    const allRows = data?.rows || [];
-    // View Details에서는 미리보기만 표시 (최대 1000개)
-    const displayRows = allRows.slice(0, 1000);
-    const rows = displayRows;
-
-    // PredictModel의 _Predict 컬럼 표시 이름을 y_pred_prob로 변경
-    const getDisplayColumnName = (colName: string): string => {
-        if (module.type === ModuleType.PredictModel && colName.endsWith('_Predict')) {
-            return 'y_pred_prob';
-        }
-        return colName;
-    };
-
-    // PredictModel의 y_pred_prob 컬럼 값 포맷팅 (소수점 6자리)
-    const formatCellValue = (value: any, colName: string): string => {
-        if (module.type === ModuleType.PredictModel && colName.endsWith('_Predict')) {
-            if (value === null || value === undefined || value === '') {
-                return 'null';
-            }
-            const numValue = Number(value);
-            if (!isNaN(numValue)) {
-                return numValue.toFixed(6);
-            }
-        }
-        return String(value);
-    };
+    const rows = data?.rows || [];
 
     const sortedRows = useMemo(() => {
         let sortableItems = [...rows];
@@ -396,11 +366,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
                         <>
                             <div className="flex justify-between items-center flex-shrink-0">
                                 <div className="text-sm text-gray-600">
-                                    {allRows.length > 1000 ? (
-                                        <>Showing {displayRows.length.toLocaleString()} of {data.totalRowCount.toLocaleString()} rows (preview only). All {data.totalRowCount.toLocaleString()} rows are used for processing.</>
-                                    ) : (
-                                        <>Showing {data.totalRowCount.toLocaleString()} rows and {columns.length} columns. Click a column to see details.</>
-                                    )}
+                                    Showing {Math.min(rows.length, 1000)} of {data.totalRowCount.toLocaleString()} rows and {columns.length} columns. Click a column to see details.
                                 </div>
                             </div>
                             <div className="flex-grow flex gap-4 overflow-hidden">
@@ -415,7 +381,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
                                                         onClick={() => requestSort(col.name)}
                                                     >
                                                         <div className="flex items-center gap-1">
-                                                            <span className="truncate" title={col.name}>{getDisplayColumnName(col.name)}</span>
+                                                            <span className="truncate" title={col.name}>{col.name}</span>
                                                             {sortConfig?.key === col.name && (sortConfig.direction === 'ascending' ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />)}
                                                         </div>
                                                     </th>
@@ -432,7 +398,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
                                                             onClick={() => setSelectedColumn(col.name)}
                                                             title={String(row[col.name])}
                                                         >
-                                                            {row[col.name] === null ? <i className="text-gray-400">null</i> : formatCellValue(row[col.name], col.name)}
+                                                            {row[col.name] === null ? <i className="text-gray-400">null</i> : String(row[col.name])}
                                                         </td>
                                                     ))}
                                                 </tr>
@@ -449,7 +415,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
                                                 <p className="text-gray-500">Plot is not available for non-numeric columns.</p>
                                             </div>
                                         )}
-                                        <ColumnStatistics data={selectedColumnData} columnName={selectedColumn} isNumeric={isSelectedColNumeric} module={module} />
+                                        <ColumnStatistics data={selectedColumnData} columnName={selectedColumn} isNumeric={isSelectedColNumeric} />
                                     </div>
                                 )}
                             </div>

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Example: OLS Model",
+    "modules": [
+      {
+        "type": "LoadData",
+        "position": { "x": 100, "y": 100 },
+        "name": "Load Data"
+      },
+      {
+        "type": "OLSModel",
+        "position": { "x": 100, "y": 250 },
+        "name": "OLS Model"
+      },
+      {
+        "type": "ResultModel",
+        "position": { "x": 100, "y": 400 },
+        "name": "Result Model"
+      }
+    ],
+    "connections": [
+      {
+        "fromModuleIndex": 0,
+        "fromPort": "data_out",
+        "toModuleIndex": 2,
+        "toPort": "data_in"
+      },
+      {
+        "fromModuleIndex": 1,
+        "fromPort": "model_out",
+        "toModuleIndex": 2,
+        "toPort": "model_in"
+      }
+    ]
+  }
+]
+
