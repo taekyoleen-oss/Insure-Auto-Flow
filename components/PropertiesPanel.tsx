@@ -1860,6 +1860,44 @@ const renderParameters = (
           />
         </>
       );
+    case ModuleType.KNN: {
+      const purpose = module.parameters.model_purpose || "classification";
+      return (
+        <>
+          <PropertySelect
+            label="Model Purpose"
+            value={purpose}
+            onChange={(v) => onParamChange("model_purpose", v)}
+            options={["classification", "regression"]}
+          />
+          <PropertyInput
+            label="N Neighbors"
+            type="number"
+            value={module.parameters.n_neighbors || 3}
+            onChange={(v) => onParamChange("n_neighbors", v)}
+            min="1"
+          />
+          <PropertySelect
+            label="Weights"
+            value={module.parameters.weights || "uniform"}
+            onChange={(v) => onParamChange("weights", v)}
+            options={["uniform", "distance"]}
+          />
+          <PropertySelect
+            label="Algorithm"
+            value={module.parameters.algorithm || "auto"}
+            onChange={(v) => onParamChange("algorithm", v)}
+            options={["auto", "ball_tree", "kd_tree", "brute"]}
+          />
+          <PropertySelect
+            label="Metric"
+            value={module.parameters.metric || "minkowski"}
+            onChange={(v) => onParamChange("metric", v)}
+            options={["minkowski", "euclidean", "manhattan", "chebyshev", "hamming", "cosine"]}
+          />
+        </>
+      );
+    }
     case ModuleType.DecisionTree: {
       const purpose = module.parameters.model_purpose;
       const handlePurposeChange = (newPurpose: string) => {

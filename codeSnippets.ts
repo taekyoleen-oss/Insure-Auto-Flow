@@ -1030,6 +1030,50 @@ print("4. 포아송 vs 음이항 AIC 비교")
 print("5. Cameron–Trivedi test")
 print("\\n실제 실행은 'Run' 버튼을 클릭하면 수행됩니다.")
 `,
+    KNN: `
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+
+def create_knn_model(model_purpose: str = 'classification', n_neighbors: int = 3,
+                     weights: str = 'uniform', algorithm: str = 'auto', metric: str = 'minkowski'):
+    """
+    Creates a K-Nearest Neighbors model using scikit-learn.
+    This model uses k nearest neighbors to make predictions.
+    It can handle both classification and regression tasks.
+    """
+    print(f"Creating K-Nearest Neighbors model ({model_purpose})...")
+    
+    if model_purpose == 'classification':
+        model = KNeighborsClassifier(
+            n_neighbors=n_neighbors,
+            weights=weights,
+            algorithm=algorithm,
+            metric=metric
+        )
+    else:
+        model = KNeighborsRegressor(
+            n_neighbors=n_neighbors,
+            weights=weights,
+            algorithm=algorithm,
+            metric=metric
+        )
+    
+    print("Model created successfully.")
+    return model
+
+# Parameters from UI
+p_model_purpose = {model_purpose}
+p_n_neighbors = {n_neighbors}
+p_weights = {weights}
+p_algorithm = {algorithm}
+p_metric = {metric}
+
+# Execution
+# knn_model = create_knn_model(p_model_purpose, p_n_neighbors, p_weights, p_algorithm, p_metric)
+
+# This module defines the intent to use a scikit-learn KNeighborsClassifier/KNeighborsRegressor model.
+# The actual training happens when this model is connected to a 'Train Model' module.
+print(f"sklearn.neighbors.KNeighbors{'Classifier' if p_model_purpose == 'classification' else 'Regressor'} model configured.")
+`,
 };
 
 export const getModuleCode = (

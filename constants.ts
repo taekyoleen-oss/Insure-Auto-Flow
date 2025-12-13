@@ -406,7 +406,7 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       type: ModuleType.SplitData,
       status: ModuleStatus.Pending,
       parameters: {
-        train_size: 0.7,
+        train_size: 0.75,
         random_state: 43,
         shuffle: "True",
         stratify: "False",
@@ -516,9 +516,10 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       status: ModuleStatus.Pending,
       parameters: {
         model_purpose: "classification",
-        n_neighbors: 5,
+        n_neighbors: 3,
         weights: "uniform",
         algorithm: "auto",
+        metric: "minkowski",
       },
       inputs: [],
       outputs: [{ name: "model_out", type: "model" }],

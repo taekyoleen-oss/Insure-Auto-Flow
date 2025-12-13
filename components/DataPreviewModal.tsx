@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { CanvasModule, ColumnInfo, DataPreview } from '../types';
+import { CanvasModule, ColumnInfo, DataPreview, ModuleType } from '../types';
 import { XCircleIcon, ChevronUpIcon, ChevronDownIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -243,45 +243,115 @@ const ColumnStatistics: React.FC<{ data: (string | number | null)[]; columnName:
 
 
 export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, projectName, onClose }) => {
+    // 안전한 데이터 가져오기
     const getPreviewData = (): DataPreview | null => {
-        if (!module.outputData) return null;
-        if (module.outputData.type === 'DataPreview') return module.outputData;
-        if (module.outputData.type === 'KMeansOutput' || module.outputData.type === 'HierarchicalClusteringOutput' || module.outputData.type === 'DBSCANOutput') {
-            return module.outputData.clusterAssignments;
+        try {
+            if (!module || !module.outputData) return null;
+            if (module.outputData.type === 'DataPreview') return module.outputData;
+            if (module.outputData.type === 'KMeansOutput' || module.outputData.type === 'HierarchicalClusteringOutput' || module.outputData.type === 'DBSCANOutput') {
+                return module.outputData.clusterAssignments || null;
+            }
+            if (module.outputData.type === 'PCAOutput') {
+                return module.outputData.transformedData || null;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error in getPreviewData:', error);
+            return null;
         }
-        if (module.outputData.type === 'PCAOutput') {
-            return module.outputData.transformedData;
-        }
-        return null;
     };
     
     const data = getPreviewData();
+    const columns = Array.isArray(data?.columns) ? data.columns : [];
+    const rows = Array.isArray(data?.rows) ? data.rows : [];
+    
     const [sortConfig, setSortConfig] = useState<SortConfig>(null);
-    const [selectedColumn, setSelectedColumn] = useState<string | null>(data?.columns[0]?.name || null);
+    const [selectedColumn, setSelectedColumn] = useState<string | null>(columns[0]?.name || null);
     const [activeTab, setActiveTab] = useState<'table' | 'visualization'>('table');
     const [yAxisCol, setYAxisCol] = useState<string | null>(null);
-
-    const columns = data?.columns || [];
-    const rows = data?.rows || [];
+    
+    // Score Model용 label column state
+    const predictCol = useMemo(() => {
+        try {
+            if (module.type === ModuleType.ScoreModel && Array.isArray(columns) && columns.length > 0) {
+                return columns.find(c => c && c.name && (c.name === 'Predict' || c.name.toLowerCase().includes('predict'))) || null;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error finding predict column:', error);
+            return null;
+        }
+    }, [module.type, columns]);
+    
+    const labelCols = useMemo(() => {
+        try {
+            if (module.type === ModuleType.ScoreModel && Array.isArray(columns) && columns.length > 0) {
+                return columns.filter(c => c && c.type === 'number' && c.name && c.name !== predictCol?.name);
+            }
+            return [];
+        } catch (error) {
+            console.error('Error filtering label columns:', error);
+            return [];
+        }
+    }, [module.type, columns, predictCol]);
+    
+    const defaultLabelCol = useMemo(() => {
+        try {
+            return labelCols && labelCols.length > 0 ? (labelCols[0]?.name || null) : null;
+        } catch (error) {
+            console.error('Error getting default label column:', error);
+            return null;
+        }
+    }, [labelCols]);
+    
+    const moduleIdRef = useRef<string | null>(null); // 모듈 ID 추적
+    const [scoreLabelCol, setScoreLabelCol] = useState<string | null>(null);
+    
+    // Score Model의 경우 모듈이 변경될 때만 초기화
+    useEffect(() => {
+        try {
+            if (module.type === ModuleType.ScoreModel) {
+                // 모듈이 변경된 경우에만 초기화
+                if (moduleIdRef.current !== module.id) {
+                    moduleIdRef.current = module.id;
+                    setScoreLabelCol(defaultLabelCol);
+                }
+            } else {
+                // Score Model이 아닌 경우 리셋
+                if (moduleIdRef.current !== null) {
+                    moduleIdRef.current = null;
+                    setScoreLabelCol(null);
+                }
+            }
+        } catch (error) {
+            console.error('Error in Score Model label column initialization:', error);
+        }
+    }, [module.id, module.type, defaultLabelCol]); // defaultLabelCol을 의존성에 추가
 
     const sortedRows = useMemo(() => {
-        let sortableItems = [...rows];
-        if (sortConfig !== null) {
-            sortableItems.sort((a, b) => {
-                const valA = a[sortConfig.key];
-                const valB = b[sortConfig.key];
-                if (valA === null || valA === undefined) return 1;
-                if (valB === null || valB === undefined) return -1;
-                if (valA < valB) {
-                    return sortConfig.direction === 'ascending' ? -1 : 1;
-                }
-                if (valA > valB) {
-                    return sortConfig.direction === 'ascending' ? 1 : -1;
-                }
-                return 0;
-            });
+        try {
+            if (!Array.isArray(rows)) return [];
+            let sortableItems = [...rows];
+            if (sortConfig !== null && sortConfig.key) {
+                sortableItems.sort((a, b) => {
+                    const valA = a[sortConfig.key];
+                    const valB = b[sortConfig.key];
+                    if (valA === null || valA === undefined) return 1;
+                    if (valB === null || valB === undefined) return -1;
+                    if (valA < valB) {
+                        return sortConfig.direction === 'ascending' ? -1 : 1;
+                    }
+                    if (valA > valB) {
+                        return sortConfig.direction === 'ascending' ? 1 : -1;
+                    }
+                    return 0;
+                });
+            }
+            return sortableItems;
+        } catch (error) {
+            console.error('Error sorting rows:', error);
+            return Array.isArray(rows) ? rows : [];
         }
-        return sortableItems;
     }, [rows, sortConfig]);
 
     const requestSort = (key: string) => {
@@ -293,13 +363,36 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
     };
 
     const selectedColumnData = useMemo(() => {
-        if (!selectedColumn) return null;
-        return (rows || []).map(row => row[selectedColumn]);
+        try {
+            if (!selectedColumn || !Array.isArray(rows)) return null;
+            return rows.map(row => row[selectedColumn]);
+        } catch (error) {
+            console.error('Error getting selected column data:', error);
+            return null;
+        }
     }, [selectedColumn, rows]);
     
-    const selectedColInfo = useMemo(() => columns.find(c => c.name === selectedColumn), [columns, selectedColumn]);
+    const selectedColInfo = useMemo(() => {
+        try {
+            if (!Array.isArray(columns) || !selectedColumn) return null;
+            return columns.find(c => c && c.name === selectedColumn) || null;
+        } catch (error) {
+            console.error('Error finding selected column info:', error);
+            return null;
+        }
+    }, [columns, selectedColumn]);
+    
     const isSelectedColNumeric = useMemo(() => selectedColInfo?.type === 'number', [selectedColInfo]);
-    const numericCols = useMemo(() => columns.filter(c => c.type === 'number').map(c => c.name), [columns]);
+    
+    const numericCols = useMemo(() => {
+        try {
+            if (!Array.isArray(columns)) return [];
+            return columns.filter(c => c && c.type === 'number').map(c => c.name).filter(Boolean);
+        } catch (error) {
+            console.error('Error getting numeric columns:', error);
+            return [];
+        }
+    }, [columns]);
 
     useEffect(() => {
         if (isSelectedColNumeric && selectedColumn) {
@@ -311,11 +404,14 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
     }, [isSelectedColNumeric, selectedColumn, numericCols]);
 
     if (!data) {
+        console.warn('DataPreviewModal: No data available for module', module.id, module.type, module.outputData);
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
                 <div className="bg-white p-6 rounded-lg shadow-xl" onClick={e => e.stopPropagation()}>
                     <h3 className="text-lg font-bold">No Data Available</h3>
                     <p>The selected module has no previewable data.</p>
+                    <p className="text-sm text-gray-500 mt-2">Module Type: {module.type}</p>
+                    <p className="text-sm text-gray-500">Output Data Type: {module.outputData?.type || 'null'}</p>
                 </div>
             </div>
         );
@@ -370,53 +466,94 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
                                 </div>
                             </div>
                             <div className="flex-grow flex gap-4 overflow-hidden">
-                                <div className={`overflow-auto border border-gray-200 rounded-lg ${selectedColumnData ? 'w-1/2' : 'w-full'}`}>
-                                    <table className="min-w-full text-sm text-left">
-                                        <thead className="bg-gray-50 sticky top-0">
-                                            <tr>
-                                                {columns.map(col => (
-                                                    <th 
-                                                        key={col.name} 
-                                                        className="py-2 px-3 font-semibold text-gray-600 cursor-pointer hover:bg-gray-100"
-                                                        onClick={() => requestSort(col.name)}
-                                                    >
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="truncate" title={col.name}>{col.name}</span>
-                                                            {sortConfig?.key === col.name && (sortConfig.direction === 'ascending' ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />)}
-                                                        </div>
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {sortedRows.map((row, rowIndex) => (
-                                                <tr key={rowIndex} className="border-b border-gray-200 last:border-b-0">
+                                {/* Score Model인 경우 테이블만 표시 */}
+                                {module.type === ModuleType.ScoreModel ? (
+                                    <div className="w-full overflow-auto border border-gray-200 rounded-lg">
+                                        <table className="min-w-full text-sm text-left">
+                                            <thead className="bg-gray-50 sticky top-0">
+                                                <tr>
                                                     {columns.map(col => (
-                                                        <td 
+                                                        <th 
                                                             key={col.name} 
-                                                            className={`py-1.5 px-3 font-mono truncate ${selectedColumn === col.name ? 'bg-blue-100' : 'hover:bg-gray-50 cursor-pointer'}`}
-                                                            onClick={() => setSelectedColumn(col.name)}
-                                                            title={String(row[col.name])}
+                                                            className="py-2 px-3 font-semibold text-gray-600 cursor-pointer hover:bg-gray-100"
+                                                            onClick={() => requestSort(col.name)}
                                                         >
-                                                            {row[col.name] === null ? <i className="text-gray-400">null</i> : String(row[col.name])}
-                                                        </td>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="truncate" title={col.name}>{col.name}</span>
+                                                                {sortConfig?.key === col.name && (sortConfig.direction === 'ascending' ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />)}
+                                                            </div>
+                                                        </th>
                                                     ))}
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {selectedColumnData && (
-                                    <div className="w-1/2 flex flex-col gap-4">
-                                        {isSelectedColNumeric ? (
-                                            <HistogramPlot rows={rows} column={selectedColumn!} />
-                                        ) : (
-                                            <div className="w-full h-full p-4 flex flex-col border border-gray-200 rounded-lg items-center justify-center">
-                                                <p className="text-gray-500">Plot is not available for non-numeric columns.</p>
+                                            </thead>
+                                            <tbody>
+                                                {sortedRows.map((row, rowIndex) => (
+                                                    <tr key={rowIndex} className="border-b border-gray-200 last:border-b-0">
+                                                        {columns.map(col => (
+                                                            <td 
+                                                                key={col.name} 
+                                                                className="py-1.5 px-3 font-mono truncate hover:bg-gray-50"
+                                                                title={String(row[col.name])}
+                                                            >
+                                                                {row[col.name] === null ? <i className="text-gray-400">null</i> : String(row[col.name])}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className={`overflow-auto border border-gray-200 rounded-lg ${selectedColumnData ? 'w-1/2' : 'w-full'}`}>
+                                            <table className="min-w-full text-sm text-left">
+                                                <thead className="bg-gray-50 sticky top-0">
+                                                    <tr>
+                                                        {columns.map(col => (
+                                                            <th 
+                                                                key={col.name} 
+                                                                className="py-2 px-3 font-semibold text-gray-600 cursor-pointer hover:bg-gray-100"
+                                                                onClick={() => requestSort(col.name)}
+                                                            >
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="truncate" title={col.name}>{col.name}</span>
+                                                                    {sortConfig?.key === col.name && (sortConfig.direction === 'ascending' ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />)}
+                                                                </div>
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {sortedRows.map((row, rowIndex) => (
+                                                        <tr key={rowIndex} className="border-b border-gray-200 last:border-b-0">
+                                                            {columns.map(col => (
+                                                                <td 
+                                                                    key={col.name} 
+                                                                    className={`py-1.5 px-3 font-mono truncate ${selectedColumn === col.name ? 'bg-blue-100' : 'hover:bg-gray-50 cursor-pointer'}`}
+                                                                    onClick={() => setSelectedColumn(col.name)}
+                                                                    title={String(row[col.name])}
+                                                                >
+                                                                    {row[col.name] === null ? <i className="text-gray-400">null</i> : String(row[col.name])}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {selectedColumnData && (
+                                            <div className="w-1/2 flex flex-col gap-4">
+                                                {isSelectedColNumeric ? (
+                                                    <HistogramPlot rows={rows} column={selectedColumn!} />
+                                                ) : (
+                                                    <div className="w-full h-full p-4 flex flex-col border border-gray-200 rounded-lg items-center justify-center">
+                                                        <p className="text-gray-500">Plot is not available for non-numeric columns.</p>
+                                                    </div>
+                                                )}
+                                                <ColumnStatistics data={selectedColumnData} columnName={selectedColumn} isNumeric={isSelectedColNumeric} />
                                             </div>
                                         )}
-                                        <ColumnStatistics data={selectedColumnData} columnName={selectedColumn} isNumeric={isSelectedColNumeric} />
-                                    </div>
+                                    </>
                                 )}
                             </div>
                         </>
@@ -424,40 +561,83 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
 
                     {activeTab === 'visualization' && (
                         <div className="flex-grow flex flex-col items-center justify-start p-4 gap-4">
-                            {!selectedColumn ? (
-                                <div className="flex items-center justify-center h-full">
-                                    <p className="text-gray-500">Select a column from the Data Table to use as the X-axis.</p>
-                                </div>
+                            {/* Score Model인 경우 y값과 predict 비교 */}
+                            {module.type === ModuleType.ScoreModel ? (
+                                <>
+                                    {!predictCol ? (
+                                        <div className="flex items-center justify-center h-full">
+                                            <p className="text-gray-500">Predict column not found in the data.</p>
+                                        </div>
+                                    ) : labelCols.length === 0 ? (
+                                        <div className="flex items-center justify-center h-full">
+                                            <p className="text-gray-500">No label column found for comparison.</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex-shrink-0 flex items-center gap-2 self-start">
+                                                <label htmlFor="label-select" className="font-semibold text-gray-700">Label Column (Y):</label>
+                                                <select
+                                                    id="label-select"
+                                                    value={scoreLabelCol || ''}
+                                                    onChange={e => setScoreLabelCol(e.target.value)}
+                                                    className="p-2 border border-gray-300 rounded-md"
+                                                >
+                                                    <option value="" disabled>Select a column</option>
+                                                    {labelCols.map(col => (
+                                                        <option key={col.name} value={col.name}>{col.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="w-full flex-grow min-h-0">
+                                                {scoreLabelCol ? (
+                                                    <ScatterPlot rows={rows} xCol={predictCol.name} yCol={scoreLabelCol} />
+                                                ) : (
+                                                    <div className="flex items-center justify-center h-full">
+                                                        <p className="text-gray-500">Please select a label column to compare with predictions.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </>
                             ) : (
                                 <>
-                                    {isSelectedColNumeric && numericCols.length > 1 && (
-                                        <div className="flex-shrink-0 flex items-center gap-2 self-start">
-                                            <label htmlFor="y-axis-select" className="font-semibold text-gray-700">Y-Axis:</label>
-                                            <select
-                                                id="y-axis-select"
-                                                value={yAxisCol || ''}
-                                                onChange={e => setYAxisCol(e.target.value)}
-                                                className="p-2 border border-gray-300 rounded-md"
-                                            >
-                                                <option value="" disabled>Select a column</option>
-                                                {numericCols.filter(c => c !== selectedColumn).map(col => (
-                                                    <option key={col} value={col}>{col}</option>
-                                                ))}
-                                            </select>
+                                    {!selectedColumn ? (
+                                        <div className="flex items-center justify-center h-full">
+                                            <p className="text-gray-500">Select a column from the Data Table to use as the X-axis.</p>
                                         </div>
-                                    )}
+                                    ) : (
+                                        <>
+                                            {isSelectedColNumeric && numericCols.length > 1 && (
+                                                <div className="flex-shrink-0 flex items-center gap-2 self-start">
+                                                    <label htmlFor="y-axis-select" className="font-semibold text-gray-700">Y-Axis:</label>
+                                                    <select
+                                                        id="y-axis-select"
+                                                        value={yAxisCol || ''}
+                                                        onChange={e => setYAxisCol(e.target.value)}
+                                                        className="p-2 border border-gray-300 rounded-md"
+                                                    >
+                                                        <option value="" disabled>Select a column</option>
+                                                        {numericCols.filter(c => c !== selectedColumn).map(col => (
+                                                            <option key={col} value={col}>{col}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
 
-                                    <div className="w-full flex-grow min-h-0">
-                                        {isSelectedColNumeric ? (
-                                            yAxisCol ? (
-                                                <ScatterPlot rows={rows} xCol={selectedColumn} yCol={yAxisCol} />
-                                            ) : (
-                                                <HistogramPlot rows={rows} column={selectedColumn} />
-                                            )
-                                        ) : (
-                                            <HistogramPlot rows={rows} column={selectedColumn} />
-                                        )}
-                                    </div>
+                                            <div className="w-full flex-grow min-h-0">
+                                                {isSelectedColNumeric ? (
+                                                    yAxisCol ? (
+                                                        <ScatterPlot rows={rows} xCol={selectedColumn} yCol={yAxisCol} />
+                                                    ) : (
+                                                        <HistogramPlot rows={rows} column={selectedColumn} />
+                                                    )
+                                                ) : (
+                                                    <HistogramPlot rows={rows} column={selectedColumn} />
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
                                 </>
                             )}
                         </div>

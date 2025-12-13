@@ -7,6 +7,8 @@ import {
   ChevronDownIcon,
   DocumentTextIcon,
   RectangleStackIcon,
+  FontSizeIncreaseIcon,
+  FontSizeDecreaseIcon,
 } from "./icons";
 
 interface ToolboxProps {
@@ -152,10 +154,10 @@ const ToolboxItem: React.FC<{
       onTouchEnd={(e) => onTouchEnd(type, e)}
       draggable
       title={description}
-      className="flex items-center px-3 py-2 rounded-lg cursor-grab bg-gray-800 hover:bg-gray-700 hover:text-blue-400 transition-colors"
+      className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors whitespace-nowrap w-full text-left cursor-grab"
     >
-      <Icon className="h-5 w-5 mr-3 flex-shrink-0" />
-      <span className="text-sm font-medium">{name}</span>
+      <Icon className="h-4 w-4 flex-shrink-0" />
+      <span>{name}</span>
     </div>
   );
 };
@@ -281,53 +283,17 @@ export const Toolbox: React.FC<ToolboxProps> = ({
               <div className="flex gap-1 ml-auto">
                 <button
                   onClick={() => onFontSizeChange(true)}
-                  title="글자 크기 키우기"
-                  className="relative group flex flex-col items-center justify-center w-6 h-6 rounded cursor-pointer bg-gray-800 hover:bg-gray-700 hover:text-blue-400 transition-colors"
+                  className="p-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                  title="글자 크게"
                 >
-                  <div className="relative flex flex-col items-center justify-center">
-                    {/* 위쪽 삼각형 */}
-                    <svg
-                      className="w-2 h-2 text-blue-400 mb-0.5"
-                      viewBox="0 0 8 8"
-                      fill="currentColor"
-                    >
-                      <path d="M4 0 L0 4 L8 4 Z" />
-                    </svg>
-                    {/* 가 문자 */}
-                    <span className="text-[10px] text-gray-300 leading-none">
-                      가
-                    </span>
-                  </div>
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
-                    글자 크기 키우기
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
-                  </div>
+                  <FontSizeIncreaseIcon className="h-4 w-4 text-gray-300" />
                 </button>
                 <button
                   onClick={() => onFontSizeChange(false)}
-                  title="글자 크기 줄이기"
-                  className="relative group flex flex-col items-center justify-center w-6 h-6 rounded cursor-pointer bg-gray-800 hover:bg-gray-700 hover:text-blue-400 transition-colors"
+                  className="p-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                  title="글자 작게"
                 >
-                  <div className="relative flex flex-col items-center justify-center">
-                    {/* 아래쪽 삼각형 */}
-                    <svg
-                      className="w-2 h-2 text-blue-400 mb-0.5"
-                      viewBox="0 0 8 8"
-                      fill="currentColor"
-                    >
-                      <path d="M4 8 L0 4 L8 4 Z" />
-                    </svg>
-                    {/* 가 문자 */}
-                    <span className="text-[10px] text-gray-300 leading-none">
-                      가
-                    </span>
-                  </div>
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
-                    글자 크기 줄이기
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
-                  </div>
+                  <FontSizeDecreaseIcon className="h-4 w-4 text-gray-300" />
                 </button>
               </div>
             </div>

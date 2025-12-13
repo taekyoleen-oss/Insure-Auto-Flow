@@ -8,6 +8,7 @@ import React, {
 import { Toolbox } from "./components/Toolbox";
 import { Canvas } from "./components/Canvas";
 import { PropertiesPanel } from "./components/PropertiesPanel";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 // fix: Add missing 'Port' type to handle portType argument in getSingleInputData.
 import {
   CanvasModule,
@@ -85,6 +86,8 @@ import { AIPipelineFromDataModal } from "./components/AIPipelineFromDataModal";
 import { AIPlanDisplayModal } from "./components/AIPlanDisplayModal";
 import { PipelineCodePanel } from "./components/PipelineCodePanel";
 import { GoogleGenAI, Type } from "@google/genai";
+import { savePipeline, loadPipeline } from "../shared/utils/fileOperations";
+import { loadSampleFromFolder, loadFolderSamples } from "../shared/utils/samples";
 
 type TerminalLog = {
   id: number;
@@ -990,70 +993,21 @@ ${header}
   const handleSavePipeline = useCallback(async () => {
     try {
       const pipelineState = { modules, connections, projectName };
-      const blob = new Blob([JSON.stringify(pipelineState, null, 2)], {
-        type: "application/json",
+      
+      await savePipeline(pipelineState, {
+        extension: ".mla",
+        description: "ML Pipeline File",
+        onSuccess: (fileName) => {
+          addLog("SUCCESS", `Pipeline saved to '${fileName}'.`);
+          setIsDirty(false);
+          setSaveButtonText("Saved!");
+          setTimeout(() => setSaveButtonText("Save"), 2000);
+        },
+        onError: (error) => {
+          console.error("Failed to save pipeline:", error);
+          addLog("ERROR", `Failed to save pipeline: ${error.message}`);
+        },
       });
-      const fileName = `${projectName.replace(/[<>:"/\\|?*]/g, "_")}.mla`;
-
-      // Try File System Access API first, fallback to download if it fails
-      let useDownload = true;
-
-      if ((window as any).showSaveFilePicker) {
-        try {
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName: fileName,
-            types: [
-              {
-                description: "ML Pipeline File",
-                accept: { "application/json": [".mla"] },
-              },
-            ],
-          });
-
-          try {
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            addLog("SUCCESS", `Pipeline saved to '${handle.name}'.`);
-            useDownload = false;
-          } catch (writeError: any) {
-            // If createWritable fails, fallback to download
-            console.warn(
-              "File System Access API write failed, using download:",
-              writeError
-            );
-            useDownload = true;
-          }
-        } catch (pickerError: any) {
-          // If showSaveFilePicker fails (e.g., user cancelled or not allowed), fallback to download
-          if (pickerError.name === "AbortError") {
-            // User cancelled, don't show error
-            return;
-          }
-          console.warn(
-            "File System Access API not available, using download:",
-            pickerError
-          );
-          useDownload = true;
-        }
-      }
-
-      // Fallback to download method
-      if (useDownload) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        addLog("SUCCESS", `Pipeline download initiated as '${fileName}'.`);
-      }
-
-      setIsDirty(false);
-      setSaveButtonText("Saved!");
-      setTimeout(() => setSaveButtonText("Save"), 2000);
     } catch (error: any) {
       if (error.name !== "AbortError") {
         console.error("Failed to save pipeline:", error);
@@ -1062,52 +1016,28 @@ ${header}
     }
   }, [modules, connections, projectName, addLog]);
 
-  const handleLoadPipeline = useCallback(() => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".mla";
-    input.onchange = (event: Event) => {
-      const target = event.target as HTMLInputElement;
-      const file = target.files?.[0];
-      if (!file) {
-        return;
-      }
+  const handleLoadPipeline = useCallback(async () => {
+    const savedState = await loadPipeline({
+      extension: ".mla",
+      onError: (error) => {
+        addLog("ERROR", error.message);
+      },
+    });
 
-      const reader = new FileReader();
-      reader.onload = (e: ProgressEvent<FileReader>) => {
-        try {
-          const content = e.target?.result as string;
-          if (!content) {
-            addLog("ERROR", "File is empty.");
-            return;
-          }
-          const savedState = JSON.parse(content);
-          if (savedState.modules && savedState.connections) {
-            resetModules(savedState.modules);
-            _setConnections(savedState.connections);
-            if (savedState.projectName) {
-              setProjectName(savedState.projectName);
-            }
-            setSelectedModuleIds([]);
-            setIsDirty(false);
-            addLog("SUCCESS", `Pipeline '${file.name}' loaded successfully.`);
-          } else {
-            addLog("WARN", "Invalid pipeline file format.");
-          }
-        } catch (error) {
-          console.error("Failed to load or parse pipeline file:", error);
-          addLog(
-            "ERROR",
-            "Failed to load pipeline from file. It may be corrupted or in the wrong format."
-          );
+    if (savedState) {
+      if (savedState.modules && savedState.connections) {
+        resetModules(savedState.modules);
+        _setConnections(savedState.connections);
+        if (savedState.projectName) {
+          setProjectName(savedState.projectName);
         }
-      };
-      reader.onerror = () => {
-        addLog("ERROR", `Error reading file: ${reader.error}`);
-      };
-      reader.readAsText(file);
-    };
-    input.click();
+        setSelectedModuleIds([]);
+        setIsDirty(false);
+        addLog("SUCCESS", "Pipeline loaded successfully.");
+      } else {
+        addLog("WARN", "Invalid pipeline file format.");
+      }
+    }
   }, [resetModules, addLog]);
 
   const handleLoadSample = useCallback(
@@ -1128,31 +1058,14 @@ ${header}
         let sampleModel: any = null;
 
         if (source === "folder" && filename) {
-          // Samples 폴더에서 파일 로드
+          // Samples 폴더에서 파일 로드 (공통 유틸리티 사용)
           try {
-            // URL 인코딩 처리 (공백, 특수문자 등)
-            const encodedFilename = encodeURIComponent(filename);
-            const response = await fetch(
-              `http://localhost:3002/api/samples/${encodedFilename}`
+            sampleModel = await loadSampleFromFolder(
+              filename,
+              "http://localhost:3002/api/samples"
             );
-            if (response.ok) {
-              const text = await response.text();
-              if (text.trim()) {
-                try {
-                  sampleModel = JSON.parse(text);
-                } catch (parseError) {
-                  addLog("ERROR", `Failed to parse sample file: ${filename}`);
-                  return;
-                }
-              } else {
-                addLog("ERROR", `Empty response for sample file: ${filename}`);
-                return;
-              }
-            } else {
-              addLog(
-                "ERROR",
-                `Failed to load sample file: ${filename} (${response.status})`
-              );
+            if (!sampleModel) {
+              addLog("ERROR", `Failed to load sample file: ${filename}`);
               return;
             }
           } catch (error: any) {
@@ -1262,61 +1175,23 @@ ${header}
   );
 
   // Samples 폴더의 파일 목록 가져오기
-  const loadFolderSamples = useCallback(async () => {
+  const loadFolderSamplesLocal = useCallback(async () => {
     setIsLoadingSamples(true);
     try {
-      const response = await fetch("http://localhost:3002/api/samples/list", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        console.warn(
-          `Samples server returned ${response.status}: ${response.statusText}`
-        );
-        setFolderSamples([]);
-        setIsLoadingSamples(false);
-        return;
-      }
-
-      const text = await response.text();
-      console.log("Samples server response:", text.substring(0, 200)); // 첫 200자만 로그
-
-      if (!text.trim()) {
-        console.log("Samples server returned empty response");
-        setFolderSamples([]);
-        setIsLoadingSamples(false);
-        return;
-      }
-
-      try {
-        const samples = JSON.parse(text);
+      const samples = await loadFolderSamples("http://localhost:3002/api/samples/list");
+      
+      if (Array.isArray(samples) && samples.length > 0) {
         console.log(
           `Loaded ${samples.length} samples from server:`,
           samples.map((s: any) => s.name || s.filename)
         );
-
-        if (Array.isArray(samples) && samples.length > 0) {
-          console.log(`Setting ${samples.length} samples to state`);
-          setFolderSamples(samples);
-        } else if (Array.isArray(samples)) {
-          console.log("Samples array is empty");
-          setFolderSamples([]);
-        } else {
-          console.error("Samples response is not an array:", samples);
-          setFolderSamples([]);
-        }
-      } catch (parseError: any) {
-        console.error("Failed to parse samples response:", parseError);
-        console.error("Response text:", text);
+        setFolderSamples(samples);
+      } else {
+        console.log("No samples found or empty array");
         setFolderSamples([]);
       }
     } catch (error: any) {
-      // 네트워크 오류 등
       console.error("Error loading folder samples:", error);
-      console.error("Error details:", error.message, error.stack);
       setFolderSamples([]);
     } finally {
       setIsLoadingSamples(false);
@@ -1329,12 +1204,12 @@ ${header}
       console.log("Samples menu opened, loading folder samples...");
       // 약간의 지연을 두어 메뉴가 완전히 열린 후 로드
       const timer = setTimeout(() => {
-        loadFolderSamples();
+        loadFolderSamplesLocal();
       }, 100);
       return () => clearTimeout(timer);
     }
     // 메뉴가 닫혀도 상태는 유지 (다음에 열 때 빠르게 표시)
-  }, [isSampleMenuOpen, loadFolderSamples]);
+  }, [isSampleMenuOpen, loadFolderSamplesLocal]);
 
   // 디버깅: folderSamples 상태 변경 추적
   useEffect(() => {
@@ -1374,6 +1249,17 @@ ${header}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 초기 마운트 시에만 실행
+
+  // 모듈 배열에 따라 자동으로 Fit to View 실행
+  useEffect(() => {
+    if (modules.length > 0) {
+      // 약간의 지연을 두어 DOM이 완전히 렌더링된 후 실행
+      const timer = setTimeout(() => {
+        handleFitToView();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [modules, handleFitToView]);
 
   // Close sample menu and my work menu when clicking outside
   useEffect(() => {
@@ -3599,6 +3485,99 @@ ${header}
                 );
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
+            } else if (modelSourceModule.type === ModuleType.KNN) {
+              // Pyodide를 사용하여 Python으로 KNN 훈련
+              const modelPurpose =
+                modelSourceModule.parameters.model_purpose || "classification";
+              const nNeighbors =
+                parseInt(modelSourceModule.parameters.n_neighbors, 10) || 3;
+              const weights =
+                modelSourceModule.parameters.weights || "uniform";
+              const algorithm =
+                modelSourceModule.parameters.algorithm || "auto";
+              const metric =
+                modelSourceModule.parameters.metric || "minkowski";
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 KNN 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitKNNPython } = pyodideModule;
+
+                const fitResult = await fitKNNPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  nNeighbors,
+                  weights,
+                  algorithm,
+                  metric,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // KNN은 coefficients와 intercept가 없으므로 메트릭만 사용
+                // coefficients와 intercept는 빈 값으로 설정
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                if (modelPurpose === "classification") {
+                  metrics["Accuracy"] = parseFloat(
+                    (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                  );
+                  metrics["Precision"] = parseFloat(
+                    (fitResult.metrics["Precision"] || 0).toFixed(4)
+                  );
+                  metrics["Recall"] = parseFloat(
+                    (fitResult.metrics["Recall"] || 0).toFixed(4)
+                  );
+                  metrics["F1-Score"] = parseFloat(
+                    (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                  );
+                  if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                    metrics["ROC-AUC"] = parseFloat(
+                      fitResult.metrics["ROC-AUC"].toFixed(4)
+                    );
+                  }
+                } else {
+                  metrics["R-squared"] = parseFloat(
+                    (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                  );
+                  metrics["Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                  );
+                  metrics["Root Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(4)
+                  );
+                  metrics["Mean Absolute Error"] = parseFloat(
+                    (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                  );
+                }
+
+                addLog(
+                  "SUCCESS",
+                  `Python으로 KNN 모델 훈련 완료`
+                );
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python KNN 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
             } else {
               // For other classification models, use simulation for now
               intercept = Math.random() - 0.5;
@@ -3693,145 +3672,259 @@ ${header}
           );
           const labelColumn = trainedModel.labelColumn;
 
-          // Pyodide를 사용하여 Python으로 예측 수행
-          try {
-            addLog(
-              "INFO",
-              "Pyodide를 사용하여 Python으로 모델 예측 수행 중..."
+          // KNN 모델의 경우 별도 처리
+          if (trainedModel.modelType === ModuleType.KNN) {
+            // Train Model 모듈에서 훈련 데이터 가져오기
+            const trainModelModule = currentModules.find(
+              (m) => m.id === trainedModelSourceModule.id
             );
+            
+            if (!trainModelModule) {
+              throw new Error("Train Model module not found.");
+            }
 
-            const pyodideModule = await import("./utils/pyodideRunner");
-            const { scoreModelPython } = pyodideModule;
-
-            const result = await scoreModelPython(
-              inputData.rows || [],
-              trainedModel.featureColumns,
-              trainedModel.coefficients,
-              trainedModel.intercept,
-              labelColumn,
-              modelIsClassification ? "classification" : "regression",
-              60000 // 타임아웃: 60초
-            );
-
-            newOutputData = {
-              type: "DataPreview",
-              columns: result.columns,
-              totalRowCount: inputData.totalRowCount,
-              rows: result.rows,
-            };
-
-            addLog("SUCCESS", "Python으로 모델 예측 완료");
-
-            // 연결된 Evaluate Model의 파라미터 자동 설정
-            const evaluateModelConnections = connections.filter(
+            // Train Model의 입력 데이터 찾기
+            const trainDataInputConnection = connections.find(
               (c) =>
-                c.from.moduleId === module.id &&
-                currentModules.find((m) => m.id === c.to.moduleId)?.type ===
-                  ModuleType.EvaluateModel
+                c.to.moduleId === trainModelModule.id &&
+                c.to.portName === "data_in"
             );
 
-            for (const evalConn of evaluateModelConnections) {
-              const evalModule = currentModules.find(
-                (m) => m.id === evalConn.to.moduleId
-              );
-              if (evalModule) {
-                const evalParams = evalModule.parameters || {};
-                const updates: Record<string, any> = {};
+            if (!trainDataInputConnection) {
+              throw new Error("Training data connection not found for KNN model.");
+            }
 
-                const inputColumns = result.columns.map((c) => c.name);
+            const trainDataSourceModule = currentModules.find(
+              (m) => m.id === trainDataInputConnection.from.moduleId
+            );
 
-                // label_column 자동 설정 (항상 업데이트)
-                if (inputColumns.includes(labelColumn)) {
-                  updates.label_column = labelColumn;
-                } else if (inputColumns.length > 0) {
-                  updates.label_column = inputColumns[0];
-                }
+            if (!trainDataSourceModule || !trainDataSourceModule.outputData) {
+              throw new Error("Training data source module not found.");
+            }
 
-                // prediction_column 자동 설정 (항상 업데이트)
-                if (modelIsClassification) {
-                  const probaColumn = `${labelColumn}_Predict_Proba_1`;
-                  if (inputColumns.includes(probaColumn)) {
-                    updates.prediction_column = probaColumn;
-                  } else if (inputColumns.includes("Predict")) {
-                    updates.prediction_column = "Predict";
-                  }
-                } else {
-                  if (inputColumns.includes("Predict")) {
-                    updates.prediction_column = "Predict";
-                  }
-                }
-
-                // model_type 자동 설정 (항상 업데이트)
-                const detectedModelType = modelIsClassification
-                  ? "classification"
-                  : "regression";
-                updates.model_type = detectedModelType;
-
-                // threshold 기본값 설정 (분류 모델인 경우, 값이 없을 때만)
-                // threshold가 이미 설정되어 있으면 절대 변경하지 않음
-                if (
-                  modelIsClassification &&
-                  (evalParams.threshold === undefined ||
-                    evalParams.threshold === null)
-                ) {
-                  // threshold가 없을 때만 기본값 설정
-                  updates.threshold = 0.5;
-                }
-                // threshold가 이미 설정되어 있으면 updates에 추가하지 않음
-
-                // 파라미터 업데이트 (threshold는 절대 덮어쓰지 않음)
-                if (Object.keys(updates).length > 0) {
-                  setModules(
-                    (prev) =>
-                      prev.map((m) => {
-                        if (m.id === evalModule.id) {
-                          // threshold를 제외한 파라미터만 업데이트
-                          const finalUpdates = { ...updates };
-                          const existingThreshold = m.parameters?.threshold;
-
-                          // threshold가 이미 있으면 절대 덮어쓰지 않음
-                          if (
-                            existingThreshold !== undefined &&
-                            existingThreshold !== null
-                          ) {
-                            delete finalUpdates.threshold;
-                          }
-
-                          // threshold를 제외한 파라미터만 업데이트하고, threshold는 기존 값 유지
-                          return {
-                            ...m,
-                            parameters: {
-                              ...m.parameters,
-                              ...finalUpdates,
-                              // threshold는 기존 값 명시적으로 유지
-                              threshold:
-                                existingThreshold !== undefined &&
-                                existingThreshold !== null
-                                  ? existingThreshold
-                                  : finalUpdates.threshold !== undefined
-                                  ? finalUpdates.threshold
-                                  : m.parameters?.threshold,
-                            },
-                          };
-                        }
-                        return m;
-                      }),
-                    true
-                  );
-
-                  // 파라미터 업데이트만 하고 자동 재실행은 하지 않음
-                  // 사용자가 수동으로 실행하거나, Score Model이 완료된 후에 실행되도록 함
-                  addLog(
-                    "INFO",
-                    `Evaluate Model [${evalModule.name}] 파라미터가 자동으로 설정되었습니다. 실행하려면 모듈을 클릭하세요.`
-                  );
-                }
+            let trainingData: DataPreview | null = null;
+            if (trainDataSourceModule.outputData.type === "DataPreview") {
+              trainingData = trainDataSourceModule.outputData;
+            } else if (trainDataSourceModule.outputData.type === "SplitDataOutput") {
+              const portName = trainDataInputConnection.from.portName;
+              if (portName === "train_data_out") {
+                trainingData = trainDataSourceModule.outputData.train;
+              } else if (portName === "test_data_out") {
+                trainingData = trainDataSourceModule.outputData.test;
               }
             }
-          } catch (error: any) {
-            const errorMessage = error.message || String(error);
-            addLog("ERROR", `Python ScoreModel 실패: ${errorMessage}`);
-            throw new Error(`모델 예측 실패: ${errorMessage}`);
+
+            if (!trainingData) {
+              throw new Error("Training data not available for KNN model.");
+            }
+
+            // KNN 모델 정의 모듈 찾기
+            const modelDefConnection = connections.find(
+              (c) =>
+                c.to.moduleId === trainModelModule.id &&
+                c.to.portName === "model_in"
+            );
+
+            if (!modelDefConnection) {
+              throw new Error("KNN model definition connection not found.");
+            }
+
+            const knnModelDefModule = currentModules.find(
+              (m) => m.id === modelDefConnection.from.moduleId
+            );
+
+            if (!knnModelDefModule) {
+              throw new Error("KNN model definition module not found.");
+            }
+
+            const modelPurpose =
+              knnModelDefModule.parameters.model_purpose || "classification";
+            const nNeighbors =
+              parseInt(knnModelDefModule.parameters.n_neighbors, 10) || 3;
+            const weights = knnModelDefModule.parameters.weights || "uniform";
+            const algorithm =
+              knnModelDefModule.parameters.algorithm || "auto";
+            const metric = knnModelDefModule.parameters.metric || "minkowski";
+
+            try {
+              addLog(
+                "INFO",
+                "Pyodide를 사용하여 Python으로 KNN 모델 예측 수행 중..."
+              );
+
+              const pyodideModule = await import("./utils/pyodideRunner");
+              const { scoreKNNPython } = pyodideModule;
+
+              const result = await scoreKNNPython(
+                inputData.rows || [],
+                trainedModel.featureColumns,
+                labelColumn,
+                modelIsClassification ? "classification" : "regression",
+                nNeighbors,
+                weights,
+                algorithm,
+                metric,
+                trainingData.rows || [],
+                trainedModel.featureColumns,
+                labelColumn,
+                60000 // 타임아웃: 60초
+              );
+
+              newOutputData = {
+                type: "DataPreview",
+                columns: result.columns,
+                totalRowCount: inputData.totalRowCount,
+                rows: result.rows,
+              };
+
+              addLog("SUCCESS", "Python으로 KNN 모델 예측 완료");
+            } catch (error: any) {
+              const errorMessage = error.message || String(error);
+              addLog("ERROR", `Python KNN ScoreModel 실패: ${errorMessage}`);
+              throw new Error(`모델 예측 실패: ${errorMessage}`);
+            }
+          } else {
+            // 기존 방식 (coefficients/intercept 사용)
+            // Pyodide를 사용하여 Python으로 예측 수행
+            try {
+              addLog(
+                "INFO",
+                "Pyodide를 사용하여 Python으로 모델 예측 수행 중..."
+              );
+
+              const pyodideModule = await import("./utils/pyodideRunner");
+              const { scoreModelPython } = pyodideModule;
+
+              const result = await scoreModelPython(
+                inputData.rows || [],
+                trainedModel.featureColumns,
+                trainedModel.coefficients,
+                trainedModel.intercept,
+                labelColumn,
+                modelIsClassification ? "classification" : "regression",
+                60000 // 타임아웃: 60초
+              );
+
+              newOutputData = {
+                type: "DataPreview",
+                columns: result.columns,
+                totalRowCount: inputData.totalRowCount,
+                rows: result.rows,
+              };
+
+              addLog("SUCCESS", "Python으로 모델 예측 완료");
+
+              // 연결된 Evaluate Model의 파라미터 자동 설정
+              const evaluateModelConnections = connections.filter(
+                (c) =>
+                  c.from.moduleId === module.id &&
+                  currentModules.find((m) => m.id === c.to.moduleId)?.type ===
+                    ModuleType.EvaluateModel
+              );
+
+              for (const evalConn of evaluateModelConnections) {
+                const evalModule = currentModules.find(
+                  (m) => m.id === evalConn.to.moduleId
+                );
+                if (evalModule) {
+                  const evalParams = evalModule.parameters || {};
+                  const updates: Record<string, any> = {};
+
+                  const inputColumns = result.columns.map((c) => c.name);
+
+                  // label_column 자동 설정 (항상 업데이트)
+                  if (inputColumns.includes(labelColumn)) {
+                    updates.label_column = labelColumn;
+                  } else if (inputColumns.length > 0) {
+                    updates.label_column = inputColumns[0];
+                  }
+
+                  // prediction_column 자동 설정 (항상 업데이트)
+                  if (modelIsClassification) {
+                    const probaColumn = `${labelColumn}_Predict_Proba_1`;
+                    if (inputColumns.includes(probaColumn)) {
+                      updates.prediction_column = probaColumn;
+                    } else if (inputColumns.includes("Predict")) {
+                      updates.prediction_column = "Predict";
+                    }
+                  } else {
+                    if (inputColumns.includes("Predict")) {
+                      updates.prediction_column = "Predict";
+                    }
+                  }
+
+                  // model_type 자동 설정 (항상 업데이트)
+                  const detectedModelType = modelIsClassification
+                    ? "classification"
+                    : "regression";
+                  updates.model_type = detectedModelType;
+
+                  // threshold 기본값 설정 (분류 모델인 경우, 값이 없을 때만)
+                  // threshold가 이미 설정되어 있으면 절대 변경하지 않음
+                  if (
+                    modelIsClassification &&
+                    (evalParams.threshold === undefined ||
+                      evalParams.threshold === null)
+                  ) {
+                    // threshold가 없을 때만 기본값 설정
+                    updates.threshold = 0.5;
+                  }
+                  // threshold가 이미 설정되어 있으면 updates에 추가하지 않음
+
+                  // 파라미터 업데이트 (threshold는 절대 덮어쓰지 않음)
+                  if (Object.keys(updates).length > 0) {
+                    setModules(
+                      (prev) =>
+                        prev.map((m) => {
+                          if (m.id === evalModule.id) {
+                            // threshold를 제외한 파라미터만 업데이트
+                            const finalUpdates = { ...updates };
+                            const existingThreshold = m.parameters?.threshold;
+
+                            // threshold가 이미 있으면 절대 덮어쓰지 않음
+                            if (
+                              existingThreshold !== undefined &&
+                              existingThreshold !== null
+                            ) {
+                              delete finalUpdates.threshold;
+                            }
+
+                            // threshold를 제외한 파라미터만 업데이트하고, threshold는 기존 값 유지
+                            return {
+                              ...m,
+                              parameters: {
+                                ...m.parameters,
+                                ...finalUpdates,
+                                // threshold는 기존 값 명시적으로 유지
+                                threshold:
+                                  existingThreshold !== undefined &&
+                                  existingThreshold !== null
+                                    ? existingThreshold
+                                    : finalUpdates.threshold !== undefined
+                                    ? finalUpdates.threshold
+                                    : m.parameters?.threshold,
+                              },
+                            };
+                          }
+                          return m;
+                        }),
+                      true
+                    );
+
+                    // 파라미터 업데이트만 하고 자동 재실행은 하지 않음
+                    // 사용자가 수동으로 실행하거나, Score Model이 완료된 후에 실행되도록 함
+                    addLog(
+                      "INFO",
+                      `Evaluate Model [${evalModule.name}] 파라미터가 자동으로 설정되었습니다. 실행하려면 모듈을 클릭하세요.`
+                    );
+                  }
+                }
+              }
+            } catch (error: any) {
+              const errorMessage = error.message || String(error);
+              addLog("ERROR", `Python ScoreModel 실패: ${errorMessage}`);
+              throw new Error(`모델 예측 실패: ${errorMessage}`);
+            }
           }
         } else if (module.type === ModuleType.EvaluateModel) {
           const inputData = getSingleInputData(module.id) as DataPreview;
@@ -5577,43 +5670,44 @@ ${header}
         </div>
 
         {/* 두 번째 줄: Load, Save 등 버튼들 */}
-        <div className="flex items-center justify-end gap-1 md:gap-2 w-full overflow-x-auto scrollbar-hide mt-1">
+        <div className="flex items-center justify-end gap-2 w-full overflow-x-auto scrollbar-hide mt-1">
           <button
             onClick={undo}
             disabled={!canUndo}
-            className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            className="p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             title="Undo (Ctrl+Z)"
           >
-            <ArrowUturnLeftIcon className="h-[10.67px] w-[10.67px] md:h-5 md:w-5" />
+            <ArrowUturnLeftIcon className="h-5 w-5" />
           </button>
           <button
             onClick={redo}
             disabled={!canRedo}
-            className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            className="p-1.5 text-gray-300 hover:bg-gray-700 rounded-md disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             title="Redo (Ctrl+Y)"
           >
-            <ArrowUturnRightIcon className="h-[10.67px] w-[10.67px] md:h-5 md:w-5" />
+            <ArrowUturnRightIcon className="h-5 w-5" />
           </button>
+          <div className="h-5 border-l border-gray-700"></div>
           <button
             onClick={handleSetFolder}
-            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0"
             title="Set Save Folder"
           >
-            <FolderOpenIcon className="h-2 w-2 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Set Folder</span>
+            <FolderOpenIcon className="h-4 w-4" />
+            <span>Set Folder</span>
           </button>
           <button
             onClick={handleLoadPipeline}
-            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold transition-colors flex-shrink-0"
             title="Load Pipeline"
           >
-            <FolderOpenIcon className="h-2 w-2 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Load</span>
+            <FolderOpenIcon className="h-4 w-4" />
+            <span>Load</span>
           </button>
           <button
             onClick={handleSavePipeline}
             disabled={!isDirty}
-            className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs rounded-md font-semibold transition-colors flex-shrink-0 ${
+            className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md font-semibold transition-colors flex-shrink-0 ${
               !isDirty
                 ? "bg-gray-600 cursor-not-allowed opacity-50"
                 : "bg-gray-700 hover:bg-gray-600"
@@ -5621,11 +5715,11 @@ ${header}
             title="Save Pipeline"
           >
             {saveButtonText === "Save" ? (
-              <CodeBracketIcon className="h-2 w-2 md:h-4 md:w-4" />
+              <CodeBracketIcon className="h-4 w-4" />
             ) : (
-              <CheckIcon className="h-2 w-2 md:h-4 md:w-4" />
+              <CheckIcon className="h-4 w-4" />
             )}
-            <span className="hidden sm:inline">{saveButtonText}</span>
+            <span>{saveButtonText}</span>
           </button>
         </div>
 
@@ -5634,12 +5728,13 @@ ${header}
           <div className="flex items-center gap-1 md:gap-2">
             <button
               onClick={() => setIsLeftPanelVisible((v) => !v)}
-              className="p-1 md:p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0"
+              className="p-1.5 text-gray-300 hover:bg-gray-700 rounded-md transition-colors flex-shrink-0"
               aria-label="Toggle modules panel"
               title="Toggle Modules Panel"
             >
-              <Bars3Icon className="h-4 w-4 md:h-5 md:w-5" />
+              <Bars3Icon className="h-5 w-5" />
             </button>
+            <div className="h-5 border-l border-gray-700"></div>
             <div
               className="relative flex-shrink-0"
               ref={sampleMenuRef}
@@ -5659,12 +5754,16 @@ ${header}
                     return !prev;
                   });
                 }}
-                className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold transition-colors cursor-pointer"
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md font-semibold transition-colors cursor-pointer ${
+                  isSampleMenuOpen
+                    ? "bg-purple-600 text-white"
+                    : "bg-gray-700 hover:bg-gray-600 text-gray-200"
+                }`}
                 title="Load Sample Model"
                 type="button"
               >
-                <SparklesIcon className="h-2 w-2 md:h-4 md:w-4" />
-                <span className="hidden sm:inline">Samples</span>
+                <SparklesIcon className="h-4 w-4" />
+                <span>Samples</span>
               </button>
               {isSampleMenuOpen && (
                 <div
@@ -5786,12 +5885,16 @@ ${header}
                   e.stopPropagation();
                   setIsMyWorkMenuOpen((prev) => !prev);
                 }}
-                className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-[6.67px] md:text-xs bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition-colors cursor-pointer"
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md font-semibold transition-colors cursor-pointer ${
+                  isMyWorkMenuOpen
+                    ? "bg-purple-600 text-white"
+                    : "bg-gray-700 hover:bg-gray-600 text-gray-200"
+                }`}
                 title="My Work"
                 type="button"
               >
-                <FolderOpenIcon className="h-2 w-2 md:h-4 md:w-4" />
-                <span className="hidden sm:inline">My Work</span>
+                <FolderOpenIcon className="h-4 w-4" />
+                <span>My Work</span>
               </button>
               {isMyWorkMenuOpen && (
                 <div
@@ -6109,76 +6212,84 @@ ${header}
           />
           <div
             onMouseDown={handleControlPanelMouseDown}
-            className={`absolute bg-gray-800 rounded-lg p-1 flex items-center gap-1 shadow-lg cursor-move z-50 ${
-              !controlPanelPos ? "bottom-4 left-1/2 -translate-x-1/2" : ""
+            style={{
+              transform: controlPanelPos
+                ? `translate(${controlPanelPos.x}px, ${controlPanelPos.y}px)`
+                : "translate(-50%, 0)",
+              cursor: "grab",
+            }}
+            className={`absolute bottom-8 left-1/2 -translate-x-1/2 bg-gray-900/80 backdrop-blur-md rounded-full px-4 py-2 flex items-center gap-4 shadow-2xl z-50 border border-gray-700 select-none transition-transform active:scale-95 ${
+              controlPanelPos ? "" : ""
             }`}
-            style={
-              controlPanelPos
-                ? { left: controlPanelPos.x, top: controlPanelPos.y }
-                : {}
-            }
           >
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                adjustScale(-0.1);
-              }}
-              className="p-1.5 hover:bg-gray-700 rounded-md"
-              title="Zoom Out"
-            >
-              <MinusIcon className="w-5 h-5" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRearrangeModules();
-              }}
-              className="p-1.5 hover:bg-gray-700 rounded-md"
-              title="Rearrange Modules"
-            >
-              <Squares2X2Icon className="w-5 h-5" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRotateModules();
-              }}
-              className="p-1.5 hover:bg-gray-700 rounded-md"
-              title="Rotate Modules"
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleFitToView();
-              }}
-              className="p-1.5 hover:bg-gray-700 rounded-md"
-              title="Fit to View"
-            >
-              <ArrowsPointingOutIcon className="w-5 h-5" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setScale(1);
-                setPan({ x: 0, y: 0 });
-              }}
-              className="px-2 py-1 text-sm font-semibold hover:bg-gray-700 rounded-md"
-              title="Reset View"
-            >
-              {Math.round(scale * 100)}%
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                adjustScale(0.1);
-              }}
-              className="p-1.5 hover:bg-gray-700 rounded-md"
-              title="Zoom In"
-            >
-              <PlusIcon className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  adjustScale(-0.1);
+                }}
+                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+                title="Zoom Out"
+              >
+                <MinusIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setScale(1);
+                  setPan({ x: 0, y: 0 });
+                }}
+                className="px-2 text-sm font-medium text-gray-300 hover:text-white min-w-[3rem] text-center"
+                title="Reset View"
+              >
+                {Math.round(scale * 100)}%
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  adjustScale(0.1);
+                }}
+                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+                title="Zoom In"
+              >
+                <PlusIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="w-px h-4 bg-gray-700"></div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFitToView();
+                }}
+                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+                title="Fit to View"
+              >
+                <ArrowsPointingOutIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRearrangeModules();
+                }}
+                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+                title="Auto Layout"
+              >
+                <SparklesIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRotateModules();
+                }}
+                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+                title="Rotate Modules"
+              >
+                <ArrowPathIcon className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </main>
 
@@ -6268,11 +6379,13 @@ ${header}
             "HierarchicalClusteringOutput" ||
           viewingDataForModule.outputData?.type === "DBSCANOutput" ||
           viewingDataForModule.outputData?.type === "PCAOutput") && (
-          <DataPreviewModal
-            module={viewingDataForModule}
-            projectName={projectName}
-            onClose={handleCloseModal}
-          />
+          <ErrorBoundary>
+            <DataPreviewModal
+              module={viewingDataForModule}
+              projectName={projectName}
+              onClose={handleCloseModal}
+            />
+          </ErrorBoundary>
         )}
       {viewingDataForModule &&
         viewingDataForModule.outputData?.type === "StatisticsOutput" && (
