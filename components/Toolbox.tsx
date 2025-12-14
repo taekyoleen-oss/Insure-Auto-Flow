@@ -66,20 +66,6 @@ const traditionAnalysisTypes = [
   ModuleType.EvaluateStat,
 ];
 
-const reinsuranceTypes = [
-  ModuleType.FitLossDistribution,
-  ModuleType.GenerateExposureCurve,
-  ModuleType.PriceXoLLayer,
-];
-
-const xolPricingTypes = [
-  ModuleType.XolLoading,
-  ModuleType.ApplyThreshold,
-  ModuleType.DefineXolContract,
-  ModuleType.CalculateCededLoss,
-  ModuleType.PriceXolContract,
-];
-
 const categorizedModules = [
   {
     name: "Data Preprocess",
@@ -113,14 +99,6 @@ const categorizedModules = [
     modules: TOOLBOX_MODULES.filter((m) =>
       traditionAnalysisTypes.includes(m.type)
     ),
-  },
-  {
-    name: "Reinsurance Analysis",
-    modules: TOOLBOX_MODULES.filter((m) => reinsuranceTypes.includes(m.type)),
-  },
-  {
-    name: "XoL Reinsurance Pricing",
-    modules: TOOLBOX_MODULES.filter((m) => xolPricingTypes.includes(m.type)),
   },
 ];
 
@@ -172,8 +150,6 @@ export const Toolbox: React.FC<ToolboxProps> = ({
     "Data Preprocess": true,
     "Data Analysis": true,
     "Tradition Analysis": true,
-    "Reinsurance Analysis": true,
-    "XoL Reinsurance Pricing": true,
     Operations: true,
     "Supervised Learning": true,
     "Unsupervised Learning": true,
