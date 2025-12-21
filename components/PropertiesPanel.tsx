@@ -3306,7 +3306,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   }}
                 >
                   {logs.map((log) => (
-<<<<<<< HEAD
                     <div
                       key={log.id}
                       className="flex group hover:bg-gray-800/50 rounded px-1 py-0.5"
