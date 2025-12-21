@@ -67,15 +67,15 @@ app.get('/api/samples/list', (req, res) => {
               name: projectName,
               data: {
                 name: projectName,
-                modules: data.modules.map((m: any) => ({
+                modules: data.modules.map((m) => ({
                   type: m.type,
                   position: m.position || { x: 0, y: 0 },
                   name: m.name || m.type,
                   parameters: m.parameters || {},
                 })),
-                connections: data.connections.map((c: any) => {
-                  const fromIndex = data.modules.findIndex((m: any) => m.id === c.from.moduleId);
-                  const toIndex = data.modules.findIndex((m: any) => m.id === c.to.moduleId);
+                connections: data.connections.map((c) => {
+                  const fromIndex = data.modules.findIndex((m) => m.id === c.from.moduleId);
+                  const toIndex = data.modules.findIndex((m) => m.id === c.to.moduleId);
                   if (fromIndex < 0 || toIndex < 0) {
                     console.warn(`Invalid connection in ${file}: fromIndex=${fromIndex}, toIndex=${toIndex}`);
                   }
@@ -85,7 +85,7 @@ app.get('/api/samples/list', (req, res) => {
                     toModuleIndex: toIndex >= 0 ? toIndex : -1,
                     toPort: c.to.portName,
                   };
-                }).filter((c: any) => c.fromModuleIndex >= 0 && c.toModuleIndex >= 0),
+                }).filter((c) => c.fromModuleIndex >= 0 && c.toModuleIndex >= 0),
               }
             };
             console.log(`Successfully converted .mla file: ${file} -> ${convertedData.name} (${convertedData.data.modules.length} modules, ${convertedData.data.connections.length} connections)`);
@@ -100,7 +100,7 @@ app.get('/api/samples/list', (req, res) => {
           };
           console.log(`Loaded .json file: ${file} -> ${jsonData.name}`);
           return jsonData;
-        } catch (error: any) {
+        } catch (error) {
           console.error(`Error reading file ${file}:`, error.message);
           console.error(`Stack:`, error.stack);
           return null;
@@ -141,22 +141,22 @@ app.get('/api/samples/:filename', (req, res) => {
       const projectName = data.projectName || filename.replace('.mla', '').trim();
       const convertedData = {
         name: projectName,
-        modules: data.modules.map((m: any) => ({
+        modules: data.modules.map((m) => ({
           type: m.type,
           position: m.position,
           name: m.name,
           parameters: m.parameters || {},
         })),
-        connections: data.connections.map((c: any) => {
-          const fromIndex = data.modules.findIndex((m: any) => m.id === c.from.moduleId);
-          const toIndex = data.modules.findIndex((m: any) => m.id === c.to.moduleId);
+        connections: data.connections.map((c) => {
+          const fromIndex = data.modules.findIndex((m) => m.id === c.from.moduleId);
+          const toIndex = data.modules.findIndex((m) => m.id === c.to.moduleId);
           return {
             fromModuleIndex: fromIndex >= 0 ? fromIndex : -1,
             fromPort: c.from.portName,
             toModuleIndex: toIndex >= 0 ? toIndex : -1,
             toPort: c.to.portName,
           };
-        }).filter((c: any) => c.fromModuleIndex >= 0 && c.toModuleIndex >= 0),
+        }).filter((c) => c.fromModuleIndex >= 0 && c.toModuleIndex >= 0),
       };
       console.log(`Converted ${convertedData.modules.length} modules and ${convertedData.connections.length} connections`);
       return res.json(convertedData);

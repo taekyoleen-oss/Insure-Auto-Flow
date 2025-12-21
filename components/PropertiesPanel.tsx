@@ -40,6 +40,16 @@ import { getModuleCode } from "../codeSnippets";
 import { SAMPLE_DATA } from "../sampleData";
 import { GoogleGenAI, Type } from "@google/genai";
 import { DEFAULT_MODULES } from "../constants";
+import { ExcelInputModal } from "./ExcelInputModal";
+
+// Dynamic import for xlsx to handle module resolution issues
+let XLSX: any = null;
+const loadXLSX = async () => {
+  if (!XLSX) {
+    XLSX = await import("xlsx");
+  }
+  return XLSX;
+};
 
 type TerminalLog = {
   id: number;
@@ -56,10 +66,11 @@ interface PropertiesPanelProps {
   logs: TerminalLog[];
   modules: CanvasModule[];
   connections: Connection[];
-  activeTab: "properties" | "preview" | "code";
-  setActiveTab: (tab: "properties" | "preview" | "code") => void;
+  activeTab: "properties" | "preview" | "code" | "terminal";
+  setActiveTab: (tab: "properties" | "preview" | "code" | "terminal") => void;
   onViewDetails: (moduleId: string) => void;
   folderHandle: FileSystemDirectoryHandle | null;
+  onRunModule?: (moduleId: string) => void;
 }
 
 const ExplanationRenderer: React.FC<{ text: string }> = ({ text }) => {
@@ -486,7 +497,8 @@ const renderParameters = (
   projectName: string,
   updateModuleParameters: (id: string, newParams: Record<string, any>) => void,
   onSampleLoad: (sample: { name: string; content: string }) => void,
-  folderHandle: FileSystemDirectoryHandle | null
+  folderHandle: FileSystemDirectoryHandle | null,
+  onOpenExcelModal?: () => void
 ) => {
   // Use the helper function
   const getConnectedDataSource = (moduleId: string, portNameToFind?: string) =>
@@ -501,6 +513,33 @@ const renderParameters = (
     // ... [Previous cases remain unchanged: LoadData, SelectData, HandleMissingValues, TransformData, EncodeCategorical, NormalizeData, TransitionData, ResampleData, SplitData] ...
     case ModuleType.LoadData:
     case ModuleType.XolLoading: {
+      // 엑셀 파일을 CSV로 변환하는 함수
+      const convertExcelToCSV = async (workbook: any, sheetName?: string): Promise<string> => {
+        const xlsx = await loadXLSX();
+        const targetSheet = sheetName || workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[targetSheet];
+        const jsonData = xlsx.utils.sheet_to_json(worksheet, {
+          header: 1,
+          defval: null,
+          raw: false,
+        });
+
+        return jsonData
+          .map((row: any) => {
+            return row
+              .map((cell: any) => {
+                if (cell === null || cell === undefined) return "";
+                const str = String(cell);
+                if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+                  return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+              })
+              .join(",");
+          })
+          .join("\n");
+      };
+
       const handleBrowseClick = async () => {
         if (folderHandle && (window as any).showOpenFilePicker) {
           try {
@@ -511,18 +550,47 @@ const renderParameters = (
                   description: "CSV Files",
                   accept: { "text/csv": [".csv"] },
                 },
+                {
+                  description: "Excel Files",
+                  accept: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+                      ".xlsx",
+                    ],
+                    "application/vnd.ms-excel": [".xls"],
+                  },
+                },
               ],
             });
             const file = await fileHandle.getFile();
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const content = e.target?.result as string;
+            const fileName = file.name.toLowerCase();
+
+            if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+              // 엑셀 파일 처리
+              const xlsx = await loadXLSX();
+              const arrayBuffer = await file.arrayBuffer();
+              const workbook = xlsx.read(arrayBuffer, { type: "array" });
+              const firstSheetName = workbook.SheetNames[0];
+              const csvContent = await convertExcelToCSV(workbook, firstSheetName);
+
               updateModuleParameters(module.id, {
                 source: file.name,
-                fileContent: content,
+                fileContent: csvContent,
+                fileType: "excel",
+                sheetName: firstSheetName,
               });
-            };
-            reader.readAsText(file);
+            } else {
+              // CSV 파일 처리
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const content = e.target?.result as string;
+                updateModuleParameters(module.id, {
+                  source: file.name,
+                  fileContent: content,
+                  fileType: "csv",
+                });
+              };
+              reader.readAsText(file);
+            }
           } catch (error: any) {
             if (error.name !== "AbortError") {
               console.warn(
@@ -555,6 +623,24 @@ const renderParameters = (
               Browse...
             </button>
           </div>
+          {/* 파일 타입 표시 */}
+          {module.parameters.fileType === "excel" &&
+            module.parameters.sheetName && (
+              <div className="mt-2 text-xs text-gray-500">
+                Excel Sheet: {module.parameters.sheetName}
+              </div>
+            )}
+          {/* 엑셀 데이터 직접 입력 버튼 */}
+          <button
+            onClick={() => {
+              if (onOpenExcelModal) {
+                onOpenExcelModal();
+              }
+            }}
+            className="mt-2 px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 rounded-md font-semibold text-white transition-colors"
+          >
+            엑셀 데이터 직접 입력
+          </button>
           <div className="mt-4">
             <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
               Examples
@@ -1444,201 +1530,6 @@ const renderParameters = (
         </div>
       );
     }
-    case ModuleType.DiversionChecker: {
-      const sourceData = getConnectedDataSource(module.id);
-      const inputColumns = sourceData?.columns || [];
-
-      if (inputColumns.length === 0) {
-        return (
-          <p className="text-sm text-gray-500">
-            Connect a data source to the 'data_in' port to configure.
-          </p>
-        );
-      }
-
-      const { feature_columns = [], label_column = null, max_iter = 100 } = module.parameters;
-
-      const handleFeatureChange = (colName: string, isChecked: boolean) => {
-        const newFeatures = isChecked
-          ? [...feature_columns, colName]
-          : feature_columns.filter((c: string) => c !== colName);
-        onParamChange("feature_columns", newFeatures);
-      };
-
-      const handleLabelChange = (colName: string) => {
-        const newLabel = colName === "" ? null : colName;
-        onParamChange("label_column", newLabel);
-        // If the new label was a feature, unselect it as a feature
-        if (newLabel && feature_columns.includes(newLabel)) {
-          onParamChange(
-            "feature_columns",
-            feature_columns.filter((c: string) => c !== newLabel)
-          );
-        }
-      };
-
-      const handleSelectAllFeatures = (selectAll: boolean) => {
-        if (selectAll) {
-          const allFeatureCols = inputColumns
-            .map((col) => col.name)
-            .filter((name) => name !== label_column);
-          onParamChange("feature_columns", allFeatureCols);
-        } else {
-          onParamChange("feature_columns", []);
-        }
-      };
-
-      return (
-        <div>
-          <AIParameterRecommender
-            module={module}
-            inputColumns={inputColumns.map((c) => c.name)}
-            projectName={projectName}
-            updateModuleParameters={updateModuleParameters}
-          />
-          <div className="mb-4">
-            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
-              Label Column
-            </h5>
-            <select
-              value={label_column || ""}
-              onChange={(e) => handleLabelChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">공백</option>
-              {inputColumns.map((col) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <h5 className="text-xs text-gray-500 uppercase font-bold">
-                Feature Columns
-              </h5>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSelectAllFeatures(true)}
-                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={() => handleSelectAllFeatures(false)}
-                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
-                >
-                  Deselect All
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2 pr-2">
-              {inputColumns.map((col) => (
-                <label
-                  key={col.name}
-                  className="flex items-center gap-2 text-sm truncate"
-                  title={col.name}
-                >
-                  <input
-                    type="checkbox"
-                    checked={feature_columns.includes(col.name)}
-                    onChange={(e) =>
-                      handleFeatureChange(col.name, e.target.checked)
-                    }
-                    disabled={col.name === label_column}
-                    className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span className="truncate">{col.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4">
-            <PropertyInput
-              label="Max Iterations"
-              type="number"
-              value={max_iter}
-              onChange={(v) => onParamChange("max_iter", v)}
-            />
-          </div>
-        </div>
-      );
-    }
-    case ModuleType.EvaluateStat: {
-      const sourceData = getConnectedDataSource(module.id);
-      const inputColumns = sourceData?.columns || [];
-
-      if (inputColumns.length === 0) {
-        return (
-          <p className="text-sm text-gray-500">
-            Connect a data source to the 'data_in' port to configure.
-          </p>
-        );
-      }
-
-      const { label_column = null, prediction_column = null, model_type = null } = module.parameters;
-
-      const handleLabelChange = (colName: string) => {
-        const newLabel = colName === "" ? null : colName;
-        onParamChange("label_column", newLabel);
-      };
-
-      const handlePredictionChange = (colName: string) => {
-        const newPrediction = colName === "" ? null : colName;
-        onParamChange("prediction_column", newPrediction);
-      };
-
-      return (
-        <div>
-          <div className="mb-4">
-            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
-              Label Column
-            </h5>
-            <select
-              value={label_column || ""}
-              onChange={(e) => handleLabelChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">공백</option>
-              {inputColumns.map((col) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="mb-4">
-            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
-              Prediction Column
-            </h5>
-            <select
-              value={prediction_column || ""}
-              onChange={(e) => handlePredictionChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">공백</option>
-              {inputColumns.map((col) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="mb-4">
-            <PropertySelect
-              label="Model Type (Optional)"
-              value={model_type || ""}
-              onChange={(v) => onParamChange("model_type", v || null)}
-              options={["", "OLS", "Logistic", "Logit", "Poisson", "QuasiPoisson", "NegativeBinomial", "Gamma", "Tweedie"]}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              모델 타입을 선택하면 해당 모델의 특수 통계량(Deviance, AIC, BIC 등)이 계산됩니다. 선택하지 않으면 기본 통계량만 계산됩니다.
-            </p>
-          </div>
-        </div>
-      );
-    }
     // ... [Rest of module types: KMeans, DBSCAN, LogisticRegression, DecisionTree, etc. remain unchanged] ...
     case ModuleType.KMeans:
     case ModuleType.HierarchicalClustering:
@@ -1860,44 +1751,6 @@ const renderParameters = (
           />
         </>
       );
-    case ModuleType.KNN: {
-      const purpose = module.parameters.model_purpose || "classification";
-      return (
-        <>
-          <PropertySelect
-            label="Model Purpose"
-            value={purpose}
-            onChange={(v) => onParamChange("model_purpose", v)}
-            options={["classification", "regression"]}
-          />
-          <PropertyInput
-            label="N Neighbors"
-            type="number"
-            value={module.parameters.n_neighbors || 3}
-            onChange={(v) => onParamChange("n_neighbors", v)}
-            min="1"
-          />
-          <PropertySelect
-            label="Weights"
-            value={module.parameters.weights || "uniform"}
-            onChange={(v) => onParamChange("weights", v)}
-            options={["uniform", "distance"]}
-          />
-          <PropertySelect
-            label="Algorithm"
-            value={module.parameters.algorithm || "auto"}
-            onChange={(v) => onParamChange("algorithm", v)}
-            options={["auto", "ball_tree", "kd_tree", "brute"]}
-          />
-          <PropertySelect
-            label="Metric"
-            value={module.parameters.metric || "minkowski"}
-            onChange={(v) => onParamChange("metric", v)}
-            options={["minkowski", "euclidean", "manhattan", "chebyshev", "hamming", "cosine"]}
-          />
-        </>
-      );
-    }
     case ModuleType.DecisionTree: {
       const purpose = module.parameters.model_purpose;
       const handlePurposeChange = (newPurpose: string) => {
@@ -2132,63 +1985,143 @@ const renderParameters = (
         </>
       );
     }
-    case ModuleType.OLSModel:
-      return (
-        <p className="text-sm text-gray-500">
-          OLS (Ordinary Least Squares) 모델입니다. 파라미터 설정이 필요 없습니다.
-        </p>
-      );
-    case ModuleType.LogisticModel:
-      return (
-        <p className="text-sm text-gray-500">
-          Logistic 회귀 모델입니다. 파라미터 설정이 필요 없습니다.
-        </p>
-      );
-    case ModuleType.PoissonModel:
-      return (
-        <PropertyInput
-          label="Max Iterations"
-          type="number"
-          value={module.parameters.max_iter || 100}
-          onChange={(v) => onParamChange("max_iter", v)}
-        />
-      );
-    case ModuleType.QuasiPoissonModel:
-      return (
-        <PropertyInput
-          label="Max Iterations"
-          type="number"
-          value={module.parameters.max_iter || 100}
-          onChange={(v) => onParamChange("max_iter", v)}
-        />
-      );
-    case ModuleType.NegativeBinomialModel:
-      return (
-        <>
-          <PropertyInput
-            label="Max Iterations"
-            type="number"
-            value={module.parameters.max_iter || 100}
-            onChange={(v) => onParamChange("max_iter", v)}
-          />
-          <PropertyInput
-            label="Dispersion"
-            type="number"
-            value={module.parameters.disp || 1.0}
-            onChange={(v) => onParamChange("disp", v)}
-            step="0.1"
-          />
-        </>
-      );
     case ModuleType.StatModels:
       return (
         <PropertySelect
           label="Model Type"
           value={module.parameters.model}
           onChange={(v) => onParamChange("model", v)}
-          options={["Gamma", "Tweedie"]}
+          options={[
+            "OLS",
+            "Logit",
+            "Poisson",
+            "NegativeBinomial",
+            "Gamma",
+            "Tweedie",
+          ]}
         />
       );
+    case ModuleType.DiversionChecker: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source to the 'data_in' port to configure.
+          </p>
+        );
+      }
+
+      const { feature_columns = [], label_column = null } = module.parameters;
+
+      const handleFeatureChange = (colName: string, isChecked: boolean) => {
+        const newFeatures = isChecked
+          ? [...feature_columns, colName]
+          : feature_columns.filter((c: string) => c !== colName);
+        onParamChange("feature_columns", newFeatures);
+      };
+
+      const handleLabelChange = (colName: string) => {
+        const newLabel = colName === "" ? null : colName;
+        onParamChange("label_column", newLabel);
+        // If the new label was a feature, unselect it as a feature
+        if (newLabel && feature_columns.includes(newLabel)) {
+          onParamChange(
+            "feature_columns",
+            feature_columns.filter((c: string) => c !== newLabel)
+          );
+        }
+      };
+
+      const handleSelectAllFeatures = (selectAll: boolean) => {
+        if (selectAll) {
+          const allFeatureCols = inputColumns
+            .map((col) => col.name)
+            .filter((name) => name !== label_column);
+          onParamChange("feature_columns", allFeatureCols);
+        } else {
+          onParamChange("feature_columns", []);
+        }
+      };
+
+      return (
+        <div>
+          <AIParameterRecommender
+            module={module}
+            inputColumns={inputColumns.map((c) => c.name)}
+            projectName={projectName}
+            updateModuleParameters={updateModuleParameters}
+          />
+          <div className="mb-4">
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Label Column
+            </h5>
+            <select
+              value={label_column || ""}
+              onChange={(e) => handleLabelChange(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">공백</option>
+              {inputColumns.map((col) => (
+                <option key={col.name} value={col.name}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h5 className="text-xs text-gray-500 uppercase font-bold">
+                Feature Columns
+              </h5>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSelectAllFeatures(true)}
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => handleSelectAllFeatures(false)}
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2 pr-2">
+              {inputColumns.map((col) => (
+                <label
+                  key={col.name}
+                  className="flex items-center gap-2 text-sm truncate"
+                  title={col.name}
+                >
+                  <input
+                    type="checkbox"
+                    checked={feature_columns.includes(col.name)}
+                    onChange={(e) =>
+                      handleFeatureChange(col.name, e.target.checked)
+                    }
+                    disabled={col.name === label_column}
+                    className="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span
+                    className={
+                      col.name === label_column
+                        ? "text-gray-500 line-through"
+                        : ""
+                    }
+                  >
+                    {col.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
     default:
       const hasParams = Object.keys(module.parameters).length > 0;
       if (!hasParams) {
@@ -2503,6 +2436,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   setActiveTab,
   onViewDetails,
   folderHandle,
+  onRunModule,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -2511,44 +2445,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
   const [localModuleName, setLocalModuleName] = useState("");
   const [isCopied, setIsCopied] = useState(false);
-  const [terminalHeight, setTerminalHeight] = useState(200);
-  const resizableContainerRef = useRef<HTMLDivElement>(null);
-
-  const handleTerminalResizeMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startY = e.clientY;
-      const startHeight = terminalHeight;
-      const container = resizableContainerRef.current;
-      if (!container) return;
-
-      document.body.style.cursor = "row-resize";
-      document.body.style.userSelect = "none";
-
-      const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-        const dy = moveEvent.clientY - startY;
-        const newHeight = startHeight - dy;
-
-        const minHeight = 80;
-        const maxHeight = container.clientHeight - 150; // Leave 150px for the top panel
-
-        if (newHeight >= minHeight && newHeight <= maxHeight) {
-          setTerminalHeight(newHeight);
-        }
-      };
-
-      const handleMouseUp = () => {
-        document.body.style.cursor = "default";
-        document.body.style.userSelect = "auto";
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-      };
-
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
-    },
-    [terminalHeight]
-  );
+  const [showExcelModal, setShowExcelModal] = useState(false);
 
   useEffect(() => {
     if (logContainerRef.current) {
@@ -2574,18 +2471,69 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     [module, updateModuleParameters]
   );
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && module) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        updateModuleParameters(module.id, {
-          source: file.name,
-          fileContent: content,
-        });
-      };
-      reader.readAsText(file);
+      const fileName = file.name.toLowerCase();
+      
+      if ((module.type === ModuleType.LoadData || module.type === ModuleType.XolLoading) && 
+          (fileName.endsWith(".xlsx") || fileName.endsWith(".xls"))) {
+        // 엑셀 파일 처리
+        try {
+          const xlsx = await loadXLSX();
+          const arrayBuffer = await file.arrayBuffer();
+          const workbook = xlsx.read(arrayBuffer, { type: "array" });
+          const firstSheetName = workbook.SheetNames[0];
+          
+          const convertExcelToCSV = async (workbook: any, sheetName?: string): Promise<string> => {
+            const targetSheet = sheetName || workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[targetSheet];
+            const jsonData = xlsx.utils.sheet_to_json(worksheet, {
+              header: 1,
+              defval: null,
+              raw: false,
+            });
+
+            return jsonData
+              .map((row: any) => {
+                return row
+                  .map((cell: any) => {
+                    if (cell === null || cell === undefined) return "";
+                    const str = String(cell);
+                    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+                      return `"${str.replace(/"/g, '""')}"`;
+                    }
+                    return str;
+                  })
+                  .join(",");
+              })
+              .join("\n");
+          };
+          
+          const csvContent = await convertExcelToCSV(workbook, firstSheetName);
+          updateModuleParameters(module.id, {
+            source: file.name,
+            fileContent: csvContent,
+            fileType: "excel",
+            sheetName: firstSheetName,
+          });
+        } catch (error) {
+          console.error("Error processing Excel file:", error);
+          alert("엑셀 파일 처리 중 오류가 발생했습니다.");
+        }
+      } else {
+        // CSV 파일 처리
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target?.result as string;
+          updateModuleParameters(module.id, {
+            source: file.name,
+            fileContent: content,
+            fileType: "csv",
+          });
+        };
+        reader.readAsText(file);
+      }
     }
   };
 
@@ -2616,7 +2564,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
-  const codeSnippet = useMemo(() => getModuleCode(module, modules, connections), [module, modules, connections]);
+  const codeSnippet = useMemo(() => getModuleCode(module), [module]);
 
   const handleCopyCode = useCallback(() => {
     if (codeSnippet) {
@@ -2815,6 +2763,39 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
+  // canVisualize 함수를 renderOutputPreview 외부로 이동
+  const visualizableTypes = [
+    "DataPreview",
+    "StatisticsOutput",
+    "SplitDataOutput",
+    "TrainedModelOutput",
+    "StatsModelsResultOutput",
+    "XoLPriceOutput",
+    "FinalXolPriceOutput",
+    "EvaluationOutput",
+    "KMeansOutput",
+    "HierarchicalClusteringOutput",
+    "PCAOutput",
+    "DBSCANOutput",
+    "MissingHandlerOutput",
+    "EncoderOutput",
+    "NormalizerOutput",
+  ];
+
+  const canVisualize = () => {
+    if (!module || !module.outputData) return false;
+    if (visualizableTypes.includes(module.outputData.type)) return true;
+    if (
+      [
+        "KMeansOutput",
+        "HierarchicalClusteringOutput",
+        "DBSCANOutput",
+      ].includes(module.outputData.type)
+    )
+      return true;
+    return false;
+  };
+
   const renderOutputPreview = () => {
     if (
       !module ||
@@ -2828,35 +2809,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       );
     }
     const outputData = module.outputData;
-
-    const visualizableTypes = [
-      "DataPreview",
-      "StatisticsOutput",
-      "SplitDataOutput",
-      "TrainedModelOutput",
-      "StatsModelsResultOutput",
-      "XoLPriceOutput",
-      "FinalXolPriceOutput",
-      "EvaluationOutput",
-      "KMeansOutput",
-      "HierarchicalClusteringOutput",
-      "PCAOutput",
-      "DBSCANOutput",
-    ];
-
-    const canVisualize = () => {
-      if (!module || !module.outputData) return false;
-      if (visualizableTypes.includes(module.outputData.type)) return true;
-      if (
-        [
-          "KMeansOutput",
-          "HierarchicalClusteringOutput",
-          "DBSCANOutput",
-        ].includes(module.outputData.type)
-      )
-        return true;
-      return false;
-    };
 
     const renderTitle = (title: string) => (
       <h3 className="text-md font-semibold mb-2 text-gray-300">{title}</h3>
@@ -3098,29 +3050,70 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   return (
-    <div
-      ref={resizableContainerRef}
-      className="bg-gray-800 text-white h-full flex flex-col"
-    >
+    <div className="bg-gray-800 text-white h-full flex flex-col">
       <input
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".csv"
+        accept={module?.type === ModuleType.LoadData ? ".csv,.xlsx,.xls" : ".csv"}
         className="hidden"
       />
       <div className="flex-grow flex flex-col min-h-0">
         <div className="p-3 border-b border-gray-700 flex-shrink-0">
-          <input
-            type="text"
-            value={localModuleName}
-            onChange={(e) => setLocalModuleName(e.target.value)}
-            onBlur={handleNameInputBlur}
-            onKeyDown={handleNameInputKeyDown}
-            className="w-full bg-transparent text-lg font-bold focus:outline-none focus:bg-gray-700 rounded-md px-2 py-1 -ml-2"
-            placeholder="Module Name"
-            disabled={!module}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={localModuleName}
+              onChange={(e) => setLocalModuleName(e.target.value)}
+              onBlur={handleNameInputBlur}
+              onKeyDown={handleNameInputKeyDown}
+              className="flex-1 bg-transparent text-lg font-bold focus:outline-none focus:bg-gray-700 rounded-md px-2 py-1 -ml-2"
+              placeholder="Module Name"
+              disabled={!module}
+            />
+            {module && onRunModule && (() => {
+              // Stat Model, 지도학습, 비지도학습 모델은 실행 버튼 표시하지 않음
+              const noRunButtonTypes = [
+                // Stat Model
+                ModuleType.OLSModel,
+                ModuleType.LogisticModel,
+                ModuleType.PoissonModel,
+                ModuleType.QuasiPoissonModel,
+                ModuleType.NegativeBinomialModel,
+                ModuleType.StatModels,
+                // 지도학습
+                ModuleType.LinearRegression,
+                ModuleType.LogisticRegression,
+                ModuleType.PoissonRegression,
+                ModuleType.NegativeBinomialRegression,
+                ModuleType.DecisionTree,
+                ModuleType.RandomForest,
+                ModuleType.SVM,
+                ModuleType.LinearDiscriminantAnalysis,
+                ModuleType.NaiveBayes,
+                ModuleType.KNN,
+                // 비지도학습
+                ModuleType.KMeans,
+                ModuleType.HierarchicalClustering,
+                ModuleType.DBSCAN,
+                ModuleType.PrincipalComponentAnalysis,
+              ];
+              
+              if (noRunButtonTypes.includes(module.type)) {
+                return null;
+              }
+              
+              return (
+                <button
+                  onClick={() => onRunModule(module.id)}
+                  className="p-2 bg-green-600 hover:bg-green-500 rounded-md transition-colors flex-shrink-0"
+                  title="Run Module"
+                >
+                  <PlayIcon className="w-4 h-4 text-white" />
+                </button>
+              );
+            })()}
+          </div>
           <p className="text-xs text-gray-500 mt-1">
             {module ? module.type : "No module selected"}
           </p>
@@ -3131,33 +3124,43 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div className="flex">
               <button
                 onClick={() => setActiveTab("properties")}
-                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
                   activeTab === "properties"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
                 }`}
               >
-                <CogIcon className="w-5 h-5" /> Properties
+                Properties
               </button>
               <button
                 onClick={() => setActiveTab("preview")}
-                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
                   activeTab === "preview"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
                 }`}
               >
-                <TableCellsIcon className="w-5 h-5" /> Preview
+                Preview
               </button>
               <button
                 onClick={() => setActiveTab("code")}
-                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
                   activeTab === "code"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
                 }`}
               >
-                <CodeBracketIcon className="w-5 h-5" /> Code
+                Code
+              </button>
+              <button
+                onClick={() => setActiveTab("terminal")}
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
+                  activeTab === "terminal"
+                    ? "bg-gray-700 text-white"
+                    : "text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Terminal
               </button>
             </div>
           </div>
@@ -3173,19 +3176,32 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           ) : (
             <>
               {activeTab === "properties" && (
-                <PropertyGroup title="Parameters" module={module}>
-                  {renderParameters(
-                    module,
-                    handleParamChange,
-                    fileInputRef,
-                    modules,
-                    connections,
-                    projectName,
-                    updateModuleParameters,
-                    handleLoadSample,
-                    folderHandle
+                <div>
+                  <PropertyGroup title="Parameters" module={module}>
+                    {renderParameters(
+                      module,
+                      handleParamChange,
+                      fileInputRef,
+                      modules,
+                      connections,
+                      projectName,
+                      updateModuleParameters,
+                      handleLoadSample,
+                      folderHandle,
+                      () => setShowExcelModal(true)
+                    )}
+                  </PropertyGroup>
+                  {canVisualize() && (
+                    <div className="mt-4 border-t border-gray-700 pt-4">
+                      <button
+                        onClick={() => onViewDetails(module.id)}
+                        className="w-full px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-white transition-colors"
+                      >
+                        View Details
+                      </button>
+                    </div>
                   )}
-                </PropertyGroup>
+                </div>
               )}
               {activeTab === "preview" && (
                 <div>
@@ -3238,39 +3254,22 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   </div>
                 </div>
               )}
-            </>
-          )}
-        </div>
-      </div>
-
-      <div
-        className="flex-shrink-0 flex flex-col"
-        style={{ height: `${terminalHeight}px` }}
-      >
-        <div
-          onMouseDown={handleTerminalResizeMouseDown}
-          className="w-full h-1.5 cursor-row-resize bg-gray-700 hover:bg-blue-500 transition-colors"
-          title="Resize Terminal"
-        />
-        <div className="p-2 border-b border-gray-700 bg-gray-900/50 flex items-center gap-2">
-          <CommandLineIcon className="w-5 h-5 text-gray-400" />
-          <h3 className="text-sm font-semibold text-gray-300">Terminal</h3>
-        </div>
-        <div
-          ref={logContainerRef}
-          className="flex-grow overflow-y-auto bg-gray-900 text-xs font-mono p-2 space-y-1"
-          onContextMenu={(e) => {
-            // 텍스트가 선택되어 있으면 컨텍스트 메뉴에서 복사 가능하도록
-            const selection = window.getSelection();
-            if (selection && selection.toString().trim()) {
-              // 브라우저 기본 컨텍스트 메뉴 사용 (복사 옵션 포함)
-              return;
-            }
-            // 텍스트가 선택되지 않았으면 기본 동작 방지
-            e.preventDefault();
-          }}
-        >
-          {logs.map((log) => (
+              {activeTab === "terminal" && (
+                <div
+                  ref={logContainerRef}
+                  className="flex-grow overflow-y-auto bg-gray-900 text-xs font-mono p-2 space-y-1"
+                  onContextMenu={(e) => {
+                    // 텍스트가 선택되어 있으면 컨텍스트 메뉴에서 복사 가능하도록
+                    const selection = window.getSelection();
+                    if (selection && selection.toString().trim()) {
+                      // 브라우저 기본 컨텍스트 메뉴 사용 (복사 옵션 포함)
+                      return;
+                    }
+                    // 텍스트가 선택되지 않았으면 기본 동작 방지
+                    e.preventDefault();
+                  }}
+                >
+                  {logs.map((log) => (
             <div
               key={log.id}
               className="flex group hover:bg-gray-800/50 rounded px-1 py-0.5"
@@ -3338,8 +3337,27 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               로그가 없습니다
             </div>
           )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
+
+      {/* Excel Input Modal */}
+      {showExcelModal && module && module.type === ModuleType.LoadData && (
+        <ExcelInputModal
+          onClose={() => setShowExcelModal(false)}
+          onApply={(csvContent) => {
+            updateModuleParameters(module.id, {
+              source: "pasted_data.csv",
+              fileContent: csvContent,
+              fileType: "pasted",
+            });
+            setShowExcelModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };

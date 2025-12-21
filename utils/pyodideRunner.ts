@@ -1283,6 +1283,809 @@ except Exception as e:
 }
 
 /**
+ * Decision Tree 모델을 Python으로 실행합니다
+ * 타임아웃: 60초
+ */
+export async function fitDecisionTreePython(
+  X: number[][],
+  y: number[],
+  modelPurpose: string = "classification",
+  criterion: string = "gini",
+  maxDepth: number | null = null,
+  minSamplesSplit: number = 2,
+  minSamplesLeaf: number = 1,
+  featureColumns?: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  metrics: Record<string, number>;
+}> {
+  try {
+    // Pyodide 로드 (타임아웃: 30초)
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // 데이터를 Python에 전달
+    const dataRows: any[] = [];
+    for (let i = 0; i < X.length; i++) {
+      const row: any = {};
+      if (featureColumns) {
+        featureColumns.forEach((col, idx) => {
+          row[col] = X[i][idx];
+        });
+      } else {
+        X[i].forEach((val, idx) => {
+          row[`x${idx}`] = val;
+        });
+      }
+      row["y"] = y[i];
+      dataRows.push(row);
+    }
+
+    py.globals.set("js_data", dataRows);
+    py.globals.set(
+      "js_feature_columns",
+      featureColumns || X[0].map((_, idx) => `x${idx}`)
+    );
+    py.globals.set("js_label_column", "y");
+
+    // Python 코드 실행
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, mean_squared_error, r2_score, mean_absolute_error
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    
+    # 데이터 검증
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    # 데이터 검증
+    if X_train.empty:
+        raise ValueError("X_train is empty")
+    if y_train.empty:
+        raise ValueError("y_train is empty")
+    if len(X_train) != len(y_train):
+        raise ValueError(f"X_train and y_train must have same number of samples: X_train.shape[0]={len(X_train)}, y_train.shape[0]={len(y_train)}")
+    if len(X_train) < 1:
+        raise ValueError(f"Need at least 1 sample, got {len(X_train)}")
+    
+    # 모델 생성
+    p_model_purpose = '${modelPurpose}'
+    p_criterion = '${criterion}'
+    p_max_depth = ${maxDepth !== null ? maxDepth : "None"}
+    p_min_samples_split = ${minSamplesSplit}
+    p_min_samples_leaf = ${minSamplesLeaf}
+    
+    if p_model_purpose == 'classification':
+        model = DecisionTreeClassifier(
+            criterion=p_criterion.lower(),
+            max_depth=p_max_depth,
+            min_samples_split=p_min_samples_split,
+            min_samples_leaf=p_min_samples_leaf,
+            random_state=42
+        )
+    else:
+        criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
+        model = DecisionTreeRegressor(
+            criterion=criterion_reg,
+            max_depth=p_max_depth,
+            min_samples_split=p_min_samples_split,
+            min_samples_leaf=p_min_samples_leaf,
+            random_state=42
+        )
+    
+    # 모델 훈련
+    model.fit(X_train, y_train)
+    
+    # 예측
+    y_pred = model.predict(X_train)
+    
+    # 메트릭 계산
+    if p_model_purpose == 'classification':
+        accuracy = float(accuracy_score(y_train, y_pred))
+        precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
+        recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
+        f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+        
+        metrics_dict = {
+            'Accuracy': accuracy,
+            'Precision': precision,
+            'Recall': recall,
+            'F1-Score': f1
+        }
+        
+        # ROC-AUC 계산 (이진 분류인 경우)
+        try:
+            if len(np.unique(y_train)) == 2:
+                y_pred_proba = model.predict_proba(X_train)[:, 1]
+                roc_auc = float(roc_auc_score(y_train, y_pred_proba))
+                metrics_dict['ROC-AUC'] = roc_auc
+        except Exception:
+            pass
+    else:
+        mse = float(mean_squared_error(y_train, y_pred))
+        rmse = float(np.sqrt(mse))
+        mae = float(mean_absolute_error(y_train, y_pred))
+        r2 = float(r2_score(y_train, y_pred))
+        
+        metrics_dict = {
+            'R-squared': r2,
+            'Mean Squared Error': mse,
+            'Root Mean Squared Error': rmse,
+            'Mean Absolute Error': mae
+        }
+    
+    result = {
+        'metrics': metrics_dict,
+        'feature_columns': p_feature_columns
+    }
+    
+    # 전역 변수에 저장
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    # 전역 변수에 저장
+    js_result = error_result
+`;
+
+    // Python 코드 실행
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Decision Tree 실행 타임아웃 (60초 초과)"
+    );
+
+    // 전역 변수에서 결과 가져오기
+    const resultPyObj = py.globals.get("js_result");
+
+    // 결과 객체 검증
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Decision Tree error: Python code returned None or undefined.`
+      );
+    }
+
+    // Python 딕셔너리를 JavaScript 객체로 변환
+    const result = fromPython(resultPyObj);
+
+    // 에러가 발생한 경우 처리
+    if (result.__error__) {
+      throw new Error(
+        `Python Decision Tree error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    // 필수 속성 검증
+    if (!result.metrics || typeof result.metrics !== "object") {
+      throw new Error(
+        `Python Decision Tree error: Missing or invalid 'metrics' in result.`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      metrics: result.metrics,
+    };
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Decision Tree error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * SVM 모델을 Python으로 실행합니다
+ * 타임아웃: 60초
+ */
+export async function fitSVMPython(
+  X: number[][],
+  y: number[],
+  modelPurpose: string = "classification",
+  kernel: string = "rbf",
+  C: number = 1.0,
+  gamma: string | number = "scale",
+  degree: number = 3,
+  featureColumns?: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  metrics: Record<string, number>;
+}> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    const dataRows: any[] = [];
+    for (let i = 0; i < X.length; i++) {
+      const row: any = {};
+      if (featureColumns) {
+        featureColumns.forEach((col, idx) => {
+          row[col] = X[i][idx];
+        });
+      } else {
+        X[i].forEach((val, idx) => {
+          row[`x${idx}`] = val;
+        });
+      }
+      row["y"] = y[i];
+      dataRows.push(row);
+    }
+
+    py.globals.set("js_data", dataRows);
+    py.globals.set(
+      "js_feature_columns",
+      featureColumns || X[0].map((_, idx) => `x${idx}`)
+    );
+    py.globals.set("js_label_column", "y");
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.svm import SVC, SVR
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, mean_squared_error, r2_score, mean_absolute_error
+
+try:
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    if X_train.empty or y_train.empty:
+        raise ValueError("X_train or y_train is empty")
+    if len(X_train) != len(y_train):
+        raise ValueError(f"X_train and y_train must have same number of samples")
+    if len(X_train) < 1:
+        raise ValueError(f"Need at least 1 sample, got {len(X_train)}")
+    
+    p_model_purpose = '${modelPurpose}'
+    p_kernel = '${kernel}'
+    p_C = ${C}
+    ${typeof gamma === "string" ? `p_gamma = '${gamma}'` : `p_gamma = ${gamma}`}
+    p_degree = ${degree}
+    
+    if p_model_purpose == 'classification':
+        model = SVC(
+            kernel=p_kernel,
+            C=p_C,
+            gamma=p_gamma,
+            degree=p_degree,
+            random_state=42
+        )
+    else:
+        model = SVR(
+            kernel=p_kernel,
+            C=p_C,
+            gamma=p_gamma,
+            degree=p_degree
+        )
+    
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_train)
+    
+    if p_model_purpose == 'classification':
+        accuracy = float(accuracy_score(y_train, y_pred))
+        precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
+        recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
+        f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+        
+        metrics_dict = {
+            'Accuracy': accuracy,
+            'Precision': precision,
+            'Recall': recall,
+            'F1-Score': f1
+        }
+        
+        try:
+            if len(np.unique(y_train)) == 2:
+                y_pred_proba = model.predict_proba(X_train)[:, 1]
+                roc_auc = float(roc_auc_score(y_train, y_pred_proba))
+                metrics_dict['ROC-AUC'] = roc_auc
+        except Exception:
+            pass
+    else:
+        mse = float(mean_squared_error(y_train, y_pred))
+        rmse = float(np.sqrt(mse))
+        mae = float(mean_absolute_error(y_train, y_pred))
+        r2 = float(r2_score(y_train, y_pred))
+        
+        metrics_dict = {
+            'R-squared': r2,
+            'Mean Squared Error': mse,
+            'Root Mean Squared Error': rmse,
+            'Mean Absolute Error': mae
+        }
+    
+    result = {
+        'metrics': metrics_dict,
+        'feature_columns': p_feature_columns
+    }
+    
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python SVM 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python SVM error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result.__error__) {
+      throw new Error(
+        `Python SVM error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    if (!result.metrics || typeof result.metrics !== "object") {
+      throw new Error(
+        `Python SVM error: Missing or invalid 'metrics' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      metrics: result.metrics,
+    };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python SVM error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * Linear Discriminant Analysis 모델을 Python으로 실행합니다
+ * 타임아웃: 60초
+ */
+export async function fitLDAPython(
+  X: number[][],
+  y: number[],
+  solver: string = "svd",
+  shrinkage: number | null = null,
+  nComponents: number | null = null,
+  featureColumns?: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  metrics: Record<string, number>;
+}> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    const dataRows: any[] = [];
+    for (let i = 0; i < X.length; i++) {
+      const row: any = {};
+      if (featureColumns) {
+        featureColumns.forEach((col, idx) => {
+          row[col] = X[i][idx];
+        });
+      } else {
+        X[i].forEach((val, idx) => {
+          row[`x${idx}`] = val;
+        });
+      }
+      row["y"] = y[i];
+      dataRows.push(row);
+    }
+
+    py.globals.set("js_data", dataRows);
+    py.globals.set(
+      "js_feature_columns",
+      featureColumns || X[0].map((_, idx) => `x${idx}`)
+    );
+    py.globals.set("js_label_column", "y");
+
+    const shrinkageStr = shrinkage !== null ? String(shrinkage) : "None";
+    const nComponentsStr = nComponents !== null ? String(nComponents) : "None";
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+
+try:
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    if X_train.empty or y_train.empty:
+        raise ValueError("X_train or y_train is empty")
+    if len(X_train) != len(y_train):
+        raise ValueError(f"X_train and y_train must have same number of samples")
+    if len(X_train) < 1:
+        raise ValueError(f"Need at least 1 sample, got {len(X_train)}")
+    
+    p_solver = '${solver}'
+    p_shrinkage = ${shrinkageStr} if ${shrinkageStr} != 'None' else None
+    p_n_components = ${nComponentsStr} if ${nComponentsStr} != 'None' else None
+    
+    model = LinearDiscriminantAnalysis(
+        solver=p_solver,
+        shrinkage=p_shrinkage,
+        n_components=p_n_components
+    )
+    
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_train)
+    
+    accuracy = float(accuracy_score(y_train, y_pred))
+    precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
+    recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
+    f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+    
+    metrics_dict = {
+        'Accuracy': accuracy,
+        'Precision': precision,
+        'Recall': recall,
+        'F1-Score': f1
+    }
+    
+    try:
+        if len(np.unique(y_train)) == 2:
+            y_pred_proba = model.predict_proba(X_train)[:, 1]
+            roc_auc = float(roc_auc_score(y_train, y_pred_proba))
+            metrics_dict['ROC-AUC'] = roc_auc
+    except Exception:
+        pass
+    
+    result = {
+        'metrics': metrics_dict,
+        'feature_columns': p_feature_columns
+    }
+    
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python LDA 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python LDA error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result.__error__) {
+      throw new Error(
+        `Python LDA error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    if (!result.metrics || typeof result.metrics !== "object") {
+      throw new Error(
+        `Python LDA error: Missing or invalid 'metrics' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      metrics: result.metrics,
+    };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python LDA error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * Naive Bayes 모델을 Python으로 실행합니다
+ * 타임아웃: 60초
+ */
+export async function fitNaiveBayesPython(
+  X: number[][],
+  y: number[],
+  modelType: string = "Gaussian",
+  alpha: number = 1.0,
+  featureColumns?: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  metrics: Record<string, number>;
+}> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    const dataRows: any[] = [];
+    for (let i = 0; i < X.length; i++) {
+      const row: any = {};
+      if (featureColumns) {
+        featureColumns.forEach((col, idx) => {
+          row[col] = X[i][idx];
+        });
+      } else {
+        X[i].forEach((val, idx) => {
+          row[`x${idx}`] = val;
+        });
+      }
+      row["y"] = y[i];
+      dataRows.push(row);
+    }
+
+    py.globals.set("js_data", dataRows);
+    py.globals.set(
+      "js_feature_columns",
+      featureColumns || X[0].map((_, idx) => `x${idx}`)
+    );
+    py.globals.set("js_label_column", "y");
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB, ComplementNB
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+
+try:
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    if X_train.empty or y_train.empty:
+        raise ValueError("X_train or y_train is empty")
+    if len(X_train) != len(y_train):
+        raise ValueError(f"X_train and y_train must have same number of samples")
+    if len(X_train) < 1:
+        raise ValueError(f"Need at least 1 sample, got {len(X_train)}")
+    
+    p_model_type = '${modelType}'
+    p_alpha = ${alpha}
+    
+    if p_model_type == 'Gaussian':
+        model = GaussianNB()
+    elif p_model_type == 'Multinomial':
+        model = MultinomialNB(alpha=p_alpha)
+    elif p_model_type == 'Bernoulli':
+        model = BernoulliNB(alpha=p_alpha)
+    elif p_model_type == 'Complement':
+        model = ComplementNB(alpha=p_alpha)
+    else:
+        model = GaussianNB()
+    
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_train)
+    
+    accuracy = float(accuracy_score(y_train, y_pred))
+    precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
+    recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
+    f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+    
+    metrics_dict = {
+        'Accuracy': accuracy,
+        'Precision': precision,
+        'Recall': recall,
+        'F1-Score': f1
+    }
+    
+    try:
+        if len(np.unique(y_train)) == 2:
+            y_pred_proba = model.predict_proba(X_train)[:, 1]
+            roc_auc = float(roc_auc_score(y_train, y_pred_proba))
+            metrics_dict['ROC-AUC'] = roc_auc
+    except Exception:
+        pass
+    
+    result = {
+        'metrics': metrics_dict,
+        'feature_columns': p_feature_columns
+    }
+    
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Naive Bayes 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Naive Bayes error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result.__error__) {
+      throw new Error(
+        `Python Naive Bayes error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    if (!result.metrics || typeof result.metrics !== "object") {
+      throw new Error(
+        `Python Naive Bayes error: Missing or invalid 'metrics' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      metrics: result.metrics,
+    };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Naive Bayes error:\n${errorMessage}`);
+  }
+}
+
+/**
  * Count Regression (Poisson, Negative Binomial, Quasi-Poisson)을 statsmodels로 실행합니다
  * 타임아웃: 60초
  */
@@ -3254,6 +4057,330 @@ result
   } catch (error: any) {
     const errorMessage = error.message || String(error);
     throw new Error(`Python EvaluateStats error: ${errorMessage}`);
+  }
+}
+
+/**
+ * ScoreModel 결과에 PCA를 적용하여 시각화용 차원 축소를 수행합니다
+ * 타임아웃: 60초
+ */
+export async function calculatePCAForScoreVisualization(
+  data: any[],
+  featureColumns: string[],
+  nComponents: number = 2,
+  timeoutMs: number = 60000
+): Promise<{
+  coordinates: number[][]; // [n_samples, n_components]
+  explainedVarianceRatio: number[];
+}> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // 데이터를 Python에 전달 (다른 함수들과 동일한 방식)
+    // 데이터 검증
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      throw new Error(`PCA: Input data is invalid. Type: ${typeof data}, IsArray: ${Array.isArray(data)}, Length: ${data?.length || 0}`);
+    }
+    if (!featureColumns || !Array.isArray(featureColumns) || featureColumns.length === 0) {
+      throw new Error(`PCA: Feature columns are invalid. Type: ${typeof featureColumns}, IsArray: ${Array.isArray(featureColumns)}, Length: ${featureColumns?.length || 0}`);
+    }
+    
+    // Pyodide에 데이터 설정 (동기적으로 설정)
+    py.globals.set("js_data", data);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_n_components", nComponents);
+    
+    // 설정 직후 확인 (디버깅용 - 동기적으로 확인)
+    const verifyData = py.globals.get("js_data");
+    const verifyCols = py.globals.get("js_feature_columns");
+    if (!verifyData) {
+      throw new Error(`PCA: Failed to set js_data immediately after setting. Original data length: ${data.length}`);
+    }
+    if (!verifyCols) {
+      throw new Error(`PCA: Failed to set js_feature_columns immediately after setting. Original columns: ${featureColumns.join(', ')}`);
+    }
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
+try:
+    # 데이터 준비
+    # 디버깅: js_data 상태 확인 (Python 코드 실행 시점)
+    import sys
+    debug_info = {
+        'js_data_is_none': js_data is None,
+        'js_data_type': str(type(js_data)) if js_data is not None else 'None',
+        'js_data_has_to_py': hasattr(js_data, 'to_py') if js_data is not None else False,
+        'js_data_repr': repr(js_data)[:100] if js_data is not None else 'None'
+    }
+    
+    if js_data is None:
+        # js_data가 None인 경우, 전역 변수에서 직접 확인 시도
+        try:
+            import pyodide
+            if hasattr(pyodide, 'globals'):
+                globals_check = pyodide.globals.get('js_data')
+                debug_info['globals_js_data'] = 'exists' if globals_check is not None else 'missing'
+        except:
+            pass
+        raise ValueError(f"js_data is None at Python execution time. Debug info: {debug_info}")
+    
+    # Pyodide에서 JavaScript 객체를 Python으로 변환
+    # js_data는 Pyodide Proxy 객체이므로 to_py() 메서드 사용
+    try:
+        # 먼저 js_data의 타입과 속성 확인
+        if hasattr(js_data, 'to_py'):
+            data_list = js_data.to_py()
+        elif isinstance(js_data, list):
+            # 이미 Python 리스트인 경우
+            data_list = js_data
+        elif hasattr(js_data, '__iter__'):
+            # iterable인 경우
+            data_list = list(js_data)
+        else:
+            # 단일 객체인 경우 리스트로 감싸기
+            data_list = [js_data]
+    except Exception as e:
+        raise ValueError(f"Failed to convert js_data to Python: {str(e)}. Debug info: {debug_info}")
+    
+    if not data_list or len(data_list) == 0:
+        raise ValueError(f"Input data is empty. Data type: {type(data_list)}, Length: {len(data_list) if data_list else 0}")
+    
+    dataframe = pd.DataFrame(data_list)
+    
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty after conversion")
+    
+    if js_feature_columns is None:
+        raise ValueError("js_feature_columns is None. Check if feature columns were passed correctly.")
+    
+    try:
+        if hasattr(js_feature_columns, 'to_py'):
+            p_feature_columns = js_feature_columns.to_py()
+        elif isinstance(js_feature_columns, list):
+            # 이미 Python 리스트인 경우
+            p_feature_columns = js_feature_columns
+        else:
+            # 다른 타입인 경우 시도
+            p_feature_columns = list(js_feature_columns) if hasattr(js_feature_columns, '__iter__') else [js_feature_columns]
+    except Exception as e:
+        raise ValueError(f"Failed to convert js_feature_columns to Python: {str(e)}. Type: {type(js_feature_columns)}, has to_py: {hasattr(js_feature_columns, 'to_py')}")
+    
+    if not p_feature_columns or len(p_feature_columns) == 0:
+        raise ValueError(f"Feature columns list is empty. Columns type: {type(p_feature_columns)}, Length: {len(p_feature_columns) if p_feature_columns else 0}")
+    
+    p_n_components = int(js_n_components)
+    
+    # 데이터 검증
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    
+    # feature columns가 존재하는지 확인
+    missing_cols = [col for col in p_feature_columns if col not in dataframe.columns]
+    if missing_cols:
+        raise ValueError(f"Feature columns not found in DataFrame: {missing_cols}")
+    
+    # Feature 데이터 추출
+    X = dataframe[p_feature_columns].select_dtypes(include=[np.number])
+    
+    # 숫자형이 아닌 컬럼 제거
+    if X.empty:
+        raise ValueError("No numeric feature columns found")
+    
+    # 결측치가 있는 행 찾기
+    valid_mask = ~X.isnull().any(axis=1)
+    X_clean = X[valid_mask].copy()
+    
+    if len(X_clean) < 2:
+        raise ValueError(f"Need at least 2 valid samples for PCA, got {len(X_clean)}")
+    
+    if X_clean.shape[1] < p_n_components:
+        raise ValueError(f"Number of features ({X_clean.shape[1]}) must be >= n_components ({p_n_components})")
+    
+    # 표준화
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_clean)
+    
+    # PCA 적용
+    pca = PCA(n_components=p_n_components)
+    X_pca = pca.fit_transform(X_scaled)
+    
+    # 결과 준비 (유효한 데이터만 반환)
+    coordinates = X_pca.tolist()
+    explained_variance_ratio = pca.explained_variance_ratio_.tolist()
+    
+    # 유효한 인덱스 정보도 함께 반환 (필터링에 사용)
+    valid_indices = X_clean.index.tolist()
+    
+    result = {
+        'coordinates': coordinates,
+        'explained_variance_ratio': explained_variance_ratio,
+        'valid_indices': valid_indices
+    }
+    
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+except:
+    # 예상치 못한 에러
+    error_result = {
+        '__error__': True,
+        'error_type': 'UnknownError',
+        'error_message': 'Unexpected error occurred: ' + str(sys.exc_info()[1]),
+        'error_traceback': str(sys.exc_info())
+    }
+    js_result = error_result
+`;
+
+    // Python 코드 실행 (다른 함수들과 동일한 방식)
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python PCA 계산 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      // 디버깅: 데이터 상태 확인
+      let debugInfo: any = {};
+      try {
+        const dataCheck = py.globals.get("js_data");
+        const colsCheck = py.globals.get("js_feature_columns");
+        const nCompCheck = py.globals.get("js_n_components");
+        
+        // Python 코드 실행 후에도 데이터가 있는지 확인
+        let dataInfo: any = {};
+        let colsInfo: any = {};
+        
+        if (dataCheck) {
+          try {
+            if (typeof dataCheck.to_py === 'function') {
+              const pyData = dataCheck.to_py();
+              dataInfo = {
+                exists: true,
+                type: typeof pyData,
+                isArray: Array.isArray(pyData),
+                length: Array.isArray(pyData) ? pyData.length : 'not_array'
+              };
+            } else {
+              dataInfo = { exists: true, hasToPy: false, type: typeof dataCheck };
+            }
+          } catch (e) {
+            dataInfo = { exists: true, error: String(e) };
+          }
+        } else {
+          dataInfo = { exists: false };
+        }
+        
+        if (colsCheck) {
+          try {
+            if (typeof colsCheck.to_py === 'function') {
+              const pyCols = colsCheck.to_py();
+              colsInfo = {
+                exists: true,
+                type: typeof pyCols,
+                isArray: Array.isArray(pyCols),
+                length: Array.isArray(pyCols) ? pyCols.length : 'not_array',
+                values: Array.isArray(pyCols) ? pyCols : 'not_array'
+              };
+            } else {
+              colsInfo = { exists: true, hasToPy: false, type: typeof colsCheck };
+            }
+          } catch (e) {
+            colsInfo = { exists: true, error: String(e) };
+          }
+        } else {
+          colsInfo = { exists: false };
+        }
+        
+        debugInfo = {
+          afterExecution: {
+            js_data: dataInfo,
+            js_feature_columns: colsInfo,
+            js_n_components: nCompCheck
+          },
+          original: {
+            dataLength: data.length,
+            columns: featureColumns,
+            nComponents: nComponents
+          }
+        };
+      } catch (e) {
+        debugInfo = { error: String(e), stack: (e as Error).stack };
+      }
+      throw new Error(
+        `Python PCA error: Python code returned None or undefined. Debug info: ${JSON.stringify(debugInfo, null, 2)}`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result.__error__) {
+      throw new Error(
+        `Python PCA error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    if (!result.coordinates || !Array.isArray(result.coordinates)) {
+      throw new Error(
+        `Python PCA error: Missing or invalid 'coordinates' in result.`
+      );
+    }
+
+    if (!result.explained_variance_ratio || !Array.isArray(result.explained_variance_ratio)) {
+      throw new Error(
+        `Python PCA error: Missing or invalid 'explained_variance_ratio' in result.`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_n_components");
+    py.globals.delete("js_result");
+    try {
+      py.globals.delete("python_error");
+    } catch {}
+
+    return {
+      coordinates: result.coordinates,
+      explainedVarianceRatio: result.explained_variance_ratio,
+    };
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_n_components");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python PCA error:\n${errorMessage}`);
   }
 }
 

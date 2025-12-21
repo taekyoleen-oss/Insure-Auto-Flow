@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { CanvasModule, StatisticsOutput } from '../types';
-import { XCircleIcon, SparklesIcon } from './icons';
+import { XCircleIcon, SparklesIcon, ArrowDownTrayIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { SpreadViewModal } from './SpreadViewModal';
 
 interface StatisticsPreviewModalProps {
     module: CanvasModule;
@@ -135,11 +136,56 @@ const Pairplot: React.FC<{ output: StatisticsOutput }> = ({ output }) => {
 export const StatisticsPreviewModal: React.FC<StatisticsPreviewModalProps> = ({ module, projectName, onClose }) => {
     const [isInterpreting, setIsInterpreting] = useState(false);
     const [aiInterpretation, setAiInterpretation] = useState<string | null>(null);
+    const [showSpreadView, setShowSpreadView] = useState(false);
 
     const output = module.outputData as StatisticsOutput;
-    if (!output || output.type !== 'StatisticsOutput') return null;
+    const hasValidOutput = output && output.type === 'StatisticsOutput';
+    const stats = hasValidOutput ? output.stats : null;
+    const correlation = hasValidOutput ? output.correlation : null;
 
-    const { stats, correlation } = output;
+    // Spread View용 데이터 변환 (Descriptive Statistics 테이블)
+    const spreadViewData = useMemo(() => {
+        if (!stats) return [];
+        const data: Array<Record<string, any>> = [];
+        const statDisplay = [
+            { key: 'count', label: 'Count' },
+            { key: 'mean', label: 'Mean' },
+            { key: 'std', label: 'Std Dev' },
+            { key: '50%', label: 'Median' },
+            { key: 'min', label: 'Min' },
+            { key: 'max', label: 'Max' },
+            { key: '25%', label: '25%' },
+            { key: '75%', label: '75%' },
+            { key: 'mode', label: 'Mode' },
+            { key: 'nulls', label: 'Null' },
+            { key: 'skewness', label: 'Skew' },
+            { key: 'kurtosis', label: 'Kurt' },
+        ];
+        
+        statDisplay.forEach(({ key, label }) => {
+            const row: Record<string, any> = { Metric: label };
+            Object.keys(stats).forEach(col => {
+                const value = (stats[col] as any)[key];
+                let displayValue = value;
+                if (typeof value === 'number' && !Number.isInteger(value)) {
+                    displayValue = value.toFixed(2);
+                }
+                row[col] = displayValue === undefined || displayValue === null || Number.isNaN(displayValue) ? 'N/A' : String(displayValue);
+            });
+            data.push(row);
+        });
+        
+        return data;
+    }, [stats]);
+
+    const spreadViewColumns = useMemo(() => {
+        if (!stats) return [{ name: 'Metric', type: 'string' }];
+        const cols = [{ name: 'Metric', type: 'string' }];
+        Object.keys(stats).forEach(col => {
+            cols.push({ name: col, type: 'number' });
+        });
+        return cols;
+    }, [stats]);
 
     const statDisplay = [
         { key: 'count', label: 'Count' },
@@ -220,9 +266,47 @@ ${correlationText}
             >
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Statistics Preview: {module.name}</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowSpreadView(true)}
+                            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                            </svg>
+                            Spread View
+                        </button>
+                        <button
+                            onClick={() => {
+                                const csvContent = [
+                                    spreadViewColumns.map(c => c.name).join(','),
+                                    ...spreadViewData.map(row => 
+                                        spreadViewColumns.map(col => {
+                                            const val = row[col.name];
+                                            if (val === null || val === undefined) return '';
+                                            const str = String(val);
+                                            return str.includes(',') || str.includes('"') || str.includes('\n') 
+                                                ? `"${str.replace(/"/g, '""')}"` 
+                                                : str;
+                                        }).join(',')
+                                    )
+                                ].join('\n');
+                                const bom = '\uFEFF';
+                                const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+                                const link = document.createElement('a');
+                                link.href = URL.createObjectURL(blob);
+                                link.download = `${module.name}_statistics.csv`;
+                                link.click();
+                            }}
+                            className="text-gray-500 hover:text-gray-800 p-1 rounded hover:bg-gray-100"
+                            title="Download CSV"
+                        >
+                            <ArrowDownTrayIcon className="w-6 h-6" />
+                        </button>
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </header>
                 <main className="flex-grow p-4 overflow-auto flex flex-col gap-6">
                     <div className="flex justify-end font-sans">
@@ -247,59 +331,82 @@ ${correlationText}
                         </div>
                     )}
 
-                    {/* Descriptive Statistics Section */}
-                    <div>
-                        <h3 className="text-lg font-semibold mb-2 text-gray-700">Descriptive Statistics</h3>
-                        <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                            <table className="w-full text-sm text-left table-auto">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="py-1.5 px-3 font-semibold text-gray-600">Metric</th>
-                                        {Object.keys(stats).map(col => (
-                                            <th key={col} className="py-1.5 px-3 font-semibold text-gray-600 text-right">{col}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {statDisplay.map(({ key, label }) => (
-                                        <tr key={key} className="border-b border-gray-200 last:border-b-0">
-                                            <td className="py-1.5 px-3 font-medium text-gray-500">{label}</td>
-                                            {Object.keys(stats).map(col => {
-                                                const value = (stats[col] as any)[key];
-                                                let displayValue = value;
-                                                if (typeof value === 'number' && !Number.isInteger(value)) {
-                                                    displayValue = value.toFixed(2);
-                                                }
-                                                return (
-                                                    <td key={`${key}-${col}`} className="py-1.5 px-3 font-mono text-right text-gray-700">
-                                                        {displayValue === undefined || displayValue === null || Number.isNaN(displayValue) ? 'N/A' : String(displayValue)}
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                    {!hasValidOutput ? (
+                        <div className="flex items-center justify-center p-8 text-gray-500">
+                            <div className="text-center">
+                                <p className="text-lg font-semibold mb-2">No Statistics Data Available</p>
+                                <p className="text-sm">Please run the Statistics module first to view the results.</p>
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <>
+                            {/* Descriptive Statistics Section */}
+                            <div>
+                                <h3 className="text-lg font-semibold mb-2 text-gray-700">Descriptive Statistics</h3>
+                                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                    <table className="w-full text-sm text-left table-auto">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="py-1.5 px-3 font-semibold text-gray-600">Metric</th>
+                                                {stats && Object.keys(stats).map(col => (
+                                                    <th key={col} className="py-1.5 px-3 font-semibold text-gray-600 text-right">{col}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {statDisplay.map(({ key, label }) => (
+                                                <tr key={key} className="border-b border-gray-200 last:border-b-0">
+                                                    <td className="py-1.5 px-3 font-medium text-gray-500">{label}</td>
+                                                    {stats && Object.keys(stats).map(col => {
+                                                        const value = (stats[col] as any)[key];
+                                                        let displayValue = value;
+                                                        if (typeof value === 'number' && !Number.isInteger(value)) {
+                                                            displayValue = value.toFixed(2);
+                                                        }
+                                                        return (
+                                                            <td key={`${key}-${col}`} className="py-1.5 px-3 font-mono text-right text-gray-700">
+                                                                {displayValue === undefined || displayValue === null || Number.isNaN(displayValue) ? 'N/A' : String(displayValue)}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                    {/* Correlation Analysis Section */}
-                    <div>
-                        <h3 className="text-lg font-semibold mb-2 text-gray-700">Correlation Analysis</h3>
-                         <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                            <CorrelationHeatmap matrix={correlation} />
-                        </div>
-                    </div>
+                            {/* Correlation Analysis Section */}
+                            {correlation && (
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-2 text-gray-700">Correlation Analysis</h3>
+                                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                        <CorrelationHeatmap matrix={correlation} />
+                                    </div>
+                                </div>
+                            )}
 
-                    {/* Pairplot Visualization Section */}
-                    <div>
-                        <h3 className="text-lg font-semibold mb-2 text-gray-700">Pairplot</h3>
-                        <div className="p-4 border border-gray-200 rounded-lg">
-                            <Pairplot output={output} />
-                        </div>
-                    </div>
+                            {/* Pairplot Visualization Section */}
+                            {output && (
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-2 text-gray-700">Pairplot</h3>
+                                    <div className="p-4 border border-gray-200 rounded-lg">
+                                        <Pairplot output={output} />
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </main>
             </div>
+            {showSpreadView && spreadViewData.length > 0 && (
+                <SpreadViewModal
+                    onClose={() => setShowSpreadView(false)}
+                    data={spreadViewData}
+                    columns={spreadViewColumns}
+                    title={`Spread View: ${module.name} - Statistics`}
+                />
+            )}
         </div>
     );
 };

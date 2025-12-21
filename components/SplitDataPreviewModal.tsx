@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { CanvasModule, SplitDataOutput, DataPreview } from '../types';
-import { XCircleIcon, SparklesIcon } from './icons';
+import { XCircleIcon, SparklesIcon, ArrowDownTrayIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { SpreadViewModal } from './SpreadViewModal';
 
 type SortConfig = {
     key: string;
@@ -142,9 +143,12 @@ const StatsTable: React.FC<{ title: string; data: DataPreview }> = ({ title, dat
 // A component to display data rows in a table
 const DataTable: React.FC<{ title: string; data: DataPreview }> = ({ title, data }) => {
     const [sortConfig, setSortConfig] = useState<SortConfig>(null);
-    const [maxRows, setMaxRows] = useState(100); // 표시할 최대 행 수
     const allColumns = useMemo(() => data.columns, [data]);
     const rows = useMemo(() => data.rows || [], [data.rows]);
+    
+    // 행과 열 개수
+    const rowCount = data.totalRowCount || rows.length;
+    const columnCount = allColumns.length;
 
     const sortedRows = useMemo(() => {
         let sortableItems = [...rows];
@@ -174,28 +178,18 @@ const DataTable: React.FC<{ title: string; data: DataPreview }> = ({ title, data
         setSortConfig({ key, direction });
     };
 
-    const displayRows = sortedRows.slice(0, maxRows);
-    const hasMoreRows = sortedRows.length > maxRows;
-
     return (
-        <div>
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-semibold text-gray-700">
-                    {title} Table ({data.totalRowCount} rows)
-                </h3>
-                {hasMoreRows && (
-                    <button
-                        onClick={() => setMaxRows(prev => prev + 100)}
-                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                        더 보기 ({sortedRows.length - maxRows}개 남음)
-                    </button>
-                )}
+        <div className="flex flex-col h-full">
+            {/* 행과 열 개수 표시 */}
+            <div className="mb-3 text-sm text-gray-600 flex-shrink-0">
+                <span className="font-semibold">Rows: {rowCount.toLocaleString()}</span>
+                <span className="mx-2">|</span>
+                <span className="font-semibold">Columns: {columnCount}</span>
             </div>
             {allColumns.length === 0 ? (
                 <p className="text-sm text-gray-500">No columns to display.</p>
             ) : (
-                <div className="overflow-x-auto overflow-y-auto border border-gray-200 rounded-lg" style={{ maxHeight: '500px' }}>
+                <div className="flex-grow overflow-x-auto overflow-y-auto border border-gray-200 rounded-lg" style={{ maxHeight: '400px' }}>
                     <table className="w-full text-sm text-left table-auto">
                         <thead className="bg-gray-50 sticky top-0">
                             <tr>
@@ -219,14 +213,14 @@ const DataTable: React.FC<{ title: string; data: DataPreview }> = ({ title, data
                             </tr>
                         </thead>
                         <tbody>
-                            {displayRows.length === 0 ? (
+                            {sortedRows.length === 0 ? (
                                 <tr>
                                     <td colSpan={allColumns.length} className="py-4 text-center text-gray-500">
                                         No data rows available.
                                     </td>
                                 </tr>
                             ) : (
-                                displayRows.map((row, rowIndex) => (
+                                sortedRows.map((row, rowIndex) => (
                                     <tr
                                         key={rowIndex}
                                         className="border-b border-gray-200 hover:bg-gray-50 last:border-b-0"
@@ -268,9 +262,23 @@ const DataTable: React.FC<{ title: string; data: DataPreview }> = ({ title, data
 export const SplitDataPreviewModal: React.FC<{ module: CanvasModule; onClose: () => void; }> = ({ module, onClose }) => {
     const [isInterpreting, setIsInterpreting] = useState(false);
     const [aiInterpretation, setAiInterpretation] = useState<string | null>(null);
+    const [showSpreadView, setShowSpreadView] = useState(false);
+    const [spreadViewTab, setSpreadViewTab] = useState<'train' | 'test'>('train');
+    const [activeTab, setActiveTab] = useState<'train' | 'test'>('train');
 
     const output = module.outputData as SplitDataOutput;
     if (!output || output.type !== 'SplitDataOutput') return null;
+
+    // Spread View용 데이터 변환
+    const spreadViewData = useMemo(() => {
+        const currentData = spreadViewTab === 'train' ? output.train : output.test;
+        return currentData.rows || [];
+    }, [output, spreadViewTab]);
+
+    const spreadViewColumns = useMemo(() => {
+        const currentData = spreadViewTab === 'train' ? output.train : output.test;
+        return currentData.columns || [];
+    }, [output, spreadViewTab]);
 
     const handleInterpret = async () => {
         setIsInterpreting(true);
@@ -301,12 +309,14 @@ You are an ML educator. Please explain the following concepts in Korean, each in
             <div className="bg-white text-gray-900 rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Data Split Preview: {module.name}</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </header>
-                <main className="flex-grow p-4 overflow-auto flex flex-col gap-6">
-                     <div className="flex justify-end font-sans">
+                <main className="flex-grow p-4 overflow-hidden flex flex-col">
+                     <div className="flex justify-end font-sans mb-4 flex-shrink-0">
                         <button
                             onClick={handleInterpret}
                             disabled={isInterpreting}
@@ -317,9 +327,9 @@ You are an ML educator. Please explain the following concepts in Korean, each in
                         </button>
                     </div>
 
-                    {isInterpreting && <div className="text-center p-4 text-gray-600">AI가 데이터 분할의 의미를 분석하고 있습니다...</div>}
+                    {isInterpreting && <div className="text-center p-4 text-gray-600 flex-shrink-0">AI가 데이터 분할의 의미를 분석하고 있습니다...</div>}
                     {aiInterpretation && (
-                         <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                         <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-4 flex-shrink-0">
                             <h3 className="text-lg font-bold text-purple-800 mb-2 font-sans flex items-center gap-2">
                                 <SparklesIcon className="w-5 h-5"/>
                                 AI 분석 요약
@@ -327,12 +337,146 @@ You are an ML educator. Please explain the following concepts in Korean, each in
                             <MarkdownRenderer text={aiInterpretation} />
                         </div>
                     )}
-                    <div className="space-y-6">
-                      <DataTable title="Train Data" data={output.train} />
-                      <DataTable title="Test Data" data={output.test} />
+                    
+                    {/* 탭 구조 */}
+                    <div className="flex-shrink-0 border-b border-gray-200 mb-4">
+                        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                            <button
+                                onClick={() => setActiveTab('train')}
+                                className={`${
+                                    activeTab === 'train'
+                                        ? 'border-indigo-500 text-indigo-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                            >
+                                Train Data
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('test')}
+                                className={`${
+                                    activeTab === 'test'
+                                        ? 'border-indigo-500 text-indigo-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                            >
+                                Test Data
+                            </button>
+                        </nav>
+                    </div>
+                    
+                    {/* 탭 내용 */}
+                    <div className="flex-grow overflow-hidden flex flex-col">
+                        {activeTab === 'train' && (
+                            <>
+                                <div className="flex items-center justify-end gap-2 mb-3 flex-shrink-0">
+                                    <button
+                                        onClick={() => {
+                                            setSpreadViewTab('train');
+                                            setShowSpreadView(true);
+                                        }}
+                                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                                        </svg>
+                                        Spread View
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const currentData = output.train;
+                                            if (!currentData || !currentData.rows || currentData.rows.length === 0) return;
+                                            const csvContent = [
+                                                currentData.columns.map(c => c.name).join(','),
+                                                ...currentData.rows.map(row => 
+                                                    currentData.columns.map(col => {
+                                                        const val = row[col.name];
+                                                        if (val === null || val === undefined) return '';
+                                                        const str = String(val);
+                                                        return str.includes(',') || str.includes('"') || str.includes('\n') 
+                                                            ? `"${str.replace(/"/g, '""')}"` 
+                                                            : str;
+                                                    }).join(',')
+                                                )
+                                            ].join('\n');
+                                            const bom = '\uFEFF';
+                                            const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+                                            const link = document.createElement('a');
+                                            link.href = URL.createObjectURL(blob);
+                                            link.download = `${module.name}_train.csv`;
+                                            link.click();
+                                        }}
+                                        className="text-gray-500 hover:text-gray-800 p-1 rounded hover:bg-gray-100"
+                                        title="Download CSV"
+                                    >
+                                        <ArrowDownTrayIcon className="w-6 h-6" />
+                                    </button>
+                                </div>
+                                <div className="flex-grow overflow-hidden">
+                                    <DataTable title="Train Data" data={output.train} />
+                                </div>
+                            </>
+                        )}
+                        {activeTab === 'test' && (
+                            <>
+                                <div className="flex items-center justify-end gap-2 mb-3 flex-shrink-0">
+                                    <button
+                                        onClick={() => {
+                                            setSpreadViewTab('test');
+                                            setShowSpreadView(true);
+                                        }}
+                                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                                        </svg>
+                                        Spread View
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const currentData = output.test;
+                                            if (!currentData || !currentData.rows || currentData.rows.length === 0) return;
+                                            const csvContent = [
+                                                currentData.columns.map(c => c.name).join(','),
+                                                ...currentData.rows.map(row => 
+                                                    currentData.columns.map(col => {
+                                                        const val = row[col.name];
+                                                        if (val === null || val === undefined) return '';
+                                                        const str = String(val);
+                                                        return str.includes(',') || str.includes('"') || str.includes('\n') 
+                                                            ? `"${str.replace(/"/g, '""')}"` 
+                                                            : str;
+                                                    }).join(',')
+                                                )
+                                            ].join('\n');
+                                            const bom = '\uFEFF';
+                                            const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+                                            const link = document.createElement('a');
+                                            link.href = URL.createObjectURL(blob);
+                                            link.download = `${module.name}_test.csv`;
+                                            link.click();
+                                        }}
+                                        className="text-gray-500 hover:text-gray-800 p-1 rounded hover:bg-gray-100"
+                                        title="Download CSV"
+                                    >
+                                        <ArrowDownTrayIcon className="w-6 h-6" />
+                                    </button>
+                                </div>
+                                <div className="flex-grow overflow-hidden">
+                                    <DataTable title="Test Data" data={output.test} />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </main>
             </div>
+            {showSpreadView && spreadViewData.length > 0 && (
+                <SpreadViewModal
+                    onClose={() => setShowSpreadView(false)}
+                    data={spreadViewData}
+                    columns={spreadViewColumns}
+                    title={`Spread View: ${module.name} - ${spreadViewTab === 'train' ? 'Train' : 'Test'} Data`}
+                />
+            )}
         </div>
     );
 };
