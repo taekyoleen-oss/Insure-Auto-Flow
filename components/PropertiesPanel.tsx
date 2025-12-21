@@ -3050,6 +3050,94 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             return <PanelModelMetrics metrics={outputData.metrics} />;
           }
           break;
+        case ModuleType.ResultModel:
+          if (outputData.type === "StatsModelsResultOutput") {
+            const {
+              summary,
+              modelType,
+              labelColumn,
+              featureColumns,
+            } = outputData;
+
+            // 수식 생성 (Train Model 참고)
+            const generateFormula = () => {
+              const coefficients = summary.coefficients;
+              const intercept = coefficients['const']?.coef || 0;
+              const formulaParts: string[] = [];
+
+              // 모델 타입에 따라 수식 형식 결정
+              if (modelType === 'Logistic' || modelType === 'Logit') {
+                formulaParts.push(`ln(p / (1 - p)) = ${intercept.toFixed(4)}`);
+              } else {
+                formulaParts.push(`${labelColumn} ≈ ${intercept.toFixed(4)}`);
+              }
+
+              // featureColumns를 사용하여 수식 생성
+              if (featureColumns && featureColumns.length > 0) {
+                featureColumns.forEach((feature) => {
+                  const coeffInfo = coefficients[feature];
+                  if (coeffInfo) {
+                    const coeff = coeffInfo.coef;
+                    if (coeff >= 0) {
+                      formulaParts.push(` + ${coeff.toFixed(4)} * [${feature}]`);
+                    } else {
+                      formulaParts.push(` - ${Math.abs(coeff).toFixed(4)} * [${feature}]`);
+                    }
+                  }
+                });
+              } else {
+                // featureColumns가 없으면 coefficients에서 const를 제외한 모든 계수 사용
+                Object.entries(coefficients).forEach(([param, values]) => {
+                  if (param !== 'const') {
+                    const coeff = values.coef;
+                    if (coeff >= 0) {
+                      formulaParts.push(` + ${coeff.toFixed(4)} * [${param}]`);
+                    } else {
+                      formulaParts.push(` - ${Math.abs(coeff).toFixed(4)} * [${param}]`);
+                    }
+                  }
+                });
+              }
+
+              return formulaParts;
+            };
+
+            const formulaParts = generateFormula();
+
+            return (
+              <div className="space-y-4">
+                {formulaParts.length > 0 && (
+                  <div>
+                    <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                      Fitted Model Equation
+                    </h4>
+                    <div className="bg-gray-900/50 p-3 rounded-lg font-mono text-xs text-green-700 whitespace-normal break-words">
+                      <span>{formulaParts[0]}</span>
+                      {formulaParts.slice(1).map((part, i) => (
+                        <span key={i}>{part}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                    Model Metrics
+                  </h4>
+                  <div className="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                    {Object.entries(summary.metrics).slice(0, 6).map(([key, value]) => (
+                      <div key={key} className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">{key}:</span>
+                        <span className="font-mono text-gray-200 font-medium">
+                          {typeof value === 'number' ? Number(value).toFixed(4) : value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          break;
         default:
           if (outputData.type === "DataPreview") {
             return (

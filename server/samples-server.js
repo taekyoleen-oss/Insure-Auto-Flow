@@ -3,6 +3,8 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -213,6 +215,151 @@ app.delete('/api/samples/:filename', (req, res) => {
   } catch (error) {
     console.error('Error deleting sample:', error);
     res.status(500).json({ error: 'Failed to delete sample' });
+  }
+});
+
+// PPT 생성 API
+const execAsync = promisify(exec);
+app.post('/api/generate-ppts', async (req, res) => {
+  try {
+    const { projectData } = req.body;
+
+    if (!projectData || !projectData.modules) {
+      return res.status(400).json({ error: 'Missing projectData or modules' });
+    }
+
+    // 임시 파일로 저장
+    const tempDir = path.join(__dirname, '..', 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const tempFile = path.join(tempDir, `project_${Date.now()}.json`);
+    fs.writeFileSync(tempFile, JSON.stringify(projectData, null, 2), 'utf-8');
+
+    // Python 스크립트 경로
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'generate_module_ppts.py');
+    
+    // Python 실행 명령어 (Windows와 Unix 모두 지원)
+    // output_dir을 지정하지 않으면 다운로드 폴더에 저장됨
+    let pythonCmd = 'python3';
+    if (process.platform === 'win32') {
+      pythonCmd = 'python';
+    }
+    
+    // output_dir을 지정하지 않으면 다운로드 폴더에 저장
+    const command = `${pythonCmd} "${scriptPath}" "${tempFile}"`;
+
+    console.log(`Executing: ${command}`);
+    console.log(`Working directory: ${path.join(__dirname, '..')}`);
+    
+    try {
+      const { stdout, stderr } = await execAsync(command, {
+        cwd: path.join(__dirname, '..'),
+        maxBuffer: 10 * 1024 * 1024, // 10MB
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+      });
+
+      if (stderr && !stderr.includes('경고') && !stderr.includes('Warning')) {
+        console.error('Python script stderr:', stderr);
+      }
+      
+      console.log('Python script stdout:', stdout);
+    } catch (execError) {
+      // Python 명령어가 실패하면 py 시도 (Windows)
+      if (process.platform === 'win32' && pythonCmd === 'python') {
+        console.log('Python command failed, trying py...');
+        try {
+          const { stdout, stderr } = await execAsync(`py "${scriptPath}" "${tempFile}"`, {
+            cwd: path.join(__dirname, '..'),
+            maxBuffer: 10 * 1024 * 1024,
+            env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+          });
+          
+          if (stderr && !stderr.includes('경고') && !stderr.includes('Warning')) {
+            console.error('Python script stderr:', stderr);
+          }
+          
+          console.log('Python script stdout:', stdout);
+        } catch (pyError) {
+          throw new Error(`Python execution failed: ${execError.message}. Py launcher also failed: ${pyError.message}`);
+        }
+      } else {
+        throw execError;
+      }
+    }
+
+    // Python 스크립트 출력에서 파일 경로 추출
+    // stdout에서 "생성 완료: [경로]" 형식으로 출력됨
+    let generatedFiles = [];
+    let outputPath = null;
+    
+    if (stdout) {
+      // stdout에서 파일 경로 추출
+      const pathMatch = stdout.match(/생성 완료:\s*(.+\.pptx)/);
+      if (pathMatch) {
+        outputPath = pathMatch[1].trim();
+        const filename = path.basename(outputPath);
+        generatedFiles = [{
+          filename: filename,
+          filepath: outputPath,
+          downloadPath: outputPath
+        }];
+        console.log(`PPT 파일이 다운로드 폴더에 저장되었습니다: ${outputPath}`);
+      }
+      
+      // 다운로드 폴더 경로도 추출
+      const downloadFolderMatch = stdout.match(/다운로드 폴더에 저장되었습니다:\s*(.+)/);
+      if (downloadFolderMatch) {
+        console.log(`다운로드 폴더: ${downloadFolderMatch[1].trim()}`);
+      }
+    }
+
+    // 임시 파일 정리
+    try {
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup temp file:', cleanupError);
+    }
+
+    res.json({
+      success: true,
+      files: generatedFiles,
+      message: stdout || 'PPT 생성 완료',
+      downloadPath: outputPath
+    });
+
+  } catch (error) {
+    console.error('PPT 생성 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// 생성된 PPT 파일 다운로드
+app.get('/api/ppts/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, '..', 'output', 'ppts', filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'PPT file not found' });
+    }
+
+    res.download(filePath, filename, (err) => {
+      if (err) {
+        console.error('Error downloading PPT:', err);
+        res.status(500).json({ error: 'Failed to download PPT' });
+      }
+    });
+  } catch (error) {
+    console.error('Error serving PPT:', error);
+    res.status(500).json({ error: 'Failed to serve PPT' });
   }
 });
 

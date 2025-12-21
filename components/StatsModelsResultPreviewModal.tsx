@@ -17,8 +17,53 @@ export const StatsModelsResultPreviewModal: React.FC<StatsModelsResultPreviewMod
     const output = module.outputData as StatsModelsResultOutput;
     if (!output || output.type !== 'StatsModelsResultOutput') return null;
 
-    const { summary, modelType, labelColumn } = output;
+    const { summary, modelType, labelColumn, featureColumns } = output;
     const isOLS = modelType === 'OLS';
+
+    // 수식 생성 (Train Model 참고)
+    const generateFormula = () => {
+        const coefficients = summary.coefficients;
+        const intercept = coefficients['const']?.coef || 0;
+        const formulaParts: string[] = [];
+
+        // 모델 타입에 따라 수식 형식 결정
+        if (modelType === 'Logistic' || modelType === 'Logit') {
+            formulaParts.push(`ln(p / (1 - p)) = ${intercept.toFixed(4)}`);
+        } else {
+            formulaParts.push(`${labelColumn} ≈ ${intercept.toFixed(4)}`);
+        }
+
+        // featureColumns를 사용하여 수식 생성
+        if (featureColumns && featureColumns.length > 0) {
+            featureColumns.forEach((feature) => {
+                const coeffInfo = coefficients[feature];
+                if (coeffInfo) {
+                    const coeff = coeffInfo.coef;
+                    if (coeff >= 0) {
+                        formulaParts.push(` + ${coeff.toFixed(4)} * [${feature}]`);
+                    } else {
+                        formulaParts.push(` - ${Math.abs(coeff).toFixed(4)} * [${feature}]`);
+                    }
+                }
+            });
+        } else {
+            // featureColumns가 없으면 coefficients에서 const를 제외한 모든 계수 사용
+            Object.entries(coefficients).forEach(([param, values]) => {
+                if (param !== 'const') {
+                    const coeff = values.coef;
+                    if (coeff >= 0) {
+                        formulaParts.push(` + ${coeff.toFixed(4)} * [${param}]`);
+                    } else {
+                        formulaParts.push(` - ${Math.abs(coeff).toFixed(4)} * [${param}]`);
+                    }
+                }
+            });
+        }
+
+        return formulaParts;
+    };
+
+    const formulaParts = generateFormula();
 
     const handleInterpret = async () => {
         setIsInterpreting(true);
@@ -90,6 +135,19 @@ ${coefficientsText}
                     </button>
                 </header>
                 <main className="flex-grow p-4 overflow-auto text-sm">
+                    {/* 모델 적합 수식 - 맨 위에 표시 */}
+                    {formulaParts.length > 0 && (
+                        <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-6">
+                            <h3 className="text-md font-semibold text-gray-700 mb-2 font-sans">Fitted Model Equation</h3>
+                            <div className="bg-white rounded-lg p-3 font-mono text-sm text-green-700 whitespace-normal break-words border border-green-300">
+                                <span>{formulaParts[0]}</span>
+                                {formulaParts.slice(1).map((part, i) => (
+                                    <span key={i}>{part}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex justify-end mb-4 font-sans">
                         <button
                             onClick={handleInterpret}

@@ -6,6 +6,9 @@ scipy>=1.10.0
 seaborn>=0.12.0
 matplotlib>=3.7.0
 imbalanced-learn>=0.11.0
+python-pptx>=0.6.21
+openai>=1.0.0
+
 
 
 

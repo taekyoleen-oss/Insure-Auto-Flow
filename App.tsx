@@ -80,6 +80,7 @@ import { DiversionCheckerPreviewModal } from "./components/DiversionCheckerPrevi
 import { EvaluateStatPreviewModal } from "./components/EvaluateStatPreviewModal";
 import { XoLPricePreviewModal } from "./components/XoLPricePreviewModal";
 import { FinalXolPricePreviewModal } from "./components/FinalXolPricePreviewModal";
+import { PredictModelPreviewModal } from "./components/PredictModelPreviewModal";
 import { EvaluationPreviewModal } from "./components/EvaluationPreviewModal";
 import { AIPipelineFromGoalModal } from "./components/AIPipelineFromGoalModal";
 import { AIPipelineFromDataModal } from "./components/AIPipelineFromDataModal";
@@ -168,6 +169,8 @@ const App: React.FC = () => {
   const [viewingFinalXolPrice, setViewingFinalXolPrice] =
     useState<CanvasModule | null>(null);
   const [viewingEvaluation, setViewingEvaluation] =
+    useState<CanvasModule | null>(null);
+  const [viewingPredictModel, setViewingPredictModel] =
     useState<CanvasModule | null>(null);
 
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -1016,6 +1019,97 @@ ${header}
     }
   }, [modules, connections, projectName, addLog]);
 
+  const [isGeneratingPPTs, setIsGeneratingPPTs] = useState(false);
+
+  const handleGeneratePPTs = useCallback(async () => {
+    if (modules.length === 0) {
+      addLog("WARN", "모듈이 없습니다. PPT를 생성할 수 없습니다.");
+      return;
+    }
+
+    setIsGeneratingPPTs(true);
+    addLog("INFO", "모듈별 PPT 생성 중...");
+
+    try {
+      const projectData = {
+        modules,
+        connections,
+        projectName,
+      };
+
+      const response = await fetch("http://localhost:3002/api/generate-ppts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ projectData }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "PPT 생성 실패";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = `서버 오류 (${response.status}): ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        const fileCount = result.files?.length || 0;
+        const downloadPath = result.downloadPath || result.files?.[0]?.filepath;
+        
+        if (fileCount > 0) {
+          addLog(
+            "SUCCESS",
+            `PPT 파일이 생성되었습니다. (${fileCount}개 모듈 포함)`
+          );
+          
+          if (downloadPath) {
+            addLog(
+              "SUCCESS",
+              `다운로드 폴더에 저장되었습니다: ${downloadPath}`
+            );
+          } else {
+            // stdout에서 경로 추출 시도
+            const pathMatch = result.message?.match(/다운로드 폴더에 저장되었습니다:\s*(.+)/);
+            if (pathMatch) {
+              addLog(
+                "SUCCESS",
+                `다운로드 폴더에 저장되었습니다: ${pathMatch[1]}`
+              );
+            } else {
+              addLog(
+                "INFO",
+                "파일이 PC의 다운로드 폴더에 저장되었습니다."
+              );
+            }
+          }
+        } else {
+          addLog("SUCCESS", "PPT 파일이 생성되었습니다.");
+        }
+      } else {
+        throw new Error(result.error || "PPT 생성 실패");
+      }
+    } catch (error: any) {
+      console.error("PPT 생성 오류:", error);
+      const errorMessage = error.message || "알 수 없는 오류";
+      
+      // 서버 연결 오류인 경우 안내 메시지 추가
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("ECONNREFUSED")) {
+        addLog("ERROR", `PPT 생성 실패: 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요. (http://localhost:3002)`);
+        addLog("INFO", "서버를 시작하려면: npm run samples-server");
+      } else {
+        addLog("ERROR", `PPT 생성 실패: ${errorMessage}`);
+      }
+    } finally {
+      setIsGeneratingPPTs(false);
+    }
+  }, [modules, connections, projectName, addLog]);
+
   const handleLoadPipeline = useCallback(async () => {
     const savedState = await loadPipeline({
       extension: ".mla",
@@ -1783,7 +1877,9 @@ ${header}
   const handleViewDetails = (moduleId: string) => {
     const module = modules.find((m) => m.id === moduleId);
     if (module?.outputData) {
-      if (module.outputData.type === "StatsModelsResultOutput") {
+      if (module.type === ModuleType.PredictModel && module.outputData.type === "DataPreview") {
+        setViewingPredictModel(module);
+      } else if (module.outputData.type === "StatsModelsResultOutput") {
         setViewingStatsModelsResult(module);
       } else if (module.outputData.type === "DiversionCheckerOutput") {
         setViewingDiversionChecker(module);
@@ -1817,6 +1913,7 @@ ${header}
     setViewingXoLPrice(null);
     setViewingFinalXolPrice(null);
     setViewingEvaluation(null);
+    setViewingPredictModel(null);
   };
 
   // Model definition modules that should not be executed directly in Run All
@@ -6712,6 +6809,24 @@ ${header}
             )}
             <span>{saveButtonText}</span>
           </button>
+          <div className="h-5 border-l border-gray-700"></div>
+          <button
+            onClick={handleGeneratePPTs}
+            disabled={isGeneratingPPTs || modules.length === 0}
+            className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md font-semibold transition-colors flex-shrink-0 ${
+              isGeneratingPPTs || modules.length === 0
+                ? "bg-gray-600 cursor-not-allowed opacity-50"
+                : "bg-blue-600 hover:bg-blue-500"
+            }`}
+            title="Generate PPTs for All Modules"
+          >
+            {isGeneratingPPTs ? (
+              <ArrowPathIcon className="h-4 w-4 animate-spin" />
+            ) : (
+              <SparklesIcon className="h-4 w-4" />
+            )}
+            <span>{isGeneratingPPTs ? "생성 중..." : "PPT 생성"}</span>
+          </button>
         </div>
 
         {/* 세 번째 줄: 햄버거 버튼(왼쪽) 및 AI 버튼 2개, Run All, 설정 버튼(오른쪽) */}
@@ -7439,6 +7554,15 @@ ${header}
         <FinalXolPricePreviewModal
           module={viewingFinalXolPrice}
           onClose={handleCloseModal}
+        />
+      )}
+      {viewingPredictModel && (
+        <PredictModelPreviewModal
+          module={viewingPredictModel}
+          projectName={projectName}
+          onClose={handleCloseModal}
+          modules={modules}
+          connections={connections}
         />
       )}
       {viewingEvaluation &&

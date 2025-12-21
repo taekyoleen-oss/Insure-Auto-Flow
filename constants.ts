@@ -650,7 +650,7 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
     {
       type: ModuleType.StatModels,
       status: ModuleStatus.Pending,
-      parameters: { model: "Gamma" },
+      parameters: { model: "OLS" },
       inputs: [],
       outputs: [{ name: "model_out", type: "model" }],
     },
