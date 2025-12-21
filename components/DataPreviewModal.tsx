@@ -1,21 +1,203 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { CanvasModule, ColumnInfo, DataPreview, ModuleType } from '../types';
-import { XCircleIcon, ChevronUpIcon, ChevronDownIcon, SparklesIcon } from './icons';
+import { CanvasModule, ColumnInfo, DataPreview, ModuleType, Connection } from '../types';
+import { XCircleIcon, ChevronUpIcon, ChevronDownIcon, SparklesIcon, ArrowDownTrayIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from './MarkdownRenderer';
-// import { calculatePCAForScoreVisualization } from '../utils/pyodideRunner'; // Python 기반 (주석 처리)
-import { calculatePCA } from '../utils/pcaCalculator'; // JavaScript 기반 (ml-pca 사용)
+import { SpreadViewModal } from './SpreadViewModal';
 
 interface DataPreviewModalProps {
     module: CanvasModule;
     projectName: string;
     onClose: () => void;
+    modules?: CanvasModule[];
+    connections?: Connection[];
 }
 
 type SortConfig = {
     key: string;
     direction: 'ascending' | 'descending';
 } | null;
+
+// Statistics 모듈의 CorrelationHeatmap 컴포넌트 (Load Data 모듈용)
+const CorrelationHeatmap: React.FC<{ matrix: Record<string, Record<string, number>> }> = ({ matrix }) => {
+    const columns = Object.keys(matrix);
+    
+    const getColor = (value: number) => {
+        const alpha = Math.abs(value);
+        if (value > 0) return `rgba(59, 130, 246, ${alpha})`; // Blue for positive
+        return `rgba(239, 68, 68, ${alpha})`; // Red for negative
+    };
+
+    return (
+        <div className="p-2">
+            <div className="flex text-xs font-bold">
+                <div className="w-20 flex-shrink-0"></div>
+                {columns.map(col => <div key={col} className="flex-1 text-center truncate" title={col}>{col}</div>)}
+            </div>
+            {columns.map(rowCol => (
+                <div key={rowCol} className="flex items-center text-xs">
+                    <div className="w-20 flex-shrink-0 font-bold truncate" title={rowCol}>{rowCol}</div>
+                    {columns.map(colCol => (
+                        <div key={`${rowCol}-${colCol}`} className="flex-1 p-0.5">
+                            <div
+                                className="w-full h-6 rounded-sm flex items-center justify-center text-white font-mono"
+                                style={{ backgroundColor: getColor(matrix[rowCol]?.[colCol] || 0) }}
+                                title={`${rowCol} vs ${colCol}: ${(matrix[rowCol]?.[colCol] || 0).toFixed(2)}`}
+                            >
+                                {(matrix[rowCol]?.[colCol] || 0).toFixed(1)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// Statistics 모듈의 Pairplot Cell 컴포넌트 (Load Data 모듈용)
+const PairplotCell: React.FC<{ 
+    row: number; 
+    col: number; 
+    displayColumns: string[]; 
+    correlation: Record<string, Record<string, number>>;
+    rows: Record<string, any>[];
+}> = ({ row, col, displayColumns, correlation, rows }) => {
+    const colNameX = displayColumns[col];
+    const colNameY = displayColumns[row];
+
+    if (row === col) { // Diagonal -> Histogram
+        const columnData = rows.map(r => parseFloat(r[colNameX])).filter(v => !isNaN(v));
+        if (columnData.length === 0) {
+            return (
+                <div className="w-full h-full border border-gray-300 rounded flex items-center justify-center text-xs text-gray-400">
+                    No data
+                </div>
+            );
+        }
+        const min = Math.min(...columnData);
+        const max = Math.max(...columnData);
+        const numBins = 10;
+        const binSize = (max - min) / numBins || 1;
+        const bins = Array(numBins).fill(0);
+        
+        for (const value of columnData) {
+            let binIndex = binSize > 0 ? Math.floor((value - min) / binSize) : 0;
+            if (binIndex === numBins) binIndex--;
+            if (binIndex >= 0 && binIndex < numBins) {
+                bins[binIndex]++;
+            }
+        }
+        
+        const maxBinCount = Math.max(...bins, 1);
+        
+        return (
+            <div className="w-full h-full border border-gray-300 rounded flex items-end justify-around gap-px p-1 bg-gray-100">
+                {bins.map((count, i) => (
+                    <div 
+                        key={i} 
+                        className="bg-gray-400 w-full" 
+                        style={{ height: `${(count / maxBinCount) * 100}%` }}
+                    />
+                ))}
+            </div>
+        );
+    } else { // Off-diagonal -> Scatter plot
+        const corrValue = correlation[colNameY]?.[colNameX] || 0;
+        const xData = rows.map(r => parseFloat(r[colNameX])).filter(v => !isNaN(v));
+        const yData = rows.map(r => parseFloat(r[colNameY])).filter(v => !isNaN(v));
+        
+        if (xData.length === 0 || yData.length === 0) {
+            return (
+                <div className="w-full h-full border border-gray-300 rounded flex items-center justify-center text-xs text-gray-400">
+                    No data
+                </div>
+            );
+        }
+        
+        const xMin = Math.min(...xData);
+        const xMax = Math.max(...xData);
+        const yMin = Math.min(...yData);
+        const yMax = Math.max(...yData);
+        
+        const xRange = xMax - xMin || 1;
+        const yRange = yMax - yMin || 1;
+        
+        const points = xData.map((x, i) => {
+            const y = yData[i];
+            return {
+                x: ((x - xMin) / xRange) * 100,
+                y: ((y - yMin) / yRange) * 100
+            };
+        }).slice(0, 100); // 최대 100개 포인트만 표시
+        
+        return (
+            <div className="w-full h-full border border-gray-300 rounded p-1 relative">
+                <div className="absolute top-0 left-0 text-xs font-semibold text-gray-700 px-1 bg-white bg-opacity-75 rounded">
+                    r = {corrValue.toFixed(2)}
+                </div>
+                <svg width="100%" height="100%" viewBox="0 0 100 100" className="overflow-visible">
+                    {points.map((p, i) => (
+                        <circle key={i} cx={p.x} cy={100 - p.y} r="1.5" fill="#3b82f6" opacity="0.6" />
+                    ))}
+                </svg>
+            </div>
+        );
+    }
+};
+
+// Statistics 모듈의 Pairplot 컴포넌트 (Load Data 모듈용)
+const Pairplot: React.FC<{ 
+    correlation: Record<string, Record<string, number>>;
+    numericColumns: string[];
+    rows: Record<string, any>[];
+}> = ({ correlation, numericColumns, rows }) => {
+    if (numericColumns.length === 0) {
+        return <p className="text-sm text-gray-500">No numeric columns to display in pairplot.</p>;
+    }
+    const displayColumns = numericColumns.slice(0, 5); 
+
+    const gridStyle: React.CSSProperties = {
+        display: 'grid',
+        gridTemplateColumns: `repeat(${displayColumns.length}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${displayColumns.length}, minmax(0, 1fr))`,
+        gap: '8px'
+    };
+    
+    return (
+        <div>
+            {displayColumns.length < numericColumns.length && (
+                <p className="text-sm text-gray-500 mb-2">Displaying first {displayColumns.length} of {numericColumns.length} numeric columns for brevity.</p>
+            )}
+            <div className="flex">
+                <div className="flex flex-col justify-around w-20 text-xs font-bold text-right pr-2">
+                    {displayColumns.map(col => <div key={col} className="truncate" title={col}>{col}</div>)}
+                </div>
+                <div className="flex-1" style={{ aspectRatio: '1 / 1' }}>
+                    <div style={gridStyle} className="w-full h-full">
+                        {displayColumns.map((_, rowIndex) => 
+                            displayColumns.map((_, colIndex) => (
+                                <PairplotCell 
+                                    key={`${rowIndex}-${colIndex}`} 
+                                    row={rowIndex} 
+                                    col={colIndex} 
+                                    displayColumns={displayColumns} 
+                                    correlation={correlation}
+                                    rows={rows}
+                                />
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+            <div className="flex">
+                <div className="w-20"></div>
+                <div className="flex-1 flex justify-around text-xs font-bold text-center pt-2">
+                    {displayColumns.map(col => <div key={col} className="truncate" title={col}>{col}</div>)}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const HistogramPlot: React.FC<{ rows: Record<string, any>[]; column: string; }> = ({ rows, column }) => {
     const data = useMemo(() => rows.map(r => r[column]), [rows, column]);
@@ -147,43 +329,111 @@ const ScatterPlot: React.FC<{ rows: Record<string, any>[], xCol: string, yCol: s
     );
 };
 
-// PCA Scatter Plot 컴포넌트
-const PCAScatterPlot: React.FC<{
-    coordinates: number[][];
-    actualValues?: (string | number)[];
-    predictedValues?: (string | number)[];
-    modelType?: 'classification' | 'regression';
-    explainedVariance: number[];
-    hasLabel?: boolean; // Label Column이 있는지 여부
-}> = ({ coordinates, actualValues, predictedValues, modelType, explainedVariance, hasLabel = false }) => {
-    const dataPoints = useMemo(() => {
-        return coordinates.map((coord, idx) => ({
-            x: coord[0] || 0,
-            y: coord[1] || 0,
-            actual: actualValues?.[idx],
-            predicted: predictedValues?.[idx],
-            index: idx,
-        }));
-    }, [coordinates, actualValues, predictedValues]);
-    
-    // 이진 분류인지 감지 (0과 1만 있는지 확인)
-    const isBinaryClassification = useMemo(() => {
-        if (!hasLabel || modelType !== 'classification' || !actualValues || actualValues.length === 0) {
-            return false;
-        }
-        
-        const uniqueValues = new Set(actualValues.map(v => String(v)));
-        const validBinaryValues = ['0', '1'];
-        return uniqueValues.size <= 2 && Array.from(uniqueValues).every(v => validBinaryValues.includes(v));
-    }, [hasLabel, modelType, actualValues]);
 
-    if (dataPoints.length === 0) {
-        return <div className="flex items-center justify-center h-full text-gray-400">No data points available.</div>;
+// 상관계수 계산 함수
+const calculateCorrelation = (x: number[], y: number[]): number => {
+    if (x.length !== y.length || x.length === 0) return 0;
+    
+    const n = x.length;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumX2 = x.reduce((a, b) => a + b * b, 0);
+    const sumY2 = y.reduce((a, b) => a + b * b, 0);
+    
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+    
+    if (denominator === 0) return 0;
+    return numerator / denominator;
+};
+
+// 상관계수 행렬 계산
+const calculateCorrelationMatrix = (rows: Record<string, any>[], numericColumns: string[]): number[][] => {
+    const matrix: number[][] = [];
+    
+    for (let i = 0; i < numericColumns.length; i++) {
+        matrix[i] = [];
+        for (let j = 0; j < numericColumns.length; j++) {
+            if (i === j) {
+                matrix[i][j] = 1;
+            } else {
+                const col1 = numericColumns[i];
+                const col2 = numericColumns[j];
+                const values1 = rows.map(r => Number(r[col1])).filter(v => !isNaN(v));
+                const values2 = rows.map(r => Number(r[col2])).filter(v => !isNaN(v));
+                
+                // 길이가 같은 값들만 사용
+                const minLength = Math.min(values1.length, values2.length);
+                const valid1 = values1.slice(0, minLength);
+                const valid2 = values2.slice(0, minLength);
+                
+                matrix[i][j] = calculateCorrelation(valid1, valid2);
+            }
+        }
+    }
+    
+    return matrix;
+};
+
+// 작은 히스토그램 플롯 (Pairplot 대각선용)
+const SmallHistogram: React.FC<{ rows: Record<string, any>[]; column: string }> = ({ rows, column }) => {
+    const data = useMemo(() => rows.map(r => r[column]), [rows, column]);
+    const numericData = useMemo(() => data.map(v => parseFloat(v as string)).filter(v => !isNaN(v)), [data]);
+
+    if (numericData.length === 0) {
+        return <div className="flex items-center justify-center h-full text-gray-400 text-xs">No data</div>;
     }
 
-    const margin = { top: 40, right: 40, bottom: 70, left: 70 };
-    const width = 1400;
-    const height = 650;
+    const { bins } = useMemo(() => {
+        const min = Math.min(...numericData);
+        const max = Math.max(...numericData);
+        const numBins = 10;
+        const binSize = (max - min) / numBins;
+        const bins = Array(numBins).fill(0);
+
+        for (const value of numericData) {
+            let binIndex = binSize > 0 ? Math.floor((value - min) / binSize) : 0;
+            if (binIndex === numBins) binIndex--;
+            if (binIndex >= 0 && binIndex < numBins) {
+                bins[binIndex]++;
+            }
+        }
+        return { bins };
+    }, [numericData]);
+    
+    const maxBinCount = Math.max(...bins, 0);
+
+    return (
+        <div className="w-full h-full p-2">
+            <div className="flex-grow flex items-end justify-around gap-0.5 h-full">
+                {bins.map((count, index) => {
+                    const heightPercentage = maxBinCount > 0 ? (count / maxBinCount) * 100 : 0;
+                    return (
+                        <div key={index} className="flex-1 h-full flex flex-col justify-end items-center">
+                            <div 
+                                className="w-full bg-blue-400"
+                                style={{ height: `${heightPercentage}%` }}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// 작은 산점도 플롯 (Pairplot용)
+const SmallScatterPlot: React.FC<{ rows: Record<string, any>[], xCol: string, yCol: string }> = ({ rows, xCol, yCol }) => {
+    const dataPoints = useMemo(() => rows.map(r => ({ x: Number(r[xCol]), y: Number(r[yCol]) })).filter(p => !isNaN(p.x) && !isNaN(p.y)), [rows, xCol, yCol]);
+
+    if (dataPoints.length === 0) {
+        return <div className="flex items-center justify-center h-full text-gray-400 text-xs">No data</div>;
+    }
+
+    const margin = { top: 5, right: 5, bottom: 20, left: 20 };
+    const width = 120;
+    const height = 120;
 
     const xMin = Math.min(...dataPoints.map(d => d.x));
     const xMax = Math.max(...dataPoints.map(d => d.x));
@@ -193,252 +443,81 @@ const PCAScatterPlot: React.FC<{
     const xScale = (x: number) => margin.left + ((x - xMin) / (xMax - xMin || 1)) * (width - margin.left - margin.right);
     const yScale = (y: number) => height - margin.bottom - ((y - yMin) / (yMax - yMin || 1)) * (height - margin.top - margin.bottom);
 
-    // 분류 모델: 클래스별 색상
-    const getColorForClassification = (actual: string | number, predicted: string | number) => {
-        const isCorrect = String(actual) === String(predicted);
-        const classKey = String(actual);
-        
-        // 이진 분류인 경우 간소한 색상 사용
-        if (isBinaryClassification) {
-            if (classKey === '0') {
-                // 실제값 0: 파랑 계열
-                return isCorrect ? '#2563eb' : '#93c5fd'; // 맞으면 진한 파랑, 틀리면 연한 파랑
-            } else if (classKey === '1') {
-                // 실제값 1: 빨강 계열
-                return isCorrect ? '#dc2626' : '#fca5a5'; // 맞으면 진한 빨강, 틀리면 연한 빨강
-            }
-        }
-        
-        // 다중 클래스 분류: 클래스별 기본 색상
-        const classColors: Record<string, string> = {
-            '0': '#2563eb', // 진한 파랑
-            '1': '#dc2626', // 진한 빨강
-            '2': '#16a34a', // 진한 초록
-            '3': '#ea580c', // 진한 주황
-            '4': '#9333ea', // 진한 보라
-            '5': '#0891b2', // 청록
-            '6': '#ca8a04', // 노랑
-            '7': '#e11d48', // 분홍
-        };
-        
-        const baseColor = classColors[classKey] || '#6b7280';
-        return isCorrect ? baseColor : `${baseColor}60`; // 틀린 경우 더 투명하게
-    };
-
-    // 회귀 모델: 실제 값에 따른 색상 (gradient) - 더 나은 색상 스케일
-    const getColorForRegression = (actual: number) => {
-        const allActuals = (actualValues || []).filter(v => typeof v === 'number') as number[];
-        if (allActuals.length === 0) return '#6366f1';
-        
-        const minVal = Math.min(...allActuals);
-        const maxVal = Math.max(...allActuals);
-        const range = maxVal - minVal || 1;
-        const normalized = (actual - minVal) / range;
-        
-        // 파랑(낮음) -> 보라 -> 빨강(높음) gradient (더 부드러운 전환)
-        if (normalized < 0.5) {
-            // 파랑 -> 보라
-            const t = normalized * 2;
-            const r = Math.round(37 + t * 99);
-            const g = Math.round(99 + t * 99);
-            const b = Math.round(235 - t * 99);
-            return `rgb(${r}, ${g}, ${b})`;
-        } else {
-            // 보라 -> 빨강
-            const t = (normalized - 0.5) * 2;
-            const r = Math.round(136 + t * 120);
-            const g = Math.round(198 - t * 172);
-            const b = Math.round(136 - t * 136);
-            return `rgb(${r}, ${g}, ${b})`;
-        }
-    };
-    
-    // Label이 없을 때 사용할 색상 (단일 색상)
-    const getDefaultColor = () => '#6366f1'; // 인디고
-
-    // 회귀 모델: 오차 크기 계산
-    const getErrorSize = (actual: number, predicted: number) => {
-        const error = Math.abs(actual - predicted);
-        const allErrors = dataPoints
-            .filter(p => typeof p.actual === 'number' && typeof p.predicted === 'number')
-            .map(p => Math.abs((p.actual as number) - (p.predicted as number)));
-        const maxError = Math.max(...allErrors, 1);
-        return 4 + (error / maxError) * 6; // 최소 4, 최대 10
-    };
-    
-    // 클래스별 통계 (범례용)
-    const classStats = useMemo(() => {
-        if (!hasLabel || modelType !== 'classification' || !actualValues) return null;
-        const stats: Record<string, { count: number; correct: number }> = {};
-        actualValues.forEach((actual, idx) => {
-            const key = String(actual);
-            if (!stats[key]) {
-                stats[key] = { count: 0, correct: 0 };
-            }
-            stats[key].count++;
-            if (predictedValues && String(actual) === String(predictedValues[idx])) {
-                stats[key].correct++;
-            }
-        });
-        return stats;
-    }, [hasLabel, modelType, actualValues, predictedValues]);
-
-    const totalVariance = explainedVariance.reduce((a, b) => a + b, 0) * 100;
-    const getTicks = (min: number, max: number, count: number) => {
-        if (min === max) return [min];
-        const ticks = [];
-        const step = (max - min) / (count - 1);
-        for (let i = 0; i < count; i++) {
-            ticks.push(min + i * step);
-        }
-        return ticks;
-    };
-    
-    const xTicks = getTicks(xMin, xMax, 6);
-    const yTicks = getTicks(yMin, yMax, 6);
-    
-    // 그리드 라인을 위한 tick 값
-    const gridXTicks = getTicks(xMin, xMax, 6);
-    const gridYTicks = getTicks(yMin, yMax, 6);
-
     return (
-        <div className="w-full h-full flex flex-col items-center gap-3 p-4">
-            {/* 설명된 분산 비율 표시 */}
-            <div className="w-full max-w-6xl bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-                <div className="text-sm font-semibold text-indigo-900 mb-1">Explained Variance</div>
-                <div className="flex items-center gap-4 text-xs text-indigo-700">
-                    <span>Total: <strong>{totalVariance.toFixed(1)}%</strong></span>
-                    <span>PC1: <strong>{(explainedVariance[0] * 100).toFixed(1)}%</strong></span>
-                    <span>PC2: <strong>{(explainedVariance[1] * 100).toFixed(1)}%</strong></span>
-                </div>
-            </div>
-            
-            <div className="w-full max-w-6xl">
-                {/* 그래프 영역 */}
-                <div className="w-full">
-                    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
-                        {/* 그리드 라인 */}
-                        <g stroke="#e5e7eb" strokeWidth="0.5" opacity="0.5">
-                            {gridXTicks.map((tick, i) => (
-                                <line 
-                                    key={`grid-x-${i}`} 
-                                    x1={xScale(tick)} 
-                                    y1={margin.top} 
-                                    x2={xScale(tick)} 
-                                    y2={height - margin.bottom} 
-                                />
-                            ))}
-                            {gridYTicks.map((tick, i) => (
-                                <line 
-                                    key={`grid-y-${i}`} 
-                                    x1={margin.left} 
-                                    y1={yScale(tick)} 
-                                    x2={width - margin.right} 
-                                    y2={yScale(tick)} 
-                                />
-                            ))}
-                        </g>
-                        
-                        {/* Axes */}
-                        <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="#374151" strokeWidth="2" />
-                        <line x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} stroke="#374151" strokeWidth="2" />
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
+            {/* Axes */}
+            <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="currentColor" strokeWidth="0.5" />
+            <line x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} stroke="currentColor" strokeWidth="0.5" />
 
-                        {/* X Ticks and Labels */}
-                        {xTicks.map((tick, i) => (
-                            <g key={`x-${i}`} transform={`translate(${xScale(tick)}, ${height - margin.bottom})`}>
-                                <line y2="6" stroke="#374151" strokeWidth="1.5" />
-                                <text y="25" textAnchor="middle" fill="#374151" fontSize="11" fontWeight="500">{tick.toFixed(2)}</text>
-                            </g>
-                        ))}
-                        <text x={width/2} y={height - 10} textAnchor="middle" fill="#1f2937" fontSize="13" fontWeight="bold">
-                            PC1 ({(explainedVariance[0] * 100).toFixed(1)}% variance)
-                        </text>
-                        
-                        {/* Y Ticks and Labels */}
-                        {yTicks.map((tick, i) => (
-                            <g key={`y-${i}`} transform={`translate(${margin.left}, ${yScale(tick)})`}>
-                                <line x2="-6" stroke="#374151" strokeWidth="1.5" />
-                                <text x="-12" y="4" textAnchor="end" fill="#374151" fontSize="11" fontWeight="500">{tick.toFixed(2)}</text>
-                            </g>
-                        ))}
-                        <text transform={`translate(${20}, ${height/2}) rotate(-90)`} textAnchor="middle" fill="#1f2937" fontSize="13" fontWeight="bold">
-                            PC2 ({(explainedVariance[1] * 100).toFixed(1)}% variance)
-                        </text>
+            {/* Points */}
+            <g>
+                {dataPoints.map((d, i) => (
+                    <circle key={i} cx={xScale(d.x)} cy={yScale(d.y)} r="1.5" fill="rgba(59, 130, 246, 0.6)" />
+                ))}
+            </g>
+        </svg>
+    );
+};
 
-                        {/* Points */}
-                        <g>
-                            {dataPoints.map((d, i) => {
-                                let color: string;
-                                let size: number;
-                                let stroke: string = 'none';
-                                let strokeWidth: number = 0;
-                                let opacity: number = 0.75;
-                                
-                                if (hasLabel && modelType) {
-                                    if (modelType === 'classification' && d.actual !== undefined && d.predicted !== undefined) {
-                                        color = getColorForClassification(d.actual, d.predicted);
-                                        size = isBinaryClassification ? 6 : 5; // 이진 분류는 조금 더 크게
-                                        
-                                        // 이진 분류: 예측이 틀린 경우 테두리 추가
-                                        if (isBinaryClassification && String(d.actual) !== String(d.predicted)) {
-                                            stroke = '#000';
-                                            strokeWidth = 1.5;
-                                            opacity = 0.9; // 틀린 경우 더 선명하게
-                                        } else if (!isBinaryClassification && String(d.actual) !== String(d.predicted)) {
-                                            // 다중 클래스: 틀린 경우 검은 테두리
-                                            stroke = '#000';
-                                            strokeWidth = 2;
-                                        }
-                                    } else if (modelType === 'regression' && typeof d.actual === 'number' && typeof d.predicted === 'number') {
-                                        color = getColorForRegression(d.actual);
-                                        size = getErrorSize(d.actual, d.predicted);
-                                    } else {
-                                        color = getDefaultColor();
-                                        size = 5;
-                                    }
-                                } else {
-                                    color = getDefaultColor();
-                                    size = 5;
-                                }
-                                
-                                return (
-                                    <circle 
-                                        key={i} 
-                                        cx={xScale(d.x)} 
-                                        cy={yScale(d.y)} 
-                                        r={size} 
-                                        fill={color}
-                                        stroke={stroke}
-                                        strokeWidth={strokeWidth}
-                                        opacity={opacity}
-                                        className="hover:opacity-100 hover:r-7 transition-all cursor-pointer"
-                                    >
-                                        <title>
-                                            {hasLabel && d.actual !== undefined && d.predicted !== undefined
-                                                ? (modelType === 'classification' 
-                                                    ? `Actual: ${d.actual}, Predicted: ${d.predicted}${String(d.actual) === String(d.predicted) ? ' ✓' : ' ✗'}`
-                                                    : `Actual: ${d.actual}, Predicted: ${d.predicted}, Error: ${typeof d.actual === 'number' && typeof d.predicted === 'number' ? Math.abs(d.actual - d.predicted).toFixed(2) : 'N/A'}`)
-                                                : `Point ${i + 1}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`
-                                            }
-                                        </title>
-                                    </circle>
-                                );
-                            })}
-                        </g>
-                    </svg>
-                </div>
+// Pairplot 컴포넌트
+const CorrelationPlots: React.FC<{ 
+    correlationMatrix: number[][]; 
+    columnNames: string[];
+    rows: Record<string, any>[];
+}> = ({ correlationMatrix, columnNames, rows }) => {
+    const numCols = columnNames.length;
+    
+    return (
+        <div className="w-full overflow-auto">
+            <div 
+                className="inline-grid gap-1 border border-gray-300 p-2 bg-white"
+                style={{ 
+                    gridTemplateColumns: `repeat(${numCols}, minmax(120px, 1fr))`,
+                    gridTemplateRows: `repeat(${numCols}, minmax(120px, 1fr))`
+                }}
+            >
+                {columnNames.map((colY, rowIdx) =>
+                    columnNames.map((colX, colIdx) => {
+                        const isDiagonal = rowIdx === colIdx;
+                        const isUpperTriangle = rowIdx < colIdx;
+                        const isLowerTriangle = rowIdx > colIdx;
+                        
+                        return (
+                            <div 
+                                key={`${rowIdx}-${colIdx}`}
+                                className="border border-gray-200 rounded bg-white relative"
+                                style={{ minWidth: '120px', minHeight: '120px' }}
+                            >
+                                {isDiagonal ? (
+                                    // 대각선: 히스토그램
+                                    <>
+                                        <div className="absolute top-1 left-1 text-xs font-semibold text-gray-700 z-10">
+                                            {colX.length > 10 ? colX.substring(0, 10) + '...' : colX}
+                                        </div>
+                                        <SmallHistogram rows={rows} column={colX} />
+                                    </>
+                                ) : isUpperTriangle ? (
+                                    // 위쪽 삼각형: 산점도 (상관계수 표시)
+                                    <>
+                                        <div className="absolute top-1 left-1 text-xs font-semibold text-gray-700 z-10">
+                                            r = {correlationMatrix[rowIdx][colIdx].toFixed(2)}
+                                        </div>
+                                        <SmallScatterPlot rows={rows} xCol={colX} yCol={colY} />
+                                    </>
+                                ) : (
+                                    // 아래쪽 삼각형: 산점도 (상관계수 표시)
+                                    <>
+                                        <div className="absolute top-1 left-1 text-xs font-semibold text-gray-700 z-10">
+                                            r = {correlationMatrix[rowIdx][colIdx].toFixed(2)}
+                                        </div>
+                                        <SmallScatterPlot rows={rows} xCol={colX} yCol={colY} />
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })
+                )}
             </div>
-            
-            {/* 하단 설명 */}
-            {hasLabel && modelType && (
-                <div className="text-xs text-gray-500 text-center max-w-6xl">
-                    {modelType === 'classification' 
-                        ? (isBinaryClassification 
-                            ? 'Blue = Class 0, Red = Class 1. Black border indicates incorrect predictions.'
-                            : 'Color represents actual class. Black border indicates incorrect predictions.')
-                        : 'Color represents actual value (blue=low, red=high). Size represents prediction error magnitude.'}
-                </div>
-            )}
         </div>
     );
 };
@@ -540,7 +619,7 @@ const ColumnStatistics: React.FC<{ data: (string | number | null)[]; columnName:
 };
 
 
-export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, projectName, onClose }) => {
+export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, projectName, onClose, modules = [], connections = [] }) => {
     // 안전한 데이터 가져오기
     const getPreviewData = (): DataPreview | null => {
         try {
@@ -551,6 +630,39 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
         }
         if (module.outputData.type === 'PCAOutput') {
                 return module.outputData.transformedData || null;
+        }
+        // MissingHandlerOutput, EncoderOutput, NormalizerOutput의 경우 inputData 사용
+        if (module.outputData.type === 'MissingHandlerOutput' || 
+            module.outputData.type === 'EncoderOutput' || 
+            module.outputData.type === 'NormalizerOutput') {
+            // data_in 포트로 연결된 inputData 찾기
+            if (!connections || !modules) {
+                console.warn('DataPreviewModal: connections or modules not provided for', module.outputData.type);
+                return null;
+            }
+            // 먼저 data_in 포트를 찾고, 없으면 data 포트도 시도
+            let dataConnection = connections.find(
+                c => c.to.moduleId === module.id && c.to.portName === 'data_in'
+            );
+            if (!dataConnection) {
+                dataConnection = connections.find(
+                    c => c.to.moduleId === module.id && c.to.portName === 'data'
+                );
+            }
+            if (dataConnection) {
+                const sourceModule = modules.find(m => m.id === dataConnection.from.moduleId);
+                if (sourceModule?.outputData) {
+                    if (sourceModule.outputData.type === 'DataPreview') {
+                        return sourceModule.outputData;
+                    }
+                    if (sourceModule.outputData.type === 'SplitDataOutput') {
+                        // SplitDataOutput의 경우 train 데이터 사용
+                        return sourceModule.outputData.train;
+                    }
+                }
+            } else {
+                console.warn('DataPreviewModal: No data connection found for', module.id, module.outputData.type, 'Available connections:', connections.filter(c => c.to.moduleId === module.id).map(c => c.to.portName));
+            }
         }
         return null;
         } catch (error) {
@@ -565,283 +677,27 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({ module, proj
     
     const [sortConfig, setSortConfig] = useState<SortConfig>(null);
     const [selectedColumn, setSelectedColumn] = useState<string | null>(columns[0]?.name || null);
-    const [activeTab, setActiveTab] = useState<'table' | 'visualization'>('table');
     const [yAxisCol, setYAxisCol] = useState<string | null>(null);
-
-    // Score Model용 label column state
-    const predictCol = useMemo(() => {
-        try {
-            if (module.type === ModuleType.ScoreModel && Array.isArray(columns) && columns.length > 0) {
-                return columns.find(c => c && c.name && (c.name === 'Predict' || c.name.toLowerCase().includes('predict'))) || null;
-            }
-            return null;
-        } catch (error) {
-            console.error('Error finding predict column:', error);
-            return null;
-        }
-    }, [module.type, columns]);
+    const [showSpreadView, setShowSpreadView] = useState(false);
     
-    const labelCols = useMemo(() => {
-        try {
-            if (module.type === ModuleType.ScoreModel && Array.isArray(columns) && columns.length > 0) {
-                return columns.filter(c => c && c.type === 'number' && c.name && c.name !== predictCol?.name);
-            }
-            return [];
-        } catch (error) {
-            console.error('Error filtering label columns:', error);
-            return [];
-        }
-    }, [module.type, columns, predictCol]);
+    // Load Data 모듈용 탭 상태
+    const [loadDataTab, setLoadDataTab] = useState<'detail' | 'graph'>('detail');
+    const [graphXCol, setGraphXCol] = useState<string | null>(null);
+    const [graphYCol, setGraphYCol] = useState<string | null>(null);
     
-    const defaultLabelCol = useMemo(() => {
-        try {
-            return labelCols && labelCols.length > 0 ? (labelCols[0]?.name || null) : null;
-        } catch (error) {
-            console.error('Error getting default label column:', error);
-            return null;
-        }
-    }, [labelCols]);
-    
-    const moduleIdRef = useRef<string | null>(null); // 모듈 ID 추적
-    const [scoreLabelCol, setScoreLabelCol] = useState<string | null>(null);
-    
-    // Score Model의 경우 모듈이 변경될 때만 초기화
-    useEffect(() => {
-        try {
-            if (module.type === ModuleType.ScoreModel) {
-                // 모듈이 변경된 경우에만 초기화
-                if (moduleIdRef.current !== module.id) {
-                    moduleIdRef.current = module.id;
-                    setScoreLabelCol(defaultLabelCol);
-                }
-            } else {
-                // Score Model이 아닌 경우 리셋
-                if (moduleIdRef.current !== null) {
-                    moduleIdRef.current = null;
-                    setScoreLabelCol(null);
-                }
-            }
-        } catch (error) {
-            console.error('Error in Score Model label column initialization:', error);
-        }
-    }, [module.id, module.type, defaultLabelCol]); // defaultLabelCol을 의존성에 추가
-
-// PCA Score Visualization 컴포넌트
-const PCAScoreVisualization: React.FC<{
-    module: CanvasModule;
-    rows: Record<string, any>[];
-    columns: ColumnInfo[];
-    predictCol: ColumnInfo | null;
-    labelCols: ColumnInfo[];
-    scoreLabelCol: string | null;
-    setScoreLabelCol: (col: string | null) => void;
-}> = ({ module, rows, columns, predictCol, labelCols, scoreLabelCol, setScoreLabelCol }) => {
-    const [pcaData, setPcaData] = useState<{
-        coordinates: number[][];
-        explainedVariance: number[];
-        actualValues?: (string | number)[];
-        predictedValues?: (string | number)[];
-    } | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [modelType, setModelType] = useState<'classification' | 'regression'>('classification');
-
-    // Feature columns 추출 (Predict 컬럼과 label 컬럼 제외한 숫자형 컬럼)
-    const featureColumns = useMemo(() => {
-        if (!predictCol) return [];
-        return columns
-            .filter(col => 
-                col.type === 'number' && 
-                col.name !== predictCol.name && 
-                (!scoreLabelCol || col.name !== scoreLabelCol)
-            )
-            .map(col => col.name);
-    }, [columns, predictCol, scoreLabelCol]);
-
-    // y 컬럼 찾기 (labelCols에서 "y"라는 이름의 컬럼)
-    const yCol = useMemo(() => {
-        return labelCols.find(col => col.name.toLowerCase() === 'y') || null;
-    }, [labelCols]);
-
-    // 실제 값과 예측 값 추출
-    const actualValues = useMemo(() => {
-        if (!scoreLabelCol) return [];
-        return rows.map(row => row[scoreLabelCol]);
-    }, [rows, scoreLabelCol]);
-
-    const predictedValues = useMemo(() => {
-        if (!predictCol) return [];
-        // scoreLabelCol이 predictCol.name이면, y 컬럼을 predicted로 사용
-        // 그렇지 않으면 항상 predictCol.name을 사용
-        if (scoreLabelCol === predictCol.name && yCol) {
-            return rows.map(row => row[yCol.name]);
-        }
-        return rows.map(row => row[predictCol.name]);
-    }, [rows, predictCol, scoreLabelCol, yCol]);
-
-    // Label Column 기본값을 Predict로 설정
-    useEffect(() => {
-        if (predictCol && !scoreLabelCol) {
-            setScoreLabelCol(predictCol.name);
-        }
-    }, [predictCol, scoreLabelCol]); // predictCol이 변경되거나 scoreLabelCol이 없을 때 실행
-
-    // 모델 타입 감지
-    useEffect(() => {
-        if (actualValues.length > 0) {
-            const firstActual = actualValues[0];
-            const isNumeric = typeof firstActual === 'number' || !isNaN(Number(firstActual));
-            setModelType(isNumeric ? 'regression' : 'classification');
-        }
-    }, [actualValues]);
-
-    // PCA 계산 (Label Column은 선택 사항)
-    useEffect(() => {
-        if (featureColumns.length < 2 || rows.length === 0 || !predictCol) {
-            setPcaData(null);
-            return;
-        }
-
-        setIsLoading(true);
-        setError(null);
-
-        // JavaScript 기반 PCA 계산 (동기 함수)
-        try {
-            const result = calculatePCA(rows, featureColumns, 2);
-            
-            // validIndices를 사용하여 유효한 데이터만 필터링
-            let validCoords: number[][] = [];
-            let validActuals: (string | number)[] = [];
-            let validPredicteds: (string | number)[] = [];
-            
-            if (result.validIndices && result.validIndices.length > 0) {
-                // validIndices에 해당하는 데이터만 사용
-                validCoords = result.validIndices
-                    .map((idx: number) => result.coordinates[idx])
-                    .filter((c: number[]) => c && c.length >= 2 && !isNaN(c[0]) && !isNaN(c[1]));
-                
-                // Label Column이 있는 경우에만 actual/predicted 값 추출
-                if (scoreLabelCol) {
-                    validActuals = result.validIndices
-                        .map((idx: number) => actualValues[idx])
-                        .filter((v: any) => v !== undefined);
-                    
-                    validPredicteds = result.validIndices
-                        .map((idx: number) => predictedValues[idx])
-                        .filter((v: any) => v !== undefined);
-                }
-            } else {
-                // validIndices가 없으면 NaN 필터링
-                for (let i = 0; i < result.coordinates.length; i++) {
-                    const coord = result.coordinates[i];
-                    if (coord && coord.length >= 2 && !isNaN(coord[0]) && !isNaN(coord[1])) {
-                        validCoords.push(coord);
-                        // Label Column이 있는 경우에만 추가
-                        if (scoreLabelCol && actualValues[i] !== undefined && predictedValues[i] !== undefined) {
-                            validActuals.push(actualValues[i]);
-                            validPredicteds.push(predictedValues[i]);
-                        }
-                    }
-                }
-            }
-            
-            if (validCoords.length === 0) {
-                throw new Error('No valid data points after filtering');
-            }
-
-            setPcaData({
-                coordinates: validCoords,
-                explainedVariance: result.explainedVariance,
-                actualValues: scoreLabelCol ? validActuals : undefined,
-                predictedValues: scoreLabelCol ? validPredicteds : undefined,
-            });
-            setIsLoading(false);
-        } catch (err: any) {
-            console.error('PCA calculation error:', err);
-            setError(err.message || 'Failed to calculate PCA');
-            setIsLoading(false);
-        }
-    }, [rows, featureColumns, predictCol, scoreLabelCol, actualValues, predictedValues]);
-
-    if (!predictCol) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <p className="text-gray-500">Predict column not found in the data.</p>
-            </div>
-        );
-    }
-
-    if (featureColumns.length < 2) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <p className="text-gray-500">Need at least 2 numeric feature columns for PCA visualization.</p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="w-full h-full flex flex-col gap-3">
-            {/* Label Column 선택 (선택 사항) - Predict와 y만 표시 */}
-            {(yCol || predictCol) && (
-                <div className="flex-shrink-0 flex items-center gap-2 px-2">
-                    <label htmlFor="label-select" className="font-semibold text-gray-700 text-sm">
-                        Label Column (Optional):
-                    </label>
-                    <select
-                        id="label-select"
-                        value={scoreLabelCol || ''}
-                        onChange={e => setScoreLabelCol(e.target.value || null)}
-                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                        {predictCol && (
-                            <option key={predictCol.name} value={predictCol.name}>
-                                {predictCol.name} (Predict)
-                            </option>
-                        )}
-                        {yCol && (
-                            <option key={yCol.name} value={yCol.name}>
-                                {yCol.name} (y)
-                            </option>
-                        )}
-                    </select>
-                    {scoreLabelCol && (
-                        <span className="text-xs text-gray-500">
-                            (Compare actual vs predicted values)
-                        </span>
-                    )}
-                </div>
-            )}
-            
-            {/* PCA 그래프 영역 */}
-            <div className="w-full flex-grow min-h-0 flex items-center justify-center overflow-auto">
-                {isLoading ? (
-                    <div className="flex flex-col items-center gap-3">
-                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-                        <p className="text-gray-500 font-medium">Calculating PCA...</p>
-                    </div>
-                ) : error ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-2">
-                        <p className="text-red-600 font-semibold">Error</p>
-                        <p className="text-red-500 text-sm">{error}</p>
-                    </div>
-                ) : pcaData ? (
-                    <PCAScatterPlot
-                        coordinates={pcaData.coordinates}
-                        actualValues={pcaData.actualValues}
-                        predictedValues={pcaData.predictedValues}
-                        modelType={scoreLabelCol ? modelType : undefined}
-                        explainedVariance={pcaData.explainedVariance}
-                        hasLabel={!!scoreLabelCol}
-                    />
-                ) : (
-                    <div className="flex items-center justify-center h-full">
-                        <p className="text-gray-500">Calculating PCA visualization...</p>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
+    // Load Data 모듈인지 확인
+    const isLoadDataModule = module.type === ModuleType.LoadData;
+    // Select Data 모듈도 Load Data와 동일한 형식으로 표시
+    const isSelectDataModule = module.type === ModuleType.SelectData;
+    // Transition Data, Resample Data, Prep Encode, Prep Normalize, Transform Data, HandleMissingValues도 동일한 형식으로 표시
+    const isDataModule = isLoadDataModule || 
+                         isSelectDataModule || 
+                         module.type === ModuleType.TransitionData ||
+                         module.type === ModuleType.ResampleData ||
+                         module.type === ModuleType.EncodeCategorical ||
+                         module.type === ModuleType.NormalizeData ||
+                         module.type === ModuleType.TransformData ||
+                         module.type === ModuleType.HandleMissingValues;
 
     const sortedRows = useMemo(() => {
         try {
@@ -917,6 +773,48 @@ const PCAScoreVisualization: React.FC<{
             setYAxisCol(null);
         }
     }, [isSelectedColNumeric, selectedColumn, numericCols]);
+    
+    // Load Data/Select Data 모듈용: Graph 탭에서 사용할 열 초기화 (Detail 탭에서 선택된 열을 기본으로 사용)
+    useEffect(() => {
+        if (isDataModule && numericCols.length >= 2) {
+            // Detail 탭에서 선택된 열이 숫자형이면 기본값으로 사용
+            if (selectedColumn && isSelectedColNumeric) {
+                if (!graphXCol || graphXCol !== selectedColumn) {
+                    setGraphXCol(selectedColumn);
+                }
+                if (!graphYCol || graphYCol === selectedColumn) {
+                    const defaultY = numericCols.find(c => c !== selectedColumn) || numericCols[1] || null;
+                    setGraphYCol(defaultY);
+                }
+            } else if (!graphXCol) {
+                // 선택된 열이 없거나 숫자형이 아니면 첫 번째 숫자형 열 사용
+                setGraphXCol(numericCols[0] || null);
+            }
+            if (!graphYCol && graphXCol) {
+                const defaultY = numericCols.find(c => c !== graphXCol) || numericCols[1] || null;
+                setGraphYCol(defaultY);
+            }
+        }
+    }, [isDataModule, numericCols, selectedColumn, isSelectedColNumeric, graphXCol, graphYCol]);
+    
+    // 상관계수 행렬 계산 (Load Data/Select Data 모듈용)
+    const correlationMatrix = useMemo(() => {
+        if (!isDataModule || numericCols.length < 2) return null;
+        return calculateCorrelationMatrix(rows, numericCols);
+    }, [isLoadDataModule, rows, numericCols]);
+    
+    // correlationMatrix를 Statistics 형식의 correlation으로 변환
+    const correlation = useMemo(() => {
+        if (!correlationMatrix || !numericCols.length) return null;
+        const result: Record<string, Record<string, number>> = {};
+        numericCols.forEach((col, i) => {
+            result[col] = {};
+            numericCols.forEach((col2, j) => {
+                result[col][col2] = correlationMatrix[i][j];
+            });
+        });
+        return result;
+    }, [correlationMatrix, numericCols]);
 
     if (!data) {
         console.warn('DataPreviewModal: No data available for module', module.id, module.type, module.outputData);
@@ -943,86 +841,202 @@ const PCAScoreVisualization: React.FC<{
             >
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Data Preview: {module.name}</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowSpreadView(true)}
+                            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                            </svg>
+                            Spread View
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (!data || !data.columns || !data.rows) return;
+                                const csvContent = [
+                                    data.columns.map(c => c.name).join(','),
+                                    ...data.rows.map(row => 
+                                        data.columns.map(col => {
+                                            const val = row[col.name];
+                                            if (val === null || val === undefined) return '';
+                                            const str = String(val);
+                                            return str.includes(',') || str.includes('"') || str.includes('\n') 
+                                                ? `"${str.replace(/"/g, '""')}"` 
+                                                : str;
+                                        }).join(',')
+                                    )
+                                ].join('\n');
+                                const bom = '\uFEFF';
+                                const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+                                const link = document.createElement('a');
+                                link.href = URL.createObjectURL(blob);
+                                link.download = `${module.name}_data.csv`;
+                                link.click();
+                            }}
+                            className="text-gray-500 hover:text-gray-800 p-1 rounded hover:bg-gray-100"
+                            title="Download CSV"
+                        >
+                            <ArrowDownTrayIcon className="w-6 h-6" />
+                        </button>
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </header>
                 <main className="flex-grow p-4 overflow-auto flex flex-col gap-4">
-                    <div className="flex-shrink-0 border-b border-gray-200">
-                        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                            <button
-                                onClick={() => setActiveTab('table')}
-                                className={`${
-                                    activeTab === 'table'
-                                        ? 'border-indigo-500 text-indigo-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                            >
-                                Data Table
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('visualization')}
-                                className={`${
-                                    activeTab === 'visualization'
-                                        ? 'border-indigo-500 text-indigo-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                            >
-                                PCA Visualization
-                            </button>
-                        </nav>
-                    </div>
-
-                    {activeTab === 'table' && (
-                        <>
+                    {/* Load Data/Select Data 모듈용 탭 */}
+                    {isDataModule && (
+                        <div className="flex-shrink-0 border-b border-gray-200">
+                            <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                                <button
+                                    onClick={() => setLoadDataTab('detail')}
+                                    className={`${
+                                        loadDataTab === 'detail'
+                                            ? 'border-indigo-500 text-indigo-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                                >
+                                    Detail
+                                </button>
+                                <button
+                                    onClick={() => setLoadDataTab('graph')}
+                                    className={`${
+                                        loadDataTab === 'graph'
+                                            ? 'border-indigo-500 text-indigo-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                                >
+                                    Graph
+                                </button>
+                            </nav>
+                        </div>
+                    )}
+                    
+                    {isDataModule && loadDataTab === 'graph' ? (
+                        /* Graph 탭 */
+                        <div className="flex-grow flex flex-col gap-4">
+                            <div className="flex-shrink-0 flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="graph-x-select" className="font-semibold text-gray-700">X-Axis:</label>
+                                    <select
+                                        id="graph-x-select"
+                                        value={graphXCol || ''}
+                                        onChange={e => setGraphXCol(e.target.value)}
+                                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <option value="" disabled>Select a column</option>
+                                        {numericCols.map(col => (
+                                            <option key={col} value={col}>{col}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="graph-y-select" className="font-semibold text-gray-700">Y-Axis:</label>
+                                    <select
+                                        id="graph-y-select"
+                                        value={graphYCol || ''}
+                                        onChange={e => setGraphYCol(e.target.value)}
+                                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <option value="" disabled>Select a column</option>
+                                        {numericCols.filter(c => c !== graphXCol).map(col => (
+                                            <option key={col} value={col}>{col}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            {graphXCol && graphYCol ? (
+                                <div className="flex-grow flex items-center justify-center border border-gray-200 rounded-lg p-4">
+                                    <ScatterPlot rows={rows} xCol={graphXCol} yCol={graphYCol} />
+                                </div>
+                            ) : (
+                                <div className="flex-grow flex items-center justify-center text-gray-500">
+                                    Please select both X and Y axis columns.
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        /* Detail 탭 또는 일반 모듈 */
+                        <div className="flex-grow flex flex-col gap-4">
+                        {/* Prep Missing 모듈의 경우 입력/출력 데이터 행/열 정보 표시 */}
+                        {module.type === ModuleType.HandleMissingValues && module.outputData?.type === 'MissingHandlerOutput' ? (
+                            <div className="flex-shrink-0 bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                                <div className="flex items-center gap-6 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-gray-700">입력 데이터:</span>
+                                        <span className="text-gray-600">
+                                            {data.totalRowCount.toLocaleString()}행 × {columns.length}열
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-gray-700">출력 데이터:</span>
+                                        <span className="text-gray-600">
+                                            {module.outputData.method === 'remove_row' 
+                                                ? 'remove_row'
+                                                : module.outputData.method === 'impute'
+                                                ? `impute (${module.outputData.strategy || 'mean'})`
+                                                : module.outputData.method === 'knn'
+                                                ? `knn (n_neighbors=${module.outputData.n_neighbors || 5})`
+                                                : module.outputData.method
+                                            }
+                                            {' - '}
+                                            {Math.min(sortedRows.length, 1000).toLocaleString()}행 × {columns.length}열
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
                             <div className="flex justify-between items-center flex-shrink-0">
                                 <div className="text-sm text-gray-600">
                                     Showing {Math.min(rows.length, 1000)} of {data.totalRowCount.toLocaleString()} rows and {columns.length} columns. Click a column to see details.
                                 </div>
                             </div>
-                            <div className="flex-grow flex gap-4 overflow-hidden">
-                                {/* Score Model인 경우 테이블만 표시 */}
-                                {module.type === ModuleType.ScoreModel ? (
-                                    <div className="w-full overflow-auto border border-gray-200 rounded-lg">
-                                        <table className="min-w-full text-sm text-left">
-                                            <thead className="bg-gray-50 sticky top-0">
-                                                <tr>
-                                                    {columns.map(col => (
-                                                        <th 
-                                                            key={col.name} 
-                                                            className="py-2 px-3 font-semibold text-gray-600 cursor-pointer hover:bg-gray-100"
-                                                            onClick={() => requestSort(col.name)}
-                                                        >
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="truncate" title={col.name}>{col.name}</span>
-                                                                {sortConfig?.key === col.name && (sortConfig.direction === 'ascending' ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />)}
-                                                            </div>
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {sortedRows.map((row, rowIndex) => (
-                                                    <tr key={rowIndex} className="border-b border-gray-200 last:border-b-0">
-                                                        {columns.map(col => (
-                                                            <td 
-                                                                key={col.name} 
-                                                                className="py-1.5 px-3 font-mono truncate hover:bg-gray-50"
-                                                                title={String(row[col.name])}
-                                                            >
-                                                                {row[col.name] === null ? <i className="text-gray-400">null</i> : String(row[col.name])}
-                                                            </td>
-                                                        ))}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <>
-                                <div className={`overflow-auto border border-gray-200 rounded-lg ${selectedColumnData ? 'w-1/2' : 'w-full'}`}>
+                        )}
+                        <div className="flex-grow flex gap-4 overflow-hidden">
+                            {/* Score Model인 경우 테이블만 표시 */}
+                            {module.type === ModuleType.ScoreModel ? (
+                                <div className="w-full overflow-auto border border-gray-200 rounded-lg">
                                     <table className="min-w-full text-sm text-left">
                                         <thead className="bg-gray-50 sticky top-0">
+                                            <tr>
+                                                {columns.map(col => (
+                                                    <th 
+                                                        key={col.name} 
+                                                        className="py-2 px-3 font-semibold text-gray-600 cursor-pointer hover:bg-gray-100"
+                                                        onClick={() => requestSort(col.name)}
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="truncate" title={col.name}>{col.name}</span>
+                                                            {sortConfig?.key === col.name && (sortConfig.direction === 'ascending' ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />)}
+                                                        </div>
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {sortedRows.map((row, rowIndex) => (
+                                                <tr key={rowIndex} className="border-b border-gray-200 last:border-b-0">
+                                                    {columns.map(col => (
+                                                        <td 
+                                                            key={col.name} 
+                                                            className="py-1.5 px-3 font-mono truncate hover:bg-gray-50"
+                                                            title={String(row[col.name])}
+                                                        >
+                                                            {row[col.name] === null ? <i className="text-gray-400">null</i> : String(row[col.name])}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <>
+                            <div className={`border border-gray-200 rounded-lg ${selectedColumnData ? 'w-1/2' : 'w-full'} overflow-hidden flex flex-col`}>
+                                <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: '400px' }}>
+                                    <table className="min-w-full text-sm text-left">
+                                        <thead className="bg-gray-50 sticky top-0 z-10">
                                             <tr>
                                                 {columns.map(col => (
                                                     <th 
@@ -1056,81 +1070,57 @@ const PCAScoreVisualization: React.FC<{
                                         </tbody>
                                     </table>
                                 </div>
-                                {selectedColumnData && (
-                                    <div className="w-1/2 flex flex-col gap-4">
-                                        {isSelectedColNumeric ? (
-                                            <HistogramPlot rows={rows} column={selectedColumn!} />
-                                        ) : (
-                                            <div className="w-full h-full p-4 flex flex-col border border-gray-200 rounded-lg items-center justify-center">
-                                                <p className="text-gray-500">Plot is not available for non-numeric columns.</p>
-                                            </div>
-                                        )}
-                                        <ColumnStatistics data={selectedColumnData} columnName={selectedColumn} isNumeric={isSelectedColNumeric} />
-                                    </div>
-                                        )}
-                                    </>
-                                )}
                             </div>
-                        </>
-                    )}
-
-                    {activeTab === 'visualization' && (
-                        <div className="flex-grow flex flex-col items-center justify-start p-4 gap-4">
-                            {/* Score Model인 경우 PCA Visualization */}
-                            {module.type === ModuleType.ScoreModel ? (
-                                <PCAScoreVisualization 
-                                    module={module}
-                                    rows={rows}
-                                    columns={columns}
-                                    predictCol={predictCol}
-                                    labelCols={labelCols}
-                                    scoreLabelCol={scoreLabelCol}
-                                    setScoreLabelCol={setScoreLabelCol}
-                                />
-                            ) : (
-                                <>
-                            {!selectedColumn ? (
-                                <div className="flex items-center justify-center h-full">
-                                    <p className="text-gray-500">Select a column from the Data Table to use as the X-axis.</p>
-                                </div>
-                            ) : (
-                                <>
-                                    {isSelectedColNumeric && numericCols.length > 1 && (
-                                        <div className="flex-shrink-0 flex items-center gap-2 self-start">
-                                            <label htmlFor="y-axis-select" className="font-semibold text-gray-700">Y-Axis:</label>
-                                            <select
-                                                id="y-axis-select"
-                                                value={yAxisCol || ''}
-                                                onChange={e => setYAxisCol(e.target.value)}
-                                                className="p-2 border border-gray-300 rounded-md"
-                                            >
-                                                <option value="" disabled>Select a column</option>
-                                                {numericCols.filter(c => c !== selectedColumn).map(col => (
-                                                    <option key={col} value={col}>{col}</option>
-                                                ))}
-                                            </select>
+                            {selectedColumnData && (
+                                <div className="w-1/2 flex flex-col gap-4">
+                                    {isSelectedColNumeric ? (
+                                        <HistogramPlot rows={rows} column={selectedColumn!} />
+                                    ) : (
+                                        <div className="w-full h-full p-4 flex flex-col border border-gray-200 rounded-lg items-center justify-center">
+                                            <p className="text-gray-500">Plot is not available for non-numeric columns.</p>
                                         </div>
                                     )}
-
-                                    <div className="w-full flex-grow min-h-0">
-                                        {isSelectedColNumeric ? (
-                                            yAxisCol ? (
-                                                <ScatterPlot rows={rows} xCol={selectedColumn} yCol={yAxisCol} />
-                                            ) : (
-                                                <HistogramPlot rows={rows} column={selectedColumn} />
-                                            )
-                                        ) : (
-                                            <HistogramPlot rows={rows} column={selectedColumn} />
-                                        )}
-                                    </div>
-                                        </>
+                                    <ColumnStatistics data={selectedColumnData} columnName={selectedColumn} isNumeric={isSelectedColNumeric} />
+                                </div>
                                     )}
                                 </>
                             )}
                         </div>
+                        
+                        {/* Load Data/Select Data 모듈용: 상관계수 표시 (Statistics 모듈 형식) */}
+                        {isDataModule && numericCols.length >= 2 && correlation && (
+                            <div className="flex-shrink-0 flex flex-col gap-4">
+                                <div className="border-t border-gray-200 pt-4">
+                                    {/* Correlation Analysis Section */}
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2 text-gray-700">Correlation Analysis</h3>
+                                        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                            <CorrelationHeatmap matrix={correlation} />
+                                        </div>
+                                    </div>
+
+                                    {/* Pairplot Visualization Section */}
+                                    <div className="mt-4">
+                                        <h3 className="text-lg font-semibold mb-2 text-gray-700">Pairplot</h3>
+                                        <div className="p-4 border border-gray-200 rounded-lg">
+                                            <Pairplot correlation={correlation} numericColumns={numericCols} rows={rows} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        </div>
                     )}
                 </main>
             </div>
+            {showSpreadView && rows.length > 0 && (
+                <SpreadViewModal
+                    onClose={() => setShowSpreadView(false)}
+                    data={rows}
+                    columns={columns}
+                    title={`Spread View: ${module.name}`}
+                />
+            )}
         </div>
     );
 };

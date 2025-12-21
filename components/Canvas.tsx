@@ -46,6 +46,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [selectionBox, setSelectionBox] = useState<{ x1: number, y1: number, x2: number, y2: number } | null>(null);
   const isSelecting = useRef(false);
   const isSpacePressed = useRef(false);
+  const selectionStartRef = useRef<{ x: number, y: number } | null>(null);
   
   // Refs for optimized dragging
   const dragInfoRef = useRef<{
@@ -352,6 +353,76 @@ export const Canvas: React.FC<CanvasProps> = ({
     window.addEventListener('touchend', handleTouchEnd);
   }, [modules, selectedModuleIds, setSelectedModuleIds, handleTouchMove, handleTouchEnd]);
   
+  const handleSelectionMouseMove = useCallback((e: globalThis.MouseEvent) => {
+    if (isSelecting.current && selectionStartRef.current && canvasContainerRef.current) {
+      const canvasRect = canvasContainerRef.current.getBoundingClientRect();
+      const currentX = e.clientX - canvasRect.left;
+      const currentY = e.clientY - canvasRect.top;
+      setSelectionBox({
+        x1: selectionStartRef.current.x,
+        y1: selectionStartRef.current.y,
+        x2: currentX,
+        y2: currentY,
+      });
+    }
+  }, []);
+
+  const handleSelectionMouseUp = useCallback((e: globalThis.MouseEvent) => {
+    if (isSelecting.current) {
+      isSelecting.current = false;
+      window.removeEventListener('mousemove', handleSelectionMouseMove);
+      window.removeEventListener('mouseup', handleSelectionMouseUp);
+      
+      if (selectionStartRef.current && canvasContainerRef.current) {
+        const canvasRect = canvasContainerRef.current.getBoundingClientRect();
+        const endX = e.clientX - canvasRect.left;
+        const endY = e.clientY - canvasRect.top;
+        const { x: startX, y: startY } = selectionStartRef.current;
+
+        const selectionRect = {
+          minX: (Math.min(startX, endX) - pan.x) / scale,
+          minY: (Math.min(startY, endY) - pan.y) / scale,
+          maxX: (Math.max(startX, endX) - pan.x) / scale,
+          maxY: (Math.max(startY, endY) - pan.y) / scale,
+        };
+
+        const moduleWidth = 256; // Updated to match component width
+        const moduleHeight = 120; 
+
+        const newlySelectedIds = modules
+          .filter(module => {
+            const moduleRect = {
+              x: module.position.x,
+              y: module.position.y,
+              width: moduleWidth,
+              height: moduleHeight,
+            };
+            return (
+              moduleRect.x < selectionRect.maxX &&
+              moduleRect.x + moduleRect.width > selectionRect.minX &&
+              moduleRect.y < selectionRect.maxY &&
+              moduleRect.y + moduleRect.height > selectionRect.minY
+            );
+          })
+          .map(m => m.id);
+
+        if (newlySelectedIds.length > 0) {
+          if (e.shiftKey) {
+            setSelectedModuleIds(prev => {
+              const newSet = new Set(prev);
+              newlySelectedIds.forEach(id => newSet.add(id));
+              return Array.from(newSet);
+            });
+          } else {
+            setSelectedModuleIds(newlySelectedIds);
+          }
+        }
+      }
+      setSelectionBox(null);
+      selectionStartRef.current = null;
+    }
+  }, [pan, scale, modules, setSelectedModuleIds, handleSelectionMouseMove]);
+
   const handleCanvasMouseDown = (e: MouseEvent) => {
     // Panning with middle mouse button
     if (e.button === 1) {
@@ -359,6 +430,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         isPanning.current = true;
         panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
         (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
+        return;
+    }
+
+    // 모듈 드래그 중이면 박스 선택 시작하지 않음
+    if (dragInfoRef.current) {
         return;
     }
 
@@ -380,7 +456,12 @@ export const Canvas: React.FC<CanvasProps> = ({
             const canvasRect = canvasContainerRef.current!.getBoundingClientRect();
             const startX = e.clientX - canvasRect.left;
             const startY = e.clientY - canvasRect.top;
+            selectionStartRef.current = { x: startX, y: startY };
             setSelectionBox({ x1: startX, y1: startY, x2: startX, y2: startY });
+            
+            // 전역 이벤트 리스너 등록
+            window.addEventListener('mousemove', handleSelectionMouseMove);
+            window.addEventListener('mouseup', handleSelectionMouseUp);
         }
     }
   };
@@ -406,12 +487,8 @@ export const Canvas: React.FC<CanvasProps> = ({
               x: e.clientX - panStart.current.x,
               y: e.clientY - panStart.current.y
           });
-      } else if (isSelecting.current && selectionBox && canvasContainerRef.current) {
-          const canvasRect = canvasContainerRef.current.getBoundingClientRect();
-          const currentX = e.clientX - canvasRect.left;
-          const currentY = e.clientY - canvasRect.top;
-          setSelectionBox(prev => prev ? { ...prev, x2: currentX, y2: currentY } : null);
       }
+      // 박스 선택은 전역 이벤트 리스너로 처리
   };
 
   const handleCanvasMouseUp = (e: MouseEvent) => {
@@ -427,53 +504,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               (e.currentTarget as HTMLElement).style.cursor = 'grab';
           }
       }
-
-      if (isSelecting.current) {
-        isSelecting.current = false;
-        if (selectionBox) {
-            const { x1, y1, x2, y2 } = selectionBox;
-
-            const selectionRect = {
-                minX: (Math.min(x1, x2) - pan.x) / scale,
-                minY: (Math.min(y1, y2) - pan.y) / scale,
-                maxX: (Math.max(x1, x2) - pan.x) / scale,
-                maxY: (Math.max(y1, y2) - pan.y) / scale,
-            };
-
-            const moduleWidth = 256; // Updated to match component width
-            const moduleHeight = 120; 
-
-            const newlySelectedIds = modules
-                .filter(module => {
-                    const moduleRect = {
-                        x: module.position.x,
-                        y: module.position.y,
-                        width: moduleWidth,
-                        height: moduleHeight,
-                    };
-                    return (
-                        moduleRect.x < selectionRect.maxX &&
-                        moduleRect.x + moduleRect.width > selectionRect.minX &&
-                        moduleRect.y < selectionRect.maxY &&
-                        moduleRect.y + moduleRect.height > selectionRect.minY
-                    );
-                })
-                .map(m => m.id);
-
-            if (newlySelectedIds.length > 0) {
-                 if (e.shiftKey) {
-                    setSelectedModuleIds(prev => {
-                        const newSet = new Set(prev);
-                        newlySelectedIds.forEach(id => newSet.add(id));
-                        return Array.from(newSet);
-                    });
-                } else {
-                    setSelectedModuleIds(newlySelectedIds);
-                }
-            }
-        }
-        setSelectionBox(null);
-    }
+      // 박스 선택은 전역 이벤트 리스너로 처리
   };
   
   const handleWheel = (e: React.WheelEvent) => {

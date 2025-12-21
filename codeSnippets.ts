@@ -417,43 +417,43 @@ if p_model_type == 'ElasticNet':
     DecisionTree: `
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-def create_decision_tree(model_purpose: str = 'classification', criterion: str = 'gini',
-                        max_depth: int = None, min_samples_split: int = 2, min_samples_leaf: int = 1):
-    """
-    의사결정나무 모델을 생성합니다.
-    """
-    print(f"의사결정나무 모델 생성 중 ({model_purpose})...")
-    
-    if model_purpose == 'classification':
-        model = DecisionTreeClassifier(
-            criterion=criterion.lower(),
-            max_depth=max_depth,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
-            random_state=42
-        )
-    else:
-        criterion_reg = 'squared_error' if criterion == 'mse' else 'absolute_error'
-        model = DecisionTreeRegressor(
-            criterion=criterion_reg,
-            max_depth=max_depth,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
-            random_state=42
-        )
-    
-    print("모델 생성 완료.")
-    return model
-
+# This module creates a decision tree model instance.
+# The model will be trained in the 'Train Model' module.
 # Parameters from UI
 p_model_purpose = {model_purpose}
 p_criterion = {criterion}
-p_max_depth = {max_depth}
+p_max_depth = {max_depth} if {max_depth} else None
 p_min_samples_split = {min_samples_split}
 p_min_samples_leaf = {min_samples_leaf}
 
-# Execution
-# decision_tree_model = create_decision_tree(p_model_purpose, p_criterion, p_max_depth, p_min_samples_split, p_min_samples_leaf)
+# Create model instance based on model purpose
+if p_model_purpose == 'classification':
+    criterion_clf = p_criterion.lower() if p_criterion else 'gini'
+        model = DecisionTreeClassifier(
+        criterion=criterion_clf,
+        max_depth=p_max_depth,
+        min_samples_split=p_min_samples_split,
+        min_samples_leaf=p_min_samples_leaf,
+            random_state=42
+        )
+    else:
+    criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
+        model = DecisionTreeRegressor(
+            criterion=criterion_reg,
+        max_depth=p_max_depth,
+        min_samples_split=p_min_samples_split,
+        min_samples_leaf=p_min_samples_leaf,
+            random_state=42
+        )
+    
+print(f"Decision Tree model instance created successfully ({p_model_purpose}).")
+print(f"  Criterion: {p_criterion}")
+print(f"  Max Depth: {p_max_depth}")
+print(f"  Min Samples Split: {p_min_samples_split}")
+print(f"  Min Samples Leaf: {p_min_samples_leaf}")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
 `,
 
     LogisticTradition: `

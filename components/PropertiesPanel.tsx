@@ -1530,201 +1530,6 @@ const renderParameters = (
         </div>
       );
     }
-    case ModuleType.DiversionChecker: {
-      const sourceData = getConnectedDataSource(module.id);
-      const inputColumns = sourceData?.columns || [];
-
-      if (inputColumns.length === 0) {
-        return (
-          <p className="text-sm text-gray-500">
-            Connect a data source to the 'data_in' port to configure.
-          </p>
-        );
-      }
-
-      const { feature_columns = [], label_column = null, max_iter = 100 } = module.parameters;
-
-      const handleFeatureChange = (colName: string, isChecked: boolean) => {
-        const newFeatures = isChecked
-          ? [...feature_columns, colName]
-          : feature_columns.filter((c: string) => c !== colName);
-        onParamChange("feature_columns", newFeatures);
-      };
-
-      const handleLabelChange = (colName: string) => {
-        const newLabel = colName === "" ? null : colName;
-        onParamChange("label_column", newLabel);
-        // If the new label was a feature, unselect it as a feature
-        if (newLabel && feature_columns.includes(newLabel)) {
-          onParamChange(
-            "feature_columns",
-            feature_columns.filter((c: string) => c !== newLabel)
-          );
-        }
-      };
-
-      const handleSelectAllFeatures = (selectAll: boolean) => {
-        if (selectAll) {
-          const allFeatureCols = inputColumns
-            .map((col) => col.name)
-            .filter((name) => name !== label_column);
-          onParamChange("feature_columns", allFeatureCols);
-        } else {
-          onParamChange("feature_columns", []);
-        }
-      };
-
-      return (
-        <div>
-          <AIParameterRecommender
-            module={module}
-            inputColumns={inputColumns.map((c) => c.name)}
-            projectName={projectName}
-            updateModuleParameters={updateModuleParameters}
-          />
-          <div className="mb-4">
-            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
-              Label Column
-            </h5>
-            <select
-              value={label_column || ""}
-              onChange={(e) => handleLabelChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">공백</option>
-              {inputColumns.map((col) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <h5 className="text-xs text-gray-500 uppercase font-bold">
-                Feature Columns
-              </h5>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSelectAllFeatures(true)}
-                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={() => handleSelectAllFeatures(false)}
-                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
-                >
-                  Deselect All
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2 pr-2">
-              {inputColumns.map((col) => (
-                <label
-                  key={col.name}
-                  className="flex items-center gap-2 text-sm truncate"
-                  title={col.name}
-                >
-                  <input
-                    type="checkbox"
-                    checked={feature_columns.includes(col.name)}
-                    onChange={(e) =>
-                      handleFeatureChange(col.name, e.target.checked)
-                    }
-                    disabled={col.name === label_column}
-                    className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span className="truncate">{col.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4">
-            <PropertyInput
-              label="Max Iterations"
-              type="number"
-              value={max_iter}
-              onChange={(v) => onParamChange("max_iter", v)}
-            />
-          </div>
-        </div>
-      );
-    }
-    case ModuleType.EvaluateStat: {
-      const sourceData = getConnectedDataSource(module.id);
-      const inputColumns = sourceData?.columns || [];
-
-      if (inputColumns.length === 0) {
-        return (
-          <p className="text-sm text-gray-500">
-            Connect a data source to the 'data_in' port to configure.
-          </p>
-        );
-      }
-
-      const { label_column = null, prediction_column = null, model_type = null } = module.parameters;
-
-      const handleLabelChange = (colName: string) => {
-        const newLabel = colName === "" ? null : colName;
-        onParamChange("label_column", newLabel);
-      };
-
-      const handlePredictionChange = (colName: string) => {
-        const newPrediction = colName === "" ? null : colName;
-        onParamChange("prediction_column", newPrediction);
-      };
-
-      return (
-        <div>
-          <div className="mb-4">
-            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
-              Label Column
-            </h5>
-            <select
-              value={label_column || ""}
-              onChange={(e) => handleLabelChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">공백</option>
-              {inputColumns.map((col) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="mb-4">
-            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
-              Prediction Column
-            </h5>
-            <select
-              value={prediction_column || ""}
-              onChange={(e) => handlePredictionChange(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">공백</option>
-              {inputColumns.map((col) => (
-                <option key={col.name} value={col.name}>
-                  {col.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="mb-4">
-            <PropertySelect
-              label="Model Type (Optional)"
-              value={model_type || ""}
-              onChange={(v) => onParamChange("model_type", v || null)}
-              options={["", "OLS", "Logistic", "Logit", "Poisson", "QuasiPoisson", "NegativeBinomial", "Gamma", "Tweedie"]}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              모델 타입을 선택하면 해당 모델의 특수 통계량(Deviance, AIC, BIC 등)이 계산됩니다. 선택하지 않으면 기본 통계량만 계산됩니다.
-            </p>
-          </div>
-        </div>
-      );
-    }
     // ... [Rest of module types: KMeans, DBSCAN, LogisticRegression, DecisionTree, etc. remain unchanged] ...
     case ModuleType.KMeans:
     case ModuleType.HierarchicalClustering:
@@ -1946,44 +1751,6 @@ const renderParameters = (
           />
         </>
       );
-    case ModuleType.KNN: {
-      const purpose = module.parameters.model_purpose || "classification";
-      return (
-        <>
-          <PropertySelect
-            label="Model Purpose"
-            value={purpose}
-            onChange={(v) => onParamChange("model_purpose", v)}
-            options={["classification", "regression"]}
-          />
-          <PropertyInput
-            label="N Neighbors"
-            type="number"
-            value={module.parameters.n_neighbors || 3}
-            onChange={(v) => onParamChange("n_neighbors", v)}
-            min="1"
-          />
-          <PropertySelect
-            label="Weights"
-            value={module.parameters.weights || "uniform"}
-            onChange={(v) => onParamChange("weights", v)}
-            options={["uniform", "distance"]}
-          />
-          <PropertySelect
-            label="Algorithm"
-            value={module.parameters.algorithm || "auto"}
-            onChange={(v) => onParamChange("algorithm", v)}
-            options={["auto", "ball_tree", "kd_tree", "brute"]}
-          />
-          <PropertySelect
-            label="Metric"
-            value={module.parameters.metric || "minkowski"}
-            onChange={(v) => onParamChange("metric", v)}
-            options={["minkowski", "euclidean", "manhattan", "chebyshev", "hamming", "cosine"]}
-          />
-        </>
-      );
-    }
     case ModuleType.DecisionTree: {
       const purpose = module.parameters.model_purpose;
       const handlePurposeChange = (newPurpose: string) => {
@@ -2218,63 +1985,143 @@ const renderParameters = (
         </>
       );
     }
-    case ModuleType.OLSModel:
-      return (
-        <p className="text-sm text-gray-500">
-          OLS (Ordinary Least Squares) 모델입니다. 파라미터 설정이 필요 없습니다.
-        </p>
-      );
-    case ModuleType.LogisticModel:
-      return (
-        <p className="text-sm text-gray-500">
-          Logistic 회귀 모델입니다. 파라미터 설정이 필요 없습니다.
-        </p>
-      );
-    case ModuleType.PoissonModel:
-      return (
-        <PropertyInput
-          label="Max Iterations"
-          type="number"
-          value={module.parameters.max_iter || 100}
-          onChange={(v) => onParamChange("max_iter", v)}
-        />
-      );
-    case ModuleType.QuasiPoissonModel:
-      return (
-        <PropertyInput
-          label="Max Iterations"
-          type="number"
-          value={module.parameters.max_iter || 100}
-          onChange={(v) => onParamChange("max_iter", v)}
-        />
-      );
-    case ModuleType.NegativeBinomialModel:
-      return (
-        <>
-          <PropertyInput
-            label="Max Iterations"
-            type="number"
-            value={module.parameters.max_iter || 100}
-            onChange={(v) => onParamChange("max_iter", v)}
-          />
-          <PropertyInput
-            label="Dispersion"
-            type="number"
-            value={module.parameters.disp || 1.0}
-            onChange={(v) => onParamChange("disp", v)}
-            step="0.1"
-          />
-        </>
-      );
     case ModuleType.StatModels:
       return (
         <PropertySelect
           label="Model Type"
           value={module.parameters.model}
           onChange={(v) => onParamChange("model", v)}
-          options={["Gamma", "Tweedie"]}
+          options={[
+            "OLS",
+            "Logit",
+            "Poisson",
+            "NegativeBinomial",
+            "Gamma",
+            "Tweedie",
+          ]}
         />
       );
+    case ModuleType.DiversionChecker: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source to the 'data_in' port to configure.
+          </p>
+        );
+      }
+
+      const { feature_columns = [], label_column = null } = module.parameters;
+
+      const handleFeatureChange = (colName: string, isChecked: boolean) => {
+        const newFeatures = isChecked
+          ? [...feature_columns, colName]
+          : feature_columns.filter((c: string) => c !== colName);
+        onParamChange("feature_columns", newFeatures);
+      };
+
+      const handleLabelChange = (colName: string) => {
+        const newLabel = colName === "" ? null : colName;
+        onParamChange("label_column", newLabel);
+        // If the new label was a feature, unselect it as a feature
+        if (newLabel && feature_columns.includes(newLabel)) {
+          onParamChange(
+            "feature_columns",
+            feature_columns.filter((c: string) => c !== newLabel)
+          );
+        }
+      };
+
+      const handleSelectAllFeatures = (selectAll: boolean) => {
+        if (selectAll) {
+          const allFeatureCols = inputColumns
+            .map((col) => col.name)
+            .filter((name) => name !== label_column);
+          onParamChange("feature_columns", allFeatureCols);
+        } else {
+          onParamChange("feature_columns", []);
+        }
+      };
+
+      return (
+        <div>
+          <AIParameterRecommender
+            module={module}
+            inputColumns={inputColumns.map((c) => c.name)}
+            projectName={projectName}
+            updateModuleParameters={updateModuleParameters}
+          />
+          <div className="mb-4">
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Label Column
+            </h5>
+            <select
+              value={label_column || ""}
+              onChange={(e) => handleLabelChange(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">공백</option>
+              {inputColumns.map((col) => (
+                <option key={col.name} value={col.name}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h5 className="text-xs text-gray-500 uppercase font-bold">
+                Feature Columns
+              </h5>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSelectAllFeatures(true)}
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => handleSelectAllFeatures(false)}
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded-md font-semibold"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2 pr-2">
+              {inputColumns.map((col) => (
+                <label
+                  key={col.name}
+                  className="flex items-center gap-2 text-sm truncate"
+                  title={col.name}
+                >
+                  <input
+                    type="checkbox"
+                    checked={feature_columns.includes(col.name)}
+                    onChange={(e) =>
+                      handleFeatureChange(col.name, e.target.checked)
+                    }
+                    disabled={col.name === label_column}
+                    className="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span
+                    className={
+                      col.name === label_column
+                        ? "text-gray-500 line-through"
+                        : ""
+                    }
+                  >
+                    {col.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
     default:
       const hasParams = Object.keys(module.parameters).length > 0;
       if (!hasParams) {
@@ -2717,7 +2564,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
-  const codeSnippet = useMemo(() => getModuleCode(module, modules, connections), [module, modules, connections]);
+  const codeSnippet = useMemo(() => getModuleCode(module), [module]);
 
   const handleCopyCode = useCallback(() => {
     if (codeSnippet) {
@@ -2916,6 +2763,39 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
+  // canVisualize 함수를 renderOutputPreview 외부로 이동
+  const visualizableTypes = [
+    "DataPreview",
+    "StatisticsOutput",
+    "SplitDataOutput",
+    "TrainedModelOutput",
+    "StatsModelsResultOutput",
+    "XoLPriceOutput",
+    "FinalXolPriceOutput",
+    "EvaluationOutput",
+    "KMeansOutput",
+    "HierarchicalClusteringOutput",
+    "PCAOutput",
+    "DBSCANOutput",
+    "MissingHandlerOutput",
+    "EncoderOutput",
+    "NormalizerOutput",
+  ];
+
+  const canVisualize = () => {
+    if (!module || !module.outputData) return false;
+    if (visualizableTypes.includes(module.outputData.type)) return true;
+    if (
+      [
+        "KMeansOutput",
+        "HierarchicalClusteringOutput",
+        "DBSCANOutput",
+      ].includes(module.outputData.type)
+    )
+      return true;
+    return false;
+  };
+
   const renderOutputPreview = () => {
     if (
       !module ||
@@ -2930,6 +2810,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     const outputData = module.outputData;
 
+<<<<<<< HEAD
     const visualizableTypes = [
       "DataPreview",
       "StatisticsOutput",
@@ -3227,15 +3108,48 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               placeholder="Module Name"
               disabled={!module}
             />
-            {module && onRunModule && (
-              <button
-                onClick={() => onRunModule(module.id)}
-                className="p-2 bg-green-600 hover:bg-green-500 rounded-md transition-colors flex-shrink-0"
-                title="Run Module"
-              >
-                <PlayIcon className="w-4 h-4 text-white" />
-              </button>
-            )}
+            {module && onRunModule && (() => {
+              // Stat Model, 지도학습, 비지도학습 모델은 실행 버튼 표시하지 않음
+              const noRunButtonTypes = [
+                // Stat Model
+                ModuleType.OLSModel,
+                ModuleType.LogisticModel,
+                ModuleType.PoissonModel,
+                ModuleType.QuasiPoissonModel,
+                ModuleType.NegativeBinomialModel,
+                ModuleType.StatModels,
+                // 지도학습
+                ModuleType.LinearRegression,
+                ModuleType.LogisticRegression,
+                ModuleType.PoissonRegression,
+                ModuleType.NegativeBinomialRegression,
+                ModuleType.DecisionTree,
+                ModuleType.RandomForest,
+                ModuleType.SVM,
+                ModuleType.LinearDiscriminantAnalysis,
+                ModuleType.NaiveBayes,
+                ModuleType.KNN,
+                // 비지도학습
+                ModuleType.KMeans,
+                ModuleType.HierarchicalClustering,
+                ModuleType.DBSCAN,
+                ModuleType.PrincipalComponentAnalysis,
+              ];
+              
+              if (noRunButtonTypes.includes(module.type)) {
+                return null;
+              }
+              
+              return (
+                <button
+                  onClick={() => onRunModule(module.id)}
+                  className="p-2 bg-green-600 hover:bg-green-500 rounded-md transition-colors flex-shrink-0"
+                  title="Run Module"
+                >
+                  <PlayIcon className="w-4 h-4 text-white" />
+                </button>
+              );
+            })()}
           </div>
           <p className="text-xs text-gray-500 mt-1">
             {module ? module.type : "No module selected"}
@@ -3299,20 +3213,32 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           ) : (
             <>
               {activeTab === "properties" && (
-                <PropertyGroup title="Parameters" module={module}>
-                  {renderParameters(
-                    module,
-                    handleParamChange,
-                    fileInputRef,
-                    modules,
-                    connections,
-                    projectName,
-                    updateModuleParameters,
-                    handleLoadSample,
-                    folderHandle,
-                    () => setShowExcelModal(true)
+                <div>
+                  <PropertyGroup title="Parameters" module={module}>
+                    {renderParameters(
+                      module,
+                      handleParamChange,
+                      fileInputRef,
+                      modules,
+                      connections,
+                      projectName,
+                      updateModuleParameters,
+                      handleLoadSample,
+                      folderHandle,
+                      () => setShowExcelModal(true)
+                    )}
+                  </PropertyGroup>
+                  {canVisualize() && (
+                    <div className="mt-4 border-t border-gray-700 pt-4">
+                      <button
+                        onClick={() => onViewDetails(module.id)}
+                        className="w-full px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-white transition-colors"
+                      >
+                        View Details
+                      </button>
+                    </div>
                   )}
-                </PropertyGroup>
+                </div>
               )}
               {activeTab === "preview" && (
                 <div>
@@ -3381,6 +3307,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   }}
                 >
                   {logs.map((log) => (
+<<<<<<< HEAD
                     <div
                       key={log.id}
                       className="flex group hover:bg-gray-800/50 rounded px-1 py-0.5"

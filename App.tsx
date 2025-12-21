@@ -96,7 +96,7 @@ type TerminalLog = {
   timestamp: string;
 };
 
-type PropertiesTab = "properties" | "preview" | "code";
+type PropertiesTab = "properties" | "preview" | "code" | "terminal";
 
 // --- Helper Functions ---
 // Note: All mathematical/statistical calculations are now performed using Pyodide (Python)
@@ -996,12 +996,12 @@ ${header}
       
       await savePipeline(pipelineState, {
         extension: ".mla",
-        description: "ML Pipeline File",
+              description: "ML Pipeline File",
         onSuccess: (fileName) => {
           addLog("SUCCESS", `Pipeline saved to '${fileName}'.`);
-          setIsDirty(false);
-          setSaveButtonText("Saved!");
-          setTimeout(() => setSaveButtonText("Save"), 2000);
+      setIsDirty(false);
+      setSaveButtonText("Saved!");
+      setTimeout(() => setSaveButtonText("Save"), 2000);
         },
         onError: (error) => {
           console.error("Failed to save pipeline:", error);
@@ -1025,18 +1025,18 @@ ${header}
     });
 
     if (savedState) {
-      if (savedState.modules && savedState.connections) {
-        resetModules(savedState.modules);
-        _setConnections(savedState.connections);
-        if (savedState.projectName) {
-          setProjectName(savedState.projectName);
-        }
-        setSelectedModuleIds([]);
-        setIsDirty(false);
+          if (savedState.modules && savedState.connections) {
+            resetModules(savedState.modules);
+            _setConnections(savedState.connections);
+            if (savedState.projectName) {
+              setProjectName(savedState.projectName);
+            }
+            setSelectedModuleIds([]);
+            setIsDirty(false);
         addLog("SUCCESS", "Pipeline loaded successfully.");
-      } else {
-        addLog("WARN", "Invalid pipeline file format.");
-      }
+          } else {
+            addLog("WARN", "Invalid pipeline file format.");
+          }
     }
   }, [resetModules, addLog]);
 
@@ -1084,8 +1084,8 @@ ${header}
               const myWorkModels = JSON.parse(myWorkModelsStr);
               if (Array.isArray(myWorkModels)) {
                 sampleModel = myWorkModels.find(
-                  (m: any) => m.name === sampleName
-                );
+          (m: any) => m.name === sampleName
+        );
               }
             } catch (error) {
               console.error("Failed to parse my work models:", error);
@@ -1799,6 +1799,8 @@ ${header}
         setViewingFinalXolPrice(module);
       } else if (module.outputData.type === "EvaluationOutput") {
         setViewingEvaluation(module);
+      } else if (module.outputData.type === "StatisticsOutput") {
+        setViewingDataForModule(module);
       } else {
         setViewingDataForModule(module);
       }
@@ -3210,12 +3212,12 @@ ${header}
               } else {
                 // 기존 모듈 (deprecated)
                 distributionType =
-                  modelSourceModule.parameters.distribution_type ||
-                  (modelSourceModule.type === ModuleType.PoissonRegression
-                    ? "Poisson"
-                    : "NegativeBinomial");
+                modelSourceModule.parameters.distribution_type ||
+                (modelSourceModule.type === ModuleType.PoissonRegression
+                  ? "Poisson"
+                  : "NegativeBinomial");
                 maxIter =
-                  parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
+                parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
                 disp = parseFloat(modelSourceModule.parameters.disp) || 1.0;
               }
 
@@ -3285,6 +3287,153 @@ ${header}
                   "ERROR",
                   `Python ${distributionType} 회귀 훈련 실패: ${errorMessage}`
                 );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.DecisionTree) {
+              // Pyodide를 사용하여 Python으로 Decision Tree 훈련 (회귀)
+              const modelPurpose = "regression";
+              const criterion =
+                modelSourceModule.parameters.criterion || "mse";
+              const maxDepth =
+                modelSourceModule.parameters.max_depth === "" ||
+                modelSourceModule.parameters.max_depth === null ||
+                modelSourceModule.parameters.max_depth === undefined
+                  ? null
+                  : parseInt(modelSourceModule.parameters.max_depth, 10);
+              const minSamplesSplit =
+                parseInt(modelSourceModule.parameters.min_samples_split, 10) ||
+                2;
+              const minSamplesLeaf =
+                parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
+                1;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Decision Tree 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitDecisionTreePython } = pyodideModule;
+
+                const fitResult = await fitDecisionTreePython(
+                  X,
+                  y,
+                  modelPurpose,
+                  criterion,
+                  maxDepth,
+                  minSamplesSplit,
+                  minSamplesLeaf,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // Decision Tree는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                metrics["R-squared"] = parseFloat(
+                  (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                );
+                metrics["Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Root Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Mean Absolute Error"] = parseFloat(
+                  (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                );
+
+                addLog(
+                  "SUCCESS",
+                  `Python으로 Decision Tree 모델 훈련 완료`
+                );
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Decision Tree 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.SVM) {
+              // Pyodide를 사용하여 Python으로 SVM 훈련 (회귀)
+              const modelPurpose = "regression";
+              const kernel = modelSourceModule.parameters.kernel || "rbf";
+              const C = parseFloat(modelSourceModule.parameters.C) || 1.0;
+              const gamma =
+                modelSourceModule.parameters.gamma === "" ||
+                modelSourceModule.parameters.gamma === null ||
+                modelSourceModule.parameters.gamma === undefined
+                  ? "scale"
+                  : modelSourceModule.parameters.gamma;
+              const degree =
+                parseInt(modelSourceModule.parameters.degree, 10) || 3;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 SVM 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitSVMPython } = pyodideModule;
+
+                const gammaValue =
+                  typeof gamma === "string" ? gamma : parseFloat(gamma);
+
+                const fitResult = await fitSVMPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  kernel,
+                  C,
+                  gammaValue,
+                  degree,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // SVM은 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                metrics["R-squared"] = parseFloat(
+                  (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                );
+                metrics["Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Root Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Mean Absolute Error"] = parseFloat(
+                  (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                );
+
+                addLog("SUCCESS", `Python으로 SVM 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog("ERROR", `Python SVM 훈련 실패: ${errorMessage}`);
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
             } else {
@@ -3578,6 +3727,676 @@ ${header}
                 );
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
+            } else if (modelSourceModule.type === ModuleType.DecisionTree) {
+              // Pyodide를 사용하여 Python으로 Decision Tree 훈련
+              const modelPurpose =
+                modelSourceModule.parameters.model_purpose || "classification";
+              const criterion =
+                modelSourceModule.parameters.criterion || "gini";
+              const maxDepth =
+                modelSourceModule.parameters.max_depth === "" ||
+                modelSourceModule.parameters.max_depth === null ||
+                modelSourceModule.parameters.max_depth === undefined
+                  ? null
+                  : parseInt(modelSourceModule.parameters.max_depth, 10);
+              const minSamplesSplit =
+                parseInt(modelSourceModule.parameters.min_samples_split, 10) ||
+                2;
+              const minSamplesLeaf =
+                parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
+                1;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Decision Tree 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitDecisionTreePython } = pyodideModule;
+
+                const fitResult = await fitDecisionTreePython(
+                  X,
+                  y,
+                  modelPurpose,
+                  criterion,
+                  maxDepth,
+                  minSamplesSplit,
+                  minSamplesLeaf,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // Decision Tree는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                if (modelPurpose === "classification") {
+                  metrics["Accuracy"] = parseFloat(
+                    (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                  );
+                  metrics["Precision"] = parseFloat(
+                    (fitResult.metrics["Precision"] || 0).toFixed(4)
+                  );
+                  metrics["Recall"] = parseFloat(
+                    (fitResult.metrics["Recall"] || 0).toFixed(4)
+                  );
+                  metrics["F1-Score"] = parseFloat(
+                    (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                  );
+                  if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                    metrics["ROC-AUC"] = parseFloat(
+                      fitResult.metrics["ROC-AUC"].toFixed(4)
+                    );
+                  }
+                } else {
+                  metrics["R-squared"] = parseFloat(
+                    (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                  );
+                  metrics["Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                  );
+                  metrics["Root Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(
+                      4
+                    )
+                  );
+                  metrics["Mean Absolute Error"] = parseFloat(
+                    (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                  );
+                }
+
+                addLog(
+                  "SUCCESS",
+                  `Python으로 Decision Tree 모델 훈련 완료`
+                );
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Decision Tree 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.SVM) {
+              // Pyodide를 사용하여 Python으로 SVM 훈련
+              const modelPurpose =
+                modelSourceModule.parameters.model_purpose || "classification";
+              const kernel = modelSourceModule.parameters.kernel || "rbf";
+              const C = parseFloat(modelSourceModule.parameters.C) || 1.0;
+              const gamma =
+                modelSourceModule.parameters.gamma === "" ||
+                modelSourceModule.parameters.gamma === null ||
+                modelSourceModule.parameters.gamma === undefined
+                  ? "scale"
+                  : modelSourceModule.parameters.gamma;
+              const degree =
+                parseInt(modelSourceModule.parameters.degree, 10) || 3;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 SVM 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitSVMPython } = pyodideModule;
+
+                const gammaValue =
+                  typeof gamma === "string" ? gamma : parseFloat(gamma);
+
+                const fitResult = await fitSVMPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  kernel,
+                  C,
+                  gammaValue,
+                  degree,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // SVM은 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                if (modelPurpose === "classification") {
+                  metrics["Accuracy"] = parseFloat(
+                    (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                  );
+                  metrics["Precision"] = parseFloat(
+                    (fitResult.metrics["Precision"] || 0).toFixed(4)
+                  );
+                  metrics["Recall"] = parseFloat(
+                    (fitResult.metrics["Recall"] || 0).toFixed(4)
+                  );
+                  metrics["F1-Score"] = parseFloat(
+                    (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                  );
+                  if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                    metrics["ROC-AUC"] = parseFloat(
+                      fitResult.metrics["ROC-AUC"].toFixed(4)
+                    );
+                  }
+                } else {
+                  metrics["R-squared"] = parseFloat(
+                    (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                  );
+                  metrics["Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                  );
+                  metrics["Root Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(
+                      4
+                    )
+                  );
+                  metrics["Mean Absolute Error"] = parseFloat(
+                    (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                  );
+                }
+
+                addLog("SUCCESS", `Python으로 SVM 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog("ERROR", `Python SVM 훈련 실패: ${errorMessage}`);
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (
+              modelSourceModule.type === ModuleType.LinearDiscriminantAnalysis
+            ) {
+              // Pyodide를 사용하여 Python으로 LDA 훈련
+              const solver = modelSourceModule.parameters.solver || "svd";
+              const shrinkage =
+                modelSourceModule.parameters.shrinkage === "" ||
+                modelSourceModule.parameters.shrinkage === null ||
+                modelSourceModule.parameters.shrinkage === undefined
+                  ? null
+                  : parseFloat(modelSourceModule.parameters.shrinkage);
+              const nComponents =
+                modelSourceModule.parameters.n_components === "" ||
+                modelSourceModule.parameters.n_components === null ||
+                modelSourceModule.parameters.n_components === undefined
+                  ? null
+                  : parseInt(modelSourceModule.parameters.n_components, 10);
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 LDA 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitLDAPython } = pyodideModule;
+
+                const fitResult = await fitLDAPython(
+                  X,
+                  y,
+                  solver,
+                  shrinkage,
+                  nComponents,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // LDA는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용 (LDA는 분류만 지원)
+                metrics["Accuracy"] = parseFloat(
+                  (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                );
+                metrics["Precision"] = parseFloat(
+                  (fitResult.metrics["Precision"] || 0).toFixed(4)
+                );
+                metrics["Recall"] = parseFloat(
+                  (fitResult.metrics["Recall"] || 0).toFixed(4)
+                );
+                metrics["F1-Score"] = parseFloat(
+                  (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                );
+                if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                  metrics["ROC-AUC"] = parseFloat(
+                    fitResult.metrics["ROC-AUC"].toFixed(4)
+                  );
+                }
+
+                addLog("SUCCESS", `Python으로 LDA 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog("ERROR", `Python LDA 훈련 실패: ${errorMessage}`);
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.NaiveBayes) {
+              // Pyodide를 사용하여 Python으로 Naive Bayes 훈련
+              const modelType =
+                modelSourceModule.parameters.model_type || "Gaussian";
+              const alpha =
+                parseFloat(modelSourceModule.parameters.alpha) || 1.0;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Naive Bayes 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitNaiveBayesPython } = pyodideModule;
+
+                const fitResult = await fitNaiveBayesPython(
+                  X,
+                  y,
+                  modelType,
+                  alpha,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // Naive Bayes는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용 (Naive Bayes는 분류만 지원)
+                metrics["Accuracy"] = parseFloat(
+                  (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                );
+                metrics["Precision"] = parseFloat(
+                  (fitResult.metrics["Precision"] || 0).toFixed(4)
+                );
+                metrics["Recall"] = parseFloat(
+                  (fitResult.metrics["Recall"] || 0).toFixed(4)
+                );
+                metrics["F1-Score"] = parseFloat(
+                  (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                );
+                if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                  metrics["ROC-AUC"] = parseFloat(
+                    fitResult.metrics["ROC-AUC"].toFixed(4)
+                  );
+                }
+
+                addLog(
+                  "SUCCESS",
+                  `Python으로 Naive Bayes 모델 훈련 완료`
+                );
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Naive Bayes 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.DecisionTree) {
+              // Pyodide를 사용하여 Python으로 Decision Tree 훈련
+              const modelPurpose =
+                modelSourceModule.parameters.model_purpose || "classification";
+              const criterion =
+                modelSourceModule.parameters.criterion || "gini";
+              const maxDepth =
+                modelSourceModule.parameters.max_depth === "" ||
+                modelSourceModule.parameters.max_depth === null ||
+                modelSourceModule.parameters.max_depth === undefined
+                  ? null
+                  : parseInt(modelSourceModule.parameters.max_depth, 10);
+              const minSamplesSplit =
+                parseInt(modelSourceModule.parameters.min_samples_split, 10) ||
+                2;
+              const minSamplesLeaf =
+                parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
+                1;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Decision Tree 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitDecisionTreePython } = pyodideModule;
+
+                const fitResult = await fitDecisionTreePython(
+                  X,
+                  y,
+                  modelPurpose,
+                  criterion,
+                  maxDepth,
+                  minSamplesSplit,
+                  minSamplesLeaf,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // Decision Tree는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                if (modelPurpose === "classification") {
+                  metrics["Accuracy"] = parseFloat(
+                    (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                  );
+                  metrics["Precision"] = parseFloat(
+                    (fitResult.metrics["Precision"] || 0).toFixed(4)
+                  );
+                  metrics["Recall"] = parseFloat(
+                    (fitResult.metrics["Recall"] || 0).toFixed(4)
+                  );
+                  metrics["F1-Score"] = parseFloat(
+                    (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                  );
+                  if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                    metrics["ROC-AUC"] = parseFloat(
+                      fitResult.metrics["ROC-AUC"].toFixed(4)
+                    );
+                  }
+                } else {
+                  metrics["R-squared"] = parseFloat(
+                    (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                  );
+                  metrics["Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                  );
+                  metrics["Root Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(
+                      4
+                    )
+                  );
+                  metrics["Mean Absolute Error"] = parseFloat(
+                    (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                  );
+                }
+
+                addLog(
+                  "SUCCESS",
+                  `Python으로 Decision Tree 모델 훈련 완료`
+                );
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Decision Tree 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.SVM) {
+              // Pyodide를 사용하여 Python으로 SVM 훈련
+              const modelPurpose =
+                modelSourceModule.parameters.model_purpose || "classification";
+              const kernel = modelSourceModule.parameters.kernel || "rbf";
+              const C = parseFloat(modelSourceModule.parameters.C) || 1.0;
+              const gamma =
+                modelSourceModule.parameters.gamma === "" ||
+                modelSourceModule.parameters.gamma === null ||
+                modelSourceModule.parameters.gamma === undefined
+                  ? "scale"
+                  : modelSourceModule.parameters.gamma;
+              const degree =
+                parseInt(modelSourceModule.parameters.degree, 10) || 3;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 SVM 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitSVMPython } = pyodideModule;
+
+                const gammaValue =
+                  typeof gamma === "string" ? gamma : parseFloat(gamma);
+
+                const fitResult = await fitSVMPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  kernel,
+                  C,
+                  gammaValue,
+                  degree,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // SVM은 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                if (modelPurpose === "classification") {
+                  metrics["Accuracy"] = parseFloat(
+                    (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                  );
+                  metrics["Precision"] = parseFloat(
+                    (fitResult.metrics["Precision"] || 0).toFixed(4)
+                  );
+                  metrics["Recall"] = parseFloat(
+                    (fitResult.metrics["Recall"] || 0).toFixed(4)
+                  );
+                  metrics["F1-Score"] = parseFloat(
+                    (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                  );
+                  if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                    metrics["ROC-AUC"] = parseFloat(
+                      fitResult.metrics["ROC-AUC"].toFixed(4)
+                    );
+                  }
+                } else {
+                  metrics["R-squared"] = parseFloat(
+                    (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                  );
+                  metrics["Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                  );
+                  metrics["Root Mean Squared Error"] = parseFloat(
+                    (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(
+                      4
+                    )
+                  );
+                  metrics["Mean Absolute Error"] = parseFloat(
+                    (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                  );
+                }
+
+                addLog("SUCCESS", `Python으로 SVM 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog("ERROR", `Python SVM 훈련 실패: ${errorMessage}`);
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (
+              modelSourceModule.type === ModuleType.LinearDiscriminantAnalysis
+            ) {
+              // Pyodide를 사용하여 Python으로 LDA 훈련
+              const solver = modelSourceModule.parameters.solver || "svd";
+              const shrinkage =
+                modelSourceModule.parameters.shrinkage === "" ||
+                modelSourceModule.parameters.shrinkage === null ||
+                modelSourceModule.parameters.shrinkage === undefined
+                  ? null
+                  : parseFloat(modelSourceModule.parameters.shrinkage);
+              const nComponents =
+                modelSourceModule.parameters.n_components === "" ||
+                modelSourceModule.parameters.n_components === null ||
+                modelSourceModule.parameters.n_components === undefined
+                  ? null
+                  : parseInt(modelSourceModule.parameters.n_components, 10);
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 LDA 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitLDAPython } = pyodideModule;
+
+                const fitResult = await fitLDAPython(
+                  X,
+                  y,
+                  solver,
+                  shrinkage,
+                  nComponents,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // LDA는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용 (LDA는 분류만 지원)
+                metrics["Accuracy"] = parseFloat(
+                  (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                );
+                metrics["Precision"] = parseFloat(
+                  (fitResult.metrics["Precision"] || 0).toFixed(4)
+                );
+                metrics["Recall"] = parseFloat(
+                  (fitResult.metrics["Recall"] || 0).toFixed(4)
+                );
+                metrics["F1-Score"] = parseFloat(
+                  (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                );
+                if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                  metrics["ROC-AUC"] = parseFloat(
+                    fitResult.metrics["ROC-AUC"].toFixed(4)
+                  );
+                }
+
+                addLog("SUCCESS", `Python으로 LDA 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog("ERROR", `Python LDA 훈련 실패: ${errorMessage}`);
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.NaiveBayes) {
+              // Pyodide를 사용하여 Python으로 Naive Bayes 훈련
+              const modelType =
+                modelSourceModule.parameters.model_type || "Gaussian";
+              const alpha =
+                parseFloat(modelSourceModule.parameters.alpha) || 1.0;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Naive Bayes 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitNaiveBayesPython } = pyodideModule;
+
+                const fitResult = await fitNaiveBayesPython(
+                  X,
+                  y,
+                  modelType,
+                  alpha,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // Naive Bayes는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용 (Naive Bayes는 분류만 지원)
+                metrics["Accuracy"] = parseFloat(
+                  (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                );
+                metrics["Precision"] = parseFloat(
+                  (fitResult.metrics["Precision"] || 0).toFixed(4)
+                );
+                metrics["Recall"] = parseFloat(
+                  (fitResult.metrics["Recall"] || 0).toFixed(4)
+                );
+                metrics["F1-Score"] = parseFloat(
+                  (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                );
+                if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                  metrics["ROC-AUC"] = parseFloat(
+                    fitResult.metrics["ROC-AUC"].toFixed(4)
+                  );
+                }
+
+                addLog(
+                  "SUCCESS",
+                  `Python으로 Naive Bayes 모델 훈련 완료`
+                );
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Naive Bayes 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
             } else {
               // For other classification models, use simulation for now
               intercept = Math.random() - 0.5;
@@ -3672,8 +4491,14 @@ ${header}
           );
           const labelColumn = trainedModel.labelColumn;
 
-          // KNN 모델의 경우 별도 처리
-          if (trainedModel.modelType === ModuleType.KNN) {
+          // KNN, Decision Tree, SVM, LDA, NaiveBayes 모델의 경우 별도 처리 (coefficients/intercept가 없는 모델)
+          if (
+            trainedModel.modelType === ModuleType.KNN ||
+            trainedModel.modelType === ModuleType.DecisionTree ||
+            trainedModel.modelType === ModuleType.SVM ||
+            trainedModel.modelType === ModuleType.LinearDiscriminantAnalysis ||
+            trainedModel.modelType === ModuleType.NaiveBayes
+          ) {
             // Train Model 모듈에서 훈련 데이터 가져오기
             const trainModelModule = currentModules.find(
               (m) => m.id === trainedModelSourceModule.id
@@ -3691,7 +4516,9 @@ ${header}
             );
 
             if (!trainDataInputConnection) {
-              throw new Error("Training data connection not found for KNN model.");
+              throw new Error(
+                `Training data connection not found for ${trainedModel.modelType} model.`
+              );
             }
 
             const trainDataSourceModule = currentModules.find(
@@ -3715,10 +4542,12 @@ ${header}
             }
 
             if (!trainingData) {
-              throw new Error("Training data not available for KNN model.");
+              throw new Error(
+                `Training data not available for ${trainedModel.modelType} model.`
+              );
             }
 
-            // KNN 모델 정의 모듈 찾기
+            // 모델 정의 모듈 찾기
             const modelDefConnection = connections.find(
               (c) =>
                 c.to.moduleId === trainModelModule.id &&
@@ -3726,49 +4555,212 @@ ${header}
             );
 
             if (!modelDefConnection) {
-              throw new Error("KNN model definition connection not found.");
+              throw new Error(
+                `${trainedModel.modelType} model definition connection not found.`
+              );
             }
 
-            const knnModelDefModule = currentModules.find(
+            const modelDefModule = currentModules.find(
               (m) => m.id === modelDefConnection.from.moduleId
             );
 
-            if (!knnModelDefModule) {
-              throw new Error("KNN model definition module not found.");
+            if (!modelDefModule) {
+              throw new Error(
+                `${trainedModel.modelType} model definition module not found.`
+              );
             }
 
-            const modelPurpose =
-              knnModelDefModule.parameters.model_purpose || "classification";
-            const nNeighbors =
-              parseInt(knnModelDefModule.parameters.n_neighbors, 10) || 3;
-            const weights = knnModelDefModule.parameters.weights || "uniform";
-            const algorithm =
-              knnModelDefModule.parameters.algorithm || "auto";
-            const metric = knnModelDefModule.parameters.metric || "minkowski";
-
             try {
-              addLog(
-                "INFO",
-                "Pyodide를 사용하여 Python으로 KNN 모델 예측 수행 중..."
-              );
-
               const pyodideModule = await import("./utils/pyodideRunner");
-              const { scoreKNNPython } = pyodideModule;
+              let result: {
+                rows: any[];
+                columns: Array<{ name: string; type: string }>;
+              };
 
-              const result = await scoreKNNPython(
-                inputData.rows || [],
-                trainedModel.featureColumns,
-                labelColumn,
-                modelIsClassification ? "classification" : "regression",
-                nNeighbors,
-                weights,
-                algorithm,
-                metric,
-                trainingData.rows || [],
-                trainedModel.featureColumns,
-                labelColumn,
-                60000 // 타임아웃: 60초
-              );
+              if (trainedModel.modelType === ModuleType.KNN) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 KNN 모델 예측 수행 중..."
+                );
+
+                const modelPurpose =
+                  modelDefModule.parameters.model_purpose || "classification";
+                const nNeighbors =
+                  parseInt(modelDefModule.parameters.n_neighbors, 10) || 3;
+                const weights = modelDefModule.parameters.weights || "uniform";
+                const algorithm =
+                  modelDefModule.parameters.algorithm || "auto";
+                const metric = modelDefModule.parameters.metric || "minkowski";
+
+                const { scoreKNNPython } = pyodideModule;
+                result = await scoreKNNPython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  modelIsClassification ? "classification" : "regression",
+                  nNeighbors,
+                  weights,
+                  algorithm,
+                  metric,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog("SUCCESS", "Python으로 KNN 모델 예측 완료");
+              } else if (trainedModel.modelType === ModuleType.DecisionTree) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 Decision Tree 모델 예측 수행 중..."
+                );
+
+                const modelPurpose =
+                  modelDefModule.parameters.model_purpose || "classification";
+                const criterion =
+                  modelDefModule.parameters.criterion || "gini";
+                const maxDepth =
+                  modelDefModule.parameters.max_depth === "" ||
+                  modelDefModule.parameters.max_depth === null ||
+                  modelDefModule.parameters.max_depth === undefined
+                    ? null
+                    : parseInt(modelDefModule.parameters.max_depth, 10);
+                const minSamplesSplit =
+                  parseInt(modelDefModule.parameters.min_samples_split, 10) ||
+                  2;
+                const minSamplesLeaf =
+                  parseInt(modelDefModule.parameters.min_samples_leaf, 10) ||
+                  1;
+
+                const { scoreDecisionTreePython } = pyodideModule;
+                result = await scoreDecisionTreePython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  modelIsClassification ? "classification" : "regression",
+                  criterion,
+                  maxDepth,
+                  minSamplesSplit,
+                  minSamplesLeaf,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog(
+                  "SUCCESS",
+                  "Python으로 Decision Tree 모델 예측 완료"
+                );
+              } else if (trainedModel.modelType === ModuleType.SVM) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 SVM 모델 예측 수행 중..."
+                );
+
+                const modelPurpose =
+                  modelDefModule.parameters.model_purpose || "classification";
+                const kernel = modelDefModule.parameters.kernel || "rbf";
+                const C = parseFloat(modelDefModule.parameters.C) || 1.0;
+                const gamma =
+                  modelDefModule.parameters.gamma === "" ||
+                  modelDefModule.parameters.gamma === null ||
+                  modelDefModule.parameters.gamma === undefined
+                    ? "scale"
+                    : modelDefModule.parameters.gamma;
+                const degree =
+                  parseInt(modelDefModule.parameters.degree, 10) || 3;
+
+                const gammaValue =
+                  typeof gamma === "string" ? gamma : parseFloat(gamma);
+
+                const { scoreSVMPython } = pyodideModule;
+                result = await scoreSVMPython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  modelIsClassification ? "classification" : "regression",
+                  kernel,
+                  C,
+                  gammaValue,
+                  degree,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog("SUCCESS", "Python으로 SVM 모델 예측 완료");
+              } else if (
+                trainedModel.modelType === ModuleType.LinearDiscriminantAnalysis
+              ) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 LDA 모델 예측 수행 중..."
+                );
+
+                const solver = modelDefModule.parameters.solver || "svd";
+                const shrinkage =
+                  modelDefModule.parameters.shrinkage === "" ||
+                  modelDefModule.parameters.shrinkage === null ||
+                  modelDefModule.parameters.shrinkage === undefined
+                    ? null
+                    : parseFloat(modelDefModule.parameters.shrinkage);
+                const nComponents =
+                  modelDefModule.parameters.n_components === "" ||
+                  modelDefModule.parameters.n_components === null ||
+                  modelDefModule.parameters.n_components === undefined
+                    ? null
+                    : parseInt(modelDefModule.parameters.n_components, 10);
+
+                const { scoreLDAPython } = pyodideModule;
+                result = await scoreLDAPython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  solver,
+                  shrinkage,
+                  nComponents,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog("SUCCESS", "Python으로 LDA 모델 예측 완료");
+              } else if (trainedModel.modelType === ModuleType.NaiveBayes) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 Naive Bayes 모델 예측 수행 중..."
+                );
+
+                const modelType =
+                  modelDefModule.parameters.model_type || "Gaussian";
+                const alpha =
+                  parseFloat(modelDefModule.parameters.alpha) || 1.0;
+
+                const { scoreNaiveBayesPython } = pyodideModule;
+                result = await scoreNaiveBayesPython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  modelType,
+                  alpha,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog(
+                  "SUCCESS",
+                  "Python으로 Naive Bayes 모델 예측 완료"
+                );
+              } else {
+                throw new Error(
+                  `Unsupported model type for ScoreModel: ${trainedModel.modelType}`
+                );
+              }
 
               newOutputData = {
                 type: "DataPreview",
@@ -3776,154 +4768,155 @@ ${header}
                 totalRowCount: inputData.totalRowCount,
                 rows: result.rows,
               };
-
-              addLog("SUCCESS", "Python으로 KNN 모델 예측 완료");
             } catch (error: any) {
               const errorMessage = error.message || String(error);
-              addLog("ERROR", `Python KNN ScoreModel 실패: ${errorMessage}`);
+              addLog(
+                "ERROR",
+                `Python ${trainedModel.modelType} ScoreModel 실패: ${errorMessage}`
+              );
               throw new Error(`모델 예측 실패: ${errorMessage}`);
             }
           } else {
             // 기존 방식 (coefficients/intercept 사용)
-            // Pyodide를 사용하여 Python으로 예측 수행
-            try {
-              addLog(
-                "INFO",
-                "Pyodide를 사용하여 Python으로 모델 예측 수행 중..."
+          // Pyodide를 사용하여 Python으로 예측 수행
+          try {
+            addLog(
+              "INFO",
+              "Pyodide를 사용하여 Python으로 모델 예측 수행 중..."
+            );
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { scoreModelPython } = pyodideModule;
+
+            const result = await scoreModelPython(
+              inputData.rows || [],
+              trainedModel.featureColumns,
+              trainedModel.coefficients,
+              trainedModel.intercept,
+              labelColumn,
+              modelIsClassification ? "classification" : "regression",
+              60000 // 타임아웃: 60초
+            );
+
+            newOutputData = {
+              type: "DataPreview",
+              columns: result.columns,
+              totalRowCount: inputData.totalRowCount,
+              rows: result.rows,
+            };
+
+            addLog("SUCCESS", "Python으로 모델 예측 완료");
+
+            // 연결된 Evaluate Model의 파라미터 자동 설정
+            const evaluateModelConnections = connections.filter(
+              (c) =>
+                c.from.moduleId === module.id &&
+                currentModules.find((m) => m.id === c.to.moduleId)?.type ===
+                  ModuleType.EvaluateModel
+            );
+
+            for (const evalConn of evaluateModelConnections) {
+              const evalModule = currentModules.find(
+                (m) => m.id === evalConn.to.moduleId
               );
+              if (evalModule) {
+                const evalParams = evalModule.parameters || {};
+                const updates: Record<string, any> = {};
 
-              const pyodideModule = await import("./utils/pyodideRunner");
-              const { scoreModelPython } = pyodideModule;
+                const inputColumns = result.columns.map((c) => c.name);
 
-              const result = await scoreModelPython(
-                inputData.rows || [],
-                trainedModel.featureColumns,
-                trainedModel.coefficients,
-                trainedModel.intercept,
-                labelColumn,
-                modelIsClassification ? "classification" : "regression",
-                60000 // 타임아웃: 60초
-              );
+                // label_column 자동 설정 (항상 업데이트)
+                if (inputColumns.includes(labelColumn)) {
+                  updates.label_column = labelColumn;
+                } else if (inputColumns.length > 0) {
+                  updates.label_column = inputColumns[0];
+                }
 
-              newOutputData = {
-                type: "DataPreview",
-                columns: result.columns,
-                totalRowCount: inputData.totalRowCount,
-                rows: result.rows,
-              };
-
-              addLog("SUCCESS", "Python으로 모델 예측 완료");
-
-              // 연결된 Evaluate Model의 파라미터 자동 설정
-              const evaluateModelConnections = connections.filter(
-                (c) =>
-                  c.from.moduleId === module.id &&
-                  currentModules.find((m) => m.id === c.to.moduleId)?.type ===
-                    ModuleType.EvaluateModel
-              );
-
-              for (const evalConn of evaluateModelConnections) {
-                const evalModule = currentModules.find(
-                  (m) => m.id === evalConn.to.moduleId
-                );
-                if (evalModule) {
-                  const evalParams = evalModule.parameters || {};
-                  const updates: Record<string, any> = {};
-
-                  const inputColumns = result.columns.map((c) => c.name);
-
-                  // label_column 자동 설정 (항상 업데이트)
-                  if (inputColumns.includes(labelColumn)) {
-                    updates.label_column = labelColumn;
-                  } else if (inputColumns.length > 0) {
-                    updates.label_column = inputColumns[0];
+                // prediction_column 자동 설정 (항상 업데이트)
+                if (modelIsClassification) {
+                  const probaColumn = `${labelColumn}_Predict_Proba_1`;
+                  if (inputColumns.includes(probaColumn)) {
+                    updates.prediction_column = probaColumn;
+                  } else if (inputColumns.includes("Predict")) {
+                    updates.prediction_column = "Predict";
                   }
-
-                  // prediction_column 자동 설정 (항상 업데이트)
-                  if (modelIsClassification) {
-                    const probaColumn = `${labelColumn}_Predict_Proba_1`;
-                    if (inputColumns.includes(probaColumn)) {
-                      updates.prediction_column = probaColumn;
-                    } else if (inputColumns.includes("Predict")) {
-                      updates.prediction_column = "Predict";
-                    }
-                  } else {
-                    if (inputColumns.includes("Predict")) {
-                      updates.prediction_column = "Predict";
-                    }
-                  }
-
-                  // model_type 자동 설정 (항상 업데이트)
-                  const detectedModelType = modelIsClassification
-                    ? "classification"
-                    : "regression";
-                  updates.model_type = detectedModelType;
-
-                  // threshold 기본값 설정 (분류 모델인 경우, 값이 없을 때만)
-                  // threshold가 이미 설정되어 있으면 절대 변경하지 않음
-                  if (
-                    modelIsClassification &&
-                    (evalParams.threshold === undefined ||
-                      evalParams.threshold === null)
-                  ) {
-                    // threshold가 없을 때만 기본값 설정
-                    updates.threshold = 0.5;
-                  }
-                  // threshold가 이미 설정되어 있으면 updates에 추가하지 않음
-
-                  // 파라미터 업데이트 (threshold는 절대 덮어쓰지 않음)
-                  if (Object.keys(updates).length > 0) {
-                    setModules(
-                      (prev) =>
-                        prev.map((m) => {
-                          if (m.id === evalModule.id) {
-                            // threshold를 제외한 파라미터만 업데이트
-                            const finalUpdates = { ...updates };
-                            const existingThreshold = m.parameters?.threshold;
-
-                            // threshold가 이미 있으면 절대 덮어쓰지 않음
-                            if (
-                              existingThreshold !== undefined &&
-                              existingThreshold !== null
-                            ) {
-                              delete finalUpdates.threshold;
-                            }
-
-                            // threshold를 제외한 파라미터만 업데이트하고, threshold는 기존 값 유지
-                            return {
-                              ...m,
-                              parameters: {
-                                ...m.parameters,
-                                ...finalUpdates,
-                                // threshold는 기존 값 명시적으로 유지
-                                threshold:
-                                  existingThreshold !== undefined &&
-                                  existingThreshold !== null
-                                    ? existingThreshold
-                                    : finalUpdates.threshold !== undefined
-                                    ? finalUpdates.threshold
-                                    : m.parameters?.threshold,
-                              },
-                            };
-                          }
-                          return m;
-                        }),
-                      true
-                    );
-
-                    // 파라미터 업데이트만 하고 자동 재실행은 하지 않음
-                    // 사용자가 수동으로 실행하거나, Score Model이 완료된 후에 실행되도록 함
-                    addLog(
-                      "INFO",
-                      `Evaluate Model [${evalModule.name}] 파라미터가 자동으로 설정되었습니다. 실행하려면 모듈을 클릭하세요.`
-                    );
+                } else {
+                  if (inputColumns.includes("Predict")) {
+                    updates.prediction_column = "Predict";
                   }
                 }
+
+                // model_type 자동 설정 (항상 업데이트)
+                const detectedModelType = modelIsClassification
+                  ? "classification"
+                  : "regression";
+                updates.model_type = detectedModelType;
+
+                // threshold 기본값 설정 (분류 모델인 경우, 값이 없을 때만)
+                // threshold가 이미 설정되어 있으면 절대 변경하지 않음
+                if (
+                  modelIsClassification &&
+                  (evalParams.threshold === undefined ||
+                    evalParams.threshold === null)
+                ) {
+                  // threshold가 없을 때만 기본값 설정
+                  updates.threshold = 0.5;
+                }
+                // threshold가 이미 설정되어 있으면 updates에 추가하지 않음
+
+                // 파라미터 업데이트 (threshold는 절대 덮어쓰지 않음)
+                if (Object.keys(updates).length > 0) {
+                  setModules(
+                    (prev) =>
+                      prev.map((m) => {
+                        if (m.id === evalModule.id) {
+                          // threshold를 제외한 파라미터만 업데이트
+                          const finalUpdates = { ...updates };
+                          const existingThreshold = m.parameters?.threshold;
+
+                          // threshold가 이미 있으면 절대 덮어쓰지 않음
+                          if (
+                            existingThreshold !== undefined &&
+                            existingThreshold !== null
+                          ) {
+                            delete finalUpdates.threshold;
+                          }
+
+                          // threshold를 제외한 파라미터만 업데이트하고, threshold는 기존 값 유지
+                          return {
+                            ...m,
+                            parameters: {
+                              ...m.parameters,
+                              ...finalUpdates,
+                              // threshold는 기존 값 명시적으로 유지
+                              threshold:
+                                existingThreshold !== undefined &&
+                                existingThreshold !== null
+                                  ? existingThreshold
+                                  : finalUpdates.threshold !== undefined
+                                  ? finalUpdates.threshold
+                                  : m.parameters?.threshold,
+                            },
+                          };
+                        }
+                        return m;
+                      }),
+                    true
+                  );
+
+                  // 파라미터 업데이트만 하고 자동 재실행은 하지 않음
+                  // 사용자가 수동으로 실행하거나, Score Model이 완료된 후에 실행되도록 함
+                  addLog(
+                    "INFO",
+                    `Evaluate Model [${evalModule.name}] 파라미터가 자동으로 설정되었습니다. 실행하려면 모듈을 클릭하세요.`
+                  );
+                }
               }
-            } catch (error: any) {
-              const errorMessage = error.message || String(error);
-              addLog("ERROR", `Python ScoreModel 실패: ${errorMessage}`);
-              throw new Error(`모델 예측 실패: ${errorMessage}`);
+            }
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python ScoreModel 실패: ${errorMessage}`);
+            throw new Error(`모델 예측 실패: ${errorMessage}`);
             }
           }
         } else if (module.type === ModuleType.EvaluateModel) {
@@ -4506,7 +5499,7 @@ ${header}
                   "P>|z|": coefData["P>|z|"],
                   "[0.025": coefData["[0.025"],
                   "0.975]": coefData["0.975]"],
-                };
+            };
               }
             );
 
@@ -4515,19 +5508,19 @@ ${header}
               ([key, value]) => {
                 if (typeof value === "number") {
                   metrics[key] = value.toFixed(6);
-                } else {
+          } else {
                   metrics[key] = value;
-                }
+          }
               }
             );
 
-            newOutputData = {
-              type: "StatsModelsResultOutput",
-              modelType: modelDefinition.modelType,
-              summary: { coefficients: summaryCoefficients, metrics },
-              featureColumns: ordered_feature_columns,
-              labelColumn: label_column,
-            };
+          newOutputData = {
+            type: "StatsModelsResultOutput",
+            modelType: modelDefinition.modelType,
+            summary: { coefficients: summaryCoefficients, metrics },
+            featureColumns: ordered_feature_columns,
+            labelColumn: label_column,
+          };
 
             addLog(
               "SUCCESS",
@@ -5560,12 +6553,11 @@ ${header}
 
   useEffect(() => {
     const handleWindowMouseMove = (e: globalThis.MouseEvent) => {
-      if (isDraggingControlPanel.current && canvasContainerRef.current) {
-        const containerRect =
-          canvasContainerRef.current.getBoundingClientRect();
+      if (isDraggingControlPanel.current) {
+        // fixed positioning을 사용하므로 viewport 좌표 사용
         setControlPanelPos({
-          x: e.clientX - containerRect.left - controlPanelDragOffset.current.x,
-          y: e.clientY - containerRect.top - controlPanelDragOffset.current.y,
+          x: e.clientX - controlPanelDragOffset.current.x,
+          y: e.clientY - controlPanelDragOffset.current.y,
         });
       }
     };
@@ -5594,12 +6586,11 @@ ${header}
       y: e.clientY - rect.top,
     };
 
-    // If it's the first drag (currently centered via CSS), set explicit coordinates relative to container
-    if (!controlPanelPos && canvasContainerRef.current) {
-      const containerRect = canvasContainerRef.current.getBoundingClientRect();
+    // If it's the first drag (currently centered via CSS), set explicit coordinates
+    if (!controlPanelPos) {
       setControlPanelPos({
-        x: rect.left - containerRect.left,
-        y: rect.top - containerRect.top,
+        x: rect.left,
+        y: rect.top,
       });
     }
   };
@@ -5853,17 +6844,17 @@ ${header}
                         Default Samples
                       </div>
                       {SAMPLE_MODELS.map((sample: any) => (
-                        <button
-                          key={sample.name}
-                          onClick={(e) => {
-                            e.stopPropagation();
+                      <button
+                        key={sample.name}
+                        onClick={(e) => {
+                          e.stopPropagation();
                             handleLoadSample(sample.name, "samples");
-                          }}
+                        }}
                           className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 last:rounded-b-md transition-colors cursor-pointer"
-                          type="button"
-                        >
-                          {sample.name}
-                        </button>
+                        type="button"
+                      >
+                        {sample.name}
+                      </button>
                       ))}
                     </>
                   ) : (
@@ -6213,82 +7204,83 @@ ${header}
           <div
             onMouseDown={handleControlPanelMouseDown}
             style={{
-              transform: controlPanelPos
-                ? `translate(${controlPanelPos.x}px, ${controlPanelPos.y}px)`
-                : "translate(-50%, 0)",
+              position: "fixed",
+              left: controlPanelPos ? `${controlPanelPos.x}px` : "50%",
+              bottom: controlPanelPos ? "auto" : "2rem",
+              top: controlPanelPos ? `${controlPanelPos.y}px` : "auto",
+              transform: controlPanelPos ? "none" : "translateX(-50%)",
               cursor: "grab",
+              pointerEvents: "auto",
             }}
-            className={`absolute bottom-8 left-1/2 -translate-x-1/2 bg-gray-900/80 backdrop-blur-md rounded-full px-4 py-2 flex items-center gap-4 shadow-2xl z-50 border border-gray-700 select-none transition-transform active:scale-95 ${
-              controlPanelPos ? "" : ""
-            }`}
+            className="bg-gray-900/80 backdrop-blur-md rounded-full px-3 py-1.5 flex items-center gap-3 shadow-2xl z-[100] border border-gray-700 select-none transition-none active:scale-95"
           >
             <div className="flex items-center gap-1">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  adjustScale(-0.1);
-                }}
-                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
-                title="Zoom Out"
-              >
-                <MinusIcon className="w-5 h-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                adjustScale(-0.1);
+              }}
+                className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+              title="Zoom Out"
+            >
+              <MinusIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                   setScale(1);
                   setPan({ x: 0, y: 0 });
-                }}
-                className="px-2 text-sm font-medium text-gray-300 hover:text-white min-w-[3rem] text-center"
+              }}
+                className="px-2 text-xs font-medium text-gray-300 hover:text-white min-w-[2.5rem] text-center"
                 title="Reset View"
-              >
+            >
                 {Math.round(scale * 100)}%
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                   adjustScale(0.1);
-                }}
-                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+              }}
+                className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
                 title="Zoom In"
-              >
-                <PlusIcon className="w-5 h-5" />
-              </button>
+            >
+                <PlusIcon className="w-4 h-4" />
+            </button>
             </div>
 
-            <div className="w-px h-4 bg-gray-700"></div>
+            <div className="w-px h-3 bg-gray-700"></div>
 
             <div className="flex items-center gap-1">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleFitToView();
-                }}
-                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
-                title="Fit to View"
-              >
-                <ArrowsPointingOutIcon className="w-5 h-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFitToView();
+              }}
+                className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+              title="Fit to View"
+            >
+              <ArrowsPointingOutIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                   handleRearrangeModules();
-                }}
-                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+              }}
+                className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
                 title="Auto Layout"
-              >
-                <SparklesIcon className="w-5 h-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
+            >
+                <SparklesIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                   handleRotateModules();
-                }}
-                className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
+              }}
+                className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
                 title="Rotate Modules"
-              >
-                <ArrowPathIcon className="w-5 h-5" />
-              </button>
+            >
+                <ArrowPathIcon className="w-4 h-4" />
+            </button>
             </div>
           </div>
         </main>
@@ -6342,6 +7334,7 @@ ${header}
                 setActiveTab={setActivePropertiesTab}
                 onViewDetails={handleViewDetails}
                 folderHandle={folderHandleRef.current}
+                onRunModule={(moduleId) => runSimulation(moduleId, false)}
               />
             </div>
           </div>
@@ -6378,22 +7371,29 @@ ${header}
           viewingDataForModule.outputData?.type ===
             "HierarchicalClusteringOutput" ||
           viewingDataForModule.outputData?.type === "DBSCANOutput" ||
-          viewingDataForModule.outputData?.type === "PCAOutput") && (
+          viewingDataForModule.outputData?.type === "PCAOutput" ||
+          viewingDataForModule.outputData?.type === "MissingHandlerOutput" ||
+          viewingDataForModule.outputData?.type === "EncoderOutput" ||
+          viewingDataForModule.outputData?.type === "NormalizerOutput") && (
           <ErrorBoundary>
-            <DataPreviewModal
+          <DataPreviewModal
+            module={viewingDataForModule}
+            projectName={projectName}
+            onClose={handleCloseModal}
+            modules={modules}
+            connections={connections}
+          />
+          </ErrorBoundary>
+        )}
+      {viewingDataForModule &&
+        viewingDataForModule.outputData?.type === "StatisticsOutput" && (
+          <ErrorBoundary>
+            <StatisticsPreviewModal
               module={viewingDataForModule}
               projectName={projectName}
               onClose={handleCloseModal}
             />
           </ErrorBoundary>
-        )}
-      {viewingDataForModule &&
-        viewingDataForModule.outputData?.type === "StatisticsOutput" && (
-          <StatisticsPreviewModal
-            module={viewingDataForModule}
-            projectName={projectName}
-            onClose={handleCloseModal}
-          />
         )}
       {viewingSplitDataForModule && (
         <SplitDataPreviewModal
