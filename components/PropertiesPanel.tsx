@@ -40,6 +40,16 @@ import { getModuleCode } from "../codeSnippets";
 import { SAMPLE_DATA } from "../sampleData";
 import { GoogleGenAI, Type } from "@google/genai";
 import { DEFAULT_MODULES } from "../constants";
+import { ExcelInputModal } from "./ExcelInputModal";
+
+// Dynamic import for xlsx to handle module resolution issues
+let XLSX: any = null;
+const loadXLSX = async () => {
+  if (!XLSX) {
+    XLSX = await import("xlsx");
+  }
+  return XLSX;
+};
 
 type TerminalLog = {
   id: number;
@@ -56,10 +66,11 @@ interface PropertiesPanelProps {
   logs: TerminalLog[];
   modules: CanvasModule[];
   connections: Connection[];
-  activeTab: "properties" | "preview" | "code";
-  setActiveTab: (tab: "properties" | "preview" | "code") => void;
+  activeTab: "properties" | "preview" | "code" | "terminal";
+  setActiveTab: (tab: "properties" | "preview" | "code" | "terminal") => void;
   onViewDetails: (moduleId: string) => void;
   folderHandle: FileSystemDirectoryHandle | null;
+  onRunModule?: (moduleId: string) => void;
 }
 
 const ExplanationRenderer: React.FC<{ text: string }> = ({ text }) => {
@@ -486,7 +497,8 @@ const renderParameters = (
   projectName: string,
   updateModuleParameters: (id: string, newParams: Record<string, any>) => void,
   onSampleLoad: (sample: { name: string; content: string }) => void,
-  folderHandle: FileSystemDirectoryHandle | null
+  folderHandle: FileSystemDirectoryHandle | null,
+  onOpenExcelModal?: () => void
 ) => {
   // Use the helper function
   const getConnectedDataSource = (moduleId: string, portNameToFind?: string) =>
@@ -501,6 +513,33 @@ const renderParameters = (
     // ... [Previous cases remain unchanged: LoadData, SelectData, HandleMissingValues, TransformData, EncodeCategorical, NormalizeData, TransitionData, ResampleData, SplitData] ...
     case ModuleType.LoadData:
     case ModuleType.XolLoading: {
+      // 엑셀 파일을 CSV로 변환하는 함수
+      const convertExcelToCSV = async (workbook: any, sheetName?: string): Promise<string> => {
+        const xlsx = await loadXLSX();
+        const targetSheet = sheetName || workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[targetSheet];
+        const jsonData = xlsx.utils.sheet_to_json(worksheet, {
+          header: 1,
+          defval: null,
+          raw: false,
+        });
+
+        return jsonData
+          .map((row: any) => {
+            return row
+              .map((cell: any) => {
+                if (cell === null || cell === undefined) return "";
+                const str = String(cell);
+                if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+                  return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+              })
+              .join(",");
+          })
+          .join("\n");
+      };
+
       const handleBrowseClick = async () => {
         if (folderHandle && (window as any).showOpenFilePicker) {
           try {
@@ -511,18 +550,47 @@ const renderParameters = (
                   description: "CSV Files",
                   accept: { "text/csv": [".csv"] },
                 },
+                {
+                  description: "Excel Files",
+                  accept: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+                      ".xlsx",
+                    ],
+                    "application/vnd.ms-excel": [".xls"],
+                  },
+                },
               ],
             });
             const file = await fileHandle.getFile();
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const content = e.target?.result as string;
+            const fileName = file.name.toLowerCase();
+
+            if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+              // 엑셀 파일 처리
+              const xlsx = await loadXLSX();
+              const arrayBuffer = await file.arrayBuffer();
+              const workbook = xlsx.read(arrayBuffer, { type: "array" });
+              const firstSheetName = workbook.SheetNames[0];
+              const csvContent = await convertExcelToCSV(workbook, firstSheetName);
+
               updateModuleParameters(module.id, {
                 source: file.name,
-                fileContent: content,
+                fileContent: csvContent,
+                fileType: "excel",
+                sheetName: firstSheetName,
               });
-            };
-            reader.readAsText(file);
+            } else {
+              // CSV 파일 처리
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const content = e.target?.result as string;
+                updateModuleParameters(module.id, {
+                  source: file.name,
+                  fileContent: content,
+                  fileType: "csv",
+                });
+              };
+              reader.readAsText(file);
+            }
           } catch (error: any) {
             if (error.name !== "AbortError") {
               console.warn(
@@ -555,6 +623,24 @@ const renderParameters = (
               Browse...
             </button>
           </div>
+          {/* 파일 타입 표시 */}
+          {module.parameters.fileType === "excel" &&
+            module.parameters.sheetName && (
+              <div className="mt-2 text-xs text-gray-500">
+                Excel Sheet: {module.parameters.sheetName}
+              </div>
+            )}
+          {/* 엑셀 데이터 직접 입력 버튼 */}
+          <button
+            onClick={() => {
+              if (onOpenExcelModal) {
+                onOpenExcelModal();
+              }
+            }}
+            className="mt-2 px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 rounded-md font-semibold text-white transition-colors"
+          >
+            엑셀 데이터 직접 입력
+          </button>
           <div className="mt-4">
             <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
               Examples
@@ -2503,6 +2589,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   setActiveTab,
   onViewDetails,
   folderHandle,
+  onRunModule,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -2511,44 +2598,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
   const [localModuleName, setLocalModuleName] = useState("");
   const [isCopied, setIsCopied] = useState(false);
-  const [terminalHeight, setTerminalHeight] = useState(200);
-  const resizableContainerRef = useRef<HTMLDivElement>(null);
-
-  const handleTerminalResizeMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startY = e.clientY;
-      const startHeight = terminalHeight;
-      const container = resizableContainerRef.current;
-      if (!container) return;
-
-      document.body.style.cursor = "row-resize";
-      document.body.style.userSelect = "none";
-
-      const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-        const dy = moveEvent.clientY - startY;
-        const newHeight = startHeight - dy;
-
-        const minHeight = 80;
-        const maxHeight = container.clientHeight - 150; // Leave 150px for the top panel
-
-        if (newHeight >= minHeight && newHeight <= maxHeight) {
-          setTerminalHeight(newHeight);
-        }
-      };
-
-      const handleMouseUp = () => {
-        document.body.style.cursor = "default";
-        document.body.style.userSelect = "auto";
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-      };
-
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
-    },
-    [terminalHeight]
-  );
+  const [showExcelModal, setShowExcelModal] = useState(false);
 
   useEffect(() => {
     if (logContainerRef.current) {
@@ -2574,18 +2624,69 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     [module, updateModuleParameters]
   );
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && module) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        updateModuleParameters(module.id, {
-          source: file.name,
-          fileContent: content,
-        });
-      };
-      reader.readAsText(file);
+      const fileName = file.name.toLowerCase();
+      
+      if ((module.type === ModuleType.LoadData || module.type === ModuleType.XolLoading) && 
+          (fileName.endsWith(".xlsx") || fileName.endsWith(".xls"))) {
+        // 엑셀 파일 처리
+        try {
+          const xlsx = await loadXLSX();
+          const arrayBuffer = await file.arrayBuffer();
+          const workbook = xlsx.read(arrayBuffer, { type: "array" });
+          const firstSheetName = workbook.SheetNames[0];
+          
+          const convertExcelToCSV = async (workbook: any, sheetName?: string): Promise<string> => {
+            const targetSheet = sheetName || workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[targetSheet];
+            const jsonData = xlsx.utils.sheet_to_json(worksheet, {
+              header: 1,
+              defval: null,
+              raw: false,
+            });
+
+            return jsonData
+              .map((row: any) => {
+                return row
+                  .map((cell: any) => {
+                    if (cell === null || cell === undefined) return "";
+                    const str = String(cell);
+                    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+                      return `"${str.replace(/"/g, '""')}"`;
+                    }
+                    return str;
+                  })
+                  .join(",");
+              })
+              .join("\n");
+          };
+          
+          const csvContent = await convertExcelToCSV(workbook, firstSheetName);
+          updateModuleParameters(module.id, {
+            source: file.name,
+            fileContent: csvContent,
+            fileType: "excel",
+            sheetName: firstSheetName,
+          });
+        } catch (error) {
+          console.error("Error processing Excel file:", error);
+          alert("엑셀 파일 처리 중 오류가 발생했습니다.");
+        }
+      } else {
+        // CSV 파일 처리
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target?.result as string;
+          updateModuleParameters(module.id, {
+            source: file.name,
+            fileContent: content,
+            fileType: "csv",
+          });
+        };
+        reader.readAsText(file);
+      }
     }
   };
 
@@ -2842,6 +2943,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       "HierarchicalClusteringOutput",
       "PCAOutput",
       "DBSCANOutput",
+      "DiversionCheckerOutput",
+      "EvaluateStatOutput",
+      "FittedDistributionOutput",
+      "ExposureCurveOutput",
+      "MissingHandlerOutput",
+      "EncoderOutput",
+      "NormalizerOutput",
     ];
 
     const canVisualize = () => {
@@ -3098,29 +3206,37 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   return (
-    <div
-      ref={resizableContainerRef}
-      className="bg-gray-800 text-white h-full flex flex-col"
-    >
+    <div className="bg-gray-800 text-white h-full flex flex-col">
       <input
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".csv"
+        accept={module?.type === ModuleType.LoadData ? ".csv,.xlsx,.xls" : ".csv"}
         className="hidden"
       />
       <div className="flex-grow flex flex-col min-h-0">
         <div className="p-3 border-b border-gray-700 flex-shrink-0">
-          <input
-            type="text"
-            value={localModuleName}
-            onChange={(e) => setLocalModuleName(e.target.value)}
-            onBlur={handleNameInputBlur}
-            onKeyDown={handleNameInputKeyDown}
-            className="w-full bg-transparent text-lg font-bold focus:outline-none focus:bg-gray-700 rounded-md px-2 py-1 -ml-2"
-            placeholder="Module Name"
-            disabled={!module}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={localModuleName}
+              onChange={(e) => setLocalModuleName(e.target.value)}
+              onBlur={handleNameInputBlur}
+              onKeyDown={handleNameInputKeyDown}
+              className="flex-1 bg-transparent text-lg font-bold focus:outline-none focus:bg-gray-700 rounded-md px-2 py-1 -ml-2"
+              placeholder="Module Name"
+              disabled={!module}
+            />
+            {module && onRunModule && (
+              <button
+                onClick={() => onRunModule(module.id)}
+                className="p-2 bg-green-600 hover:bg-green-500 rounded-md transition-colors flex-shrink-0"
+                title="Run Module"
+              >
+                <PlayIcon className="w-4 h-4 text-white" />
+              </button>
+            )}
+          </div>
           <p className="text-xs text-gray-500 mt-1">
             {module ? module.type : "No module selected"}
           </p>
@@ -3131,33 +3247,43 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div className="flex">
               <button
                 onClick={() => setActiveTab("properties")}
-                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
                   activeTab === "properties"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
                 }`}
               >
-                <CogIcon className="w-5 h-5" /> Properties
+                Properties
               </button>
               <button
                 onClick={() => setActiveTab("preview")}
-                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
                   activeTab === "preview"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
                 }`}
               >
-                <TableCellsIcon className="w-5 h-5" /> Preview
+                Preview
               </button>
               <button
                 onClick={() => setActiveTab("code")}
-                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold ${
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
                   activeTab === "code"
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:bg-gray-700/50"
                 }`}
               >
-                <CodeBracketIcon className="w-5 h-5" /> Code
+                Code
+              </button>
+              <button
+                onClick={() => setActiveTab("terminal")}
+                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
+                  activeTab === "terminal"
+                    ? "bg-gray-700 text-white"
+                    : "text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Terminal
               </button>
             </div>
           </div>
@@ -3183,7 +3309,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     projectName,
                     updateModuleParameters,
                     handleLoadSample,
-                    folderHandle
+                    folderHandle,
+                    () => setShowExcelModal(true)
                   )}
                 </PropertyGroup>
               )}
@@ -3238,108 +3365,110 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   </div>
                 </div>
               )}
+              {activeTab === "terminal" && (
+                <div
+                  ref={logContainerRef}
+                  className="flex-grow overflow-y-auto bg-gray-900 text-xs font-mono p-2 space-y-1"
+                  onContextMenu={(e) => {
+                    // 텍스트가 선택되어 있으면 컨텍스트 메뉴에서 복사 가능하도록
+                    const selection = window.getSelection();
+                    if (selection && selection.toString().trim()) {
+                      // 브라우저 기본 컨텍스트 메뉴 사용 (복사 옵션 포함)
+                      return;
+                    }
+                    // 텍스트가 선택되지 않았으면 기본 동작 방지
+                    e.preventDefault();
+                  }}
+                >
+                  {logs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="flex group hover:bg-gray-800/50 rounded px-1 py-0.5"
+                    >
+                      <span className="text-gray-500 mr-2 flex-shrink-0 select-none">
+                        {log.timestamp}
+                      </span>
+                      <span
+                        className={`mr-2 font-bold flex-shrink-0 select-none ${
+                          log.level === "INFO"
+                            ? "text-blue-400"
+                            : log.level === "WARN"
+                            ? "text-yellow-400"
+                            : log.level === "ERROR"
+                            ? "text-red-400"
+                            : "text-green-400"
+                        }`}
+                      >
+                        {log.level}:
+                      </span>
+                      <span
+                        className="flex-1 whitespace-pre-wrap break-words cursor-text select-text"
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          const text = log.message;
+                          navigator.clipboard.writeText(text).then(() => {
+                            setIsCopied(true);
+                            setTimeout(() => setIsCopied(false), 2000);
+                          });
+                        }}
+                        onMouseUp={(e) => {
+                          // 텍스트 선택 후 Ctrl+C 또는 우클릭으로 복사 가능
+                          const selection = window.getSelection();
+                          if (selection && selection.toString().trim()) {
+                            // 선택된 텍스트가 있으면 복사 가능
+                          }
+                        }}
+                        title="텍스트를 선택하여 복사하거나 더블클릭하여 전체 메시지 복사"
+                      >
+                        {log.message}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const text = `${log.timestamp} ${log.level}: ${log.message}`;
+                          navigator.clipboard.writeText(text).then(() => {
+                            setIsCopied(true);
+                            setTimeout(() => setIsCopied(false), 2000);
+                          });
+                        }}
+                        className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        title="전체 로그 복사"
+                      >
+                        {isCopied ? (
+                          <CheckIcon className="w-4 h-4 text-green-400" />
+                        ) : (
+                          <ClipboardIcon className="w-4 h-4 text-gray-400 hover:text-gray-300" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                  {logs.length === 0 && (
+                    <div className="text-gray-500 text-center py-4">
+                      로그가 없습니다
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
       </div>
 
-      <div
-        className="flex-shrink-0 flex flex-col"
-        style={{ height: `${terminalHeight}px` }}
-      >
-        <div
-          onMouseDown={handleTerminalResizeMouseDown}
-          className="w-full h-1.5 cursor-row-resize bg-gray-700 hover:bg-blue-500 transition-colors"
-          title="Resize Terminal"
-        />
-        <div className="p-2 border-b border-gray-700 bg-gray-900/50 flex items-center gap-2">
-          <CommandLineIcon className="w-5 h-5 text-gray-400" />
-          <h3 className="text-sm font-semibold text-gray-300">Terminal</h3>
-        </div>
-        <div
-          ref={logContainerRef}
-          className="flex-grow overflow-y-auto bg-gray-900 text-xs font-mono p-2 space-y-1"
-          onContextMenu={(e) => {
-            // 텍스트가 선택되어 있으면 컨텍스트 메뉴에서 복사 가능하도록
-            const selection = window.getSelection();
-            if (selection && selection.toString().trim()) {
-              // 브라우저 기본 컨텍스트 메뉴 사용 (복사 옵션 포함)
-              return;
-            }
-            // 텍스트가 선택되지 않았으면 기본 동작 방지
-            e.preventDefault();
+      {/* Excel Input Modal */}
+      {showExcelModal && module && module.type === ModuleType.LoadData && (
+        <ExcelInputModal
+          onClose={() => setShowExcelModal(false)}
+          onApply={(csvContent) => {
+            updateModuleParameters(module.id, {
+              source: "pasted_data.csv",
+              fileContent: csvContent,
+              fileType: "pasted",
+            });
+            setShowExcelModal(false);
           }}
-        >
-          {logs.map((log) => (
-            <div
-              key={log.id}
-              className="flex group hover:bg-gray-800/50 rounded px-1 py-0.5"
-            >
-              <span className="text-gray-500 mr-2 flex-shrink-0 select-none">
-                {log.timestamp}
-              </span>
-              <span
-                className={`mr-2 font-bold flex-shrink-0 select-none ${
-                  log.level === "INFO"
-                    ? "text-blue-400"
-                    : log.level === "WARN"
-                    ? "text-yellow-400"
-                    : log.level === "ERROR"
-                    ? "text-red-400"
-                    : "text-green-400"
-                }`}
-              >
-                {log.level}:
-              </span>
-              <span
-                className="flex-1 whitespace-pre-wrap break-words cursor-text select-text"
-                onDoubleClick={(e) => {
-                  e.preventDefault();
-                  const text = log.message;
-                  navigator.clipboard.writeText(text).then(() => {
-                    setIsCopied(true);
-                    setTimeout(() => setIsCopied(false), 2000);
-                  });
-                }}
-                onMouseUp={(e) => {
-                  // 텍스트 선택 후 Ctrl+C 또는 우클릭으로 복사 가능
-                  const selection = window.getSelection();
-                  if (selection && selection.toString().trim()) {
-                    // 선택된 텍스트가 있으면 복사 가능
-                  }
-                }}
-                title="텍스트를 선택하여 복사하거나 더블클릭하여 전체 메시지 복사"
-              >
-                {log.message}
-              </span>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const text = `${log.timestamp} ${log.level}: ${log.message}`;
-                  navigator.clipboard.writeText(text).then(() => {
-                    setIsCopied(true);
-                    setTimeout(() => setIsCopied(false), 2000);
-                  });
-                }}
-                className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                title="전체 로그 복사"
-              >
-                {isCopied ? (
-                  <CheckIcon className="w-4 h-4 text-green-400" />
-                ) : (
-                  <ClipboardIcon className="w-4 h-4 text-gray-400 hover:text-gray-300" />
-                )}
-              </button>
-            </div>
-          ))}
-          {logs.length === 0 && (
-            <div className="text-gray-500 text-center py-4">
-              로그가 없습니다
-            </div>
-          )}
-        </div>
-      </div>
+        />
+      )}
     </div>
   );
 };
