@@ -2810,7 +2810,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     const outputData = module.outputData;
 
-<<<<<<< HEAD
     const visualizableTypes = [
       "DataPreview",
       "StatisticsOutput",
