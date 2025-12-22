@@ -1,0 +1,2029 @@
+{
+  "modules": [
+    {
+      "type": "LoadData",
+      "status": "Success",
+      "parameters": {
+        "source": "insurance_claims.csv",
+        "fileContent": "race,fire,theft,age,volact,involact,income\n10,6.2,29,60.4,5.3,0,11744\n22.2,9.5,44,76.5,3.1,0.1,9323\n19.6,10.5,36,73.5,4.8,1.2,9948\n17.3,7.7,37,66.9,5.7,0.5,10656\n24.5,8.6,53,81.4,5.9,0.7,9730\n54,34.1,68,52.6,4,0.3,8231\n4.9,11,75,42.6,7.9,0,21480\n7.1,6.9,18,78.5,6.9,0,11104\n5.3,7.3,31,90.1,7.6,0.4,10694\n21.5,15.1,25,89.8,3.1,1.1,9631\n43.1,29.1,34,82.7,1.3,1.9,7995\n1.1,2.2,14,40.2,14.3,0,13722\n1,5.7,11,27.9,12.1,0,16250\n1.7,2,11,7.7,10.9,0,13686\n1.6,2.5,22,63.8,10.7,0,12405\n1.5,3,17,51.2,13.8,0,12198\n1.8,5.4,27,85.1,8.9,0,11600\n1,2.2,9,44.4,11.5,0,12765\n2.5,7.2,29,84.2,8.5,0.2,11084\n13.4,15.1,30,89.8,5.2,0.8,10510\n59.8,16.5,40,72.7,2.7,0.8,9784\n94.4,18.4,32,72.9,1.2,1.8,7342\n86.2,36.2,41,63.1,0.8,1.8,6565\n50.2,39.7,147,83,5.2,0.9,7459\n74.2,18.5,22,78.3,1.8,1.9,8014\n55.5,23.3,29,79,2.1,1.5,8177\n62.3,12.2,46,48,3.4,0.6,8212\n4.4,5.6,23,71.5,8,0.3,11230\n46.2,21.8,4,73.1,2.6,1.3,8330\n99.7,21.6,31,65,0.5,0.9,5583\n73.5,9,39,75.4,2.7,0.4,8564\n10.7,3.6,15,20.8,9.1,0,12102\n1.5,5,32,61.8,11.6,0,11876\n4.8,28.6,27,78.1,4,1.4,9742\n98.9,17.4,32,68.6,1.7,2.2,7520\n90.6,11.3,34,73.4,1.9,0.8,7388\n1.4,3.4,17,2,12.9,0,13842\n71.2,11.9,46,57,4.8,0.9,11040\n94.1,10.5,42,55.9,6.6,0.9,10332\n66.1,10.7,43,67.5,3.1,0.4,10908\n36.4,10.8,34,58,7.8,0.9,11156\n1,4.8,19,15.2,13,0,13323\n42.5,10.4,25,40.8,10.2,0.5,12960\n35.1,15.6,28,57.8,7.5,1,11260\n47.4,7,3,11.4,7.7,0.2,10080\n34,7.1,23,49.2,11.6,0.3,11428\n3.1,4.9,27,46.6,10.9,0,13731"
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "data_out",
+          "type": "data"
+        }
+      ],
+      "id": "module-1766383087957-0",
+      "name": "Load Data",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "outputData": {
+        "type": "DataPreview",
+        "columns": [
+          {
+            "name": "race",
+            "type": "number"
+          },
+          {
+            "name": "fire",
+            "type": "number"
+          },
+          {
+            "name": "theft",
+            "type": "number"
+          },
+          {
+            "name": "age",
+            "type": "number"
+          },
+          {
+            "name": "volact",
+            "type": "number"
+          },
+          {
+            "name": "involact",
+            "type": "number"
+          },
+          {
+            "name": "income",
+            "type": "number"
+          }
+        ],
+        "totalRowCount": 47,
+        "rows": [
+          {
+            "race": 10,
+            "fire": 6.2,
+            "theft": 29,
+            "age": 60.4,
+            "volact": 5.3,
+            "involact": 0,
+            "income": 11744
+          },
+          {
+            "race": 22.2,
+            "fire": 9.5,
+            "theft": 44,
+            "age": 76.5,
+            "volact": 3.1,
+            "involact": 0.1,
+            "income": 9323
+          },
+          {
+            "race": 19.6,
+            "fire": 10.5,
+            "theft": 36,
+            "age": 73.5,
+            "volact": 4.8,
+            "involact": 1.2,
+            "income": 9948
+          },
+          {
+            "race": 17.3,
+            "fire": 7.7,
+            "theft": 37,
+            "age": 66.9,
+            "volact": 5.7,
+            "involact": 0.5,
+            "income": 10656
+          },
+          {
+            "race": 24.5,
+            "fire": 8.6,
+            "theft": 53,
+            "age": 81.4,
+            "volact": 5.9,
+            "involact": 0.7,
+            "income": 9730
+          },
+          {
+            "race": 54,
+            "fire": 34.1,
+            "theft": 68,
+            "age": 52.6,
+            "volact": 4,
+            "involact": 0.3,
+            "income": 8231
+          },
+          {
+            "race": 4.9,
+            "fire": 11,
+            "theft": 75,
+            "age": 42.6,
+            "volact": 7.9,
+            "involact": 0,
+            "income": 21480
+          },
+          {
+            "race": 7.1,
+            "fire": 6.9,
+            "theft": 18,
+            "age": 78.5,
+            "volact": 6.9,
+            "involact": 0,
+            "income": 11104
+          },
+          {
+            "race": 5.3,
+            "fire": 7.3,
+            "theft": 31,
+            "age": 90.1,
+            "volact": 7.6,
+            "involact": 0.4,
+            "income": 10694
+          },
+          {
+            "race": 21.5,
+            "fire": 15.1,
+            "theft": 25,
+            "age": 89.8,
+            "volact": 3.1,
+            "involact": 1.1,
+            "income": 9631
+          },
+          {
+            "race": 43.1,
+            "fire": 29.1,
+            "theft": 34,
+            "age": 82.7,
+            "volact": 1.3,
+            "involact": 1.9,
+            "income": 7995
+          },
+          {
+            "race": 1.1,
+            "fire": 2.2,
+            "theft": 14,
+            "age": 40.2,
+            "volact": 14.3,
+            "involact": 0,
+            "income": 13722
+          },
+          {
+            "race": 1,
+            "fire": 5.7,
+            "theft": 11,
+            "age": 27.9,
+            "volact": 12.1,
+            "involact": 0,
+            "income": 16250
+          },
+          {
+            "race": 1.7,
+            "fire": 2,
+            "theft": 11,
+            "age": 7.7,
+            "volact": 10.9,
+            "involact": 0,
+            "income": 13686
+          },
+          {
+            "race": 1.6,
+            "fire": 2.5,
+            "theft": 22,
+            "age": 63.8,
+            "volact": 10.7,
+            "involact": 0,
+            "income": 12405
+          },
+          {
+            "race": 1.5,
+            "fire": 3,
+            "theft": 17,
+            "age": 51.2,
+            "volact": 13.8,
+            "involact": 0,
+            "income": 12198
+          },
+          {
+            "race": 1.8,
+            "fire": 5.4,
+            "theft": 27,
+            "age": 85.1,
+            "volact": 8.9,
+            "involact": 0,
+            "income": 11600
+          },
+          {
+            "race": 1,
+            "fire": 2.2,
+            "theft": 9,
+            "age": 44.4,
+            "volact": 11.5,
+            "involact": 0,
+            "income": 12765
+          },
+          {
+            "race": 2.5,
+            "fire": 7.2,
+            "theft": 29,
+            "age": 84.2,
+            "volact": 8.5,
+            "involact": 0.2,
+            "income": 11084
+          },
+          {
+            "race": 13.4,
+            "fire": 15.1,
+            "theft": 30,
+            "age": 89.8,
+            "volact": 5.2,
+            "involact": 0.8,
+            "income": 10510
+          },
+          {
+            "race": 59.8,
+            "fire": 16.5,
+            "theft": 40,
+            "age": 72.7,
+            "volact": 2.7,
+            "involact": 0.8,
+            "income": 9784
+          },
+          {
+            "race": 94.4,
+            "fire": 18.4,
+            "theft": 32,
+            "age": 72.9,
+            "volact": 1.2,
+            "involact": 1.8,
+            "income": 7342
+          },
+          {
+            "race": 86.2,
+            "fire": 36.2,
+            "theft": 41,
+            "age": 63.1,
+            "volact": 0.8,
+            "involact": 1.8,
+            "income": 6565
+          },
+          {
+            "race": 50.2,
+            "fire": 39.7,
+            "theft": 147,
+            "age": 83,
+            "volact": 5.2,
+            "involact": 0.9,
+            "income": 7459
+          },
+          {
+            "race": 74.2,
+            "fire": 18.5,
+            "theft": 22,
+            "age": 78.3,
+            "volact": 1.8,
+            "involact": 1.9,
+            "income": 8014
+          },
+          {
+            "race": 55.5,
+            "fire": 23.3,
+            "theft": 29,
+            "age": 79,
+            "volact": 2.1,
+            "involact": 1.5,
+            "income": 8177
+          },
+          {
+            "race": 62.3,
+            "fire": 12.2,
+            "theft": 46,
+            "age": 48,
+            "volact": 3.4,
+            "involact": 0.6,
+            "income": 8212
+          },
+          {
+            "race": 4.4,
+            "fire": 5.6,
+            "theft": 23,
+            "age": 71.5,
+            "volact": 8,
+            "involact": 0.3,
+            "income": 11230
+          },
+          {
+            "race": 46.2,
+            "fire": 21.8,
+            "theft": 4,
+            "age": 73.1,
+            "volact": 2.6,
+            "involact": 1.3,
+            "income": 8330
+          },
+          {
+            "race": 99.7,
+            "fire": 21.6,
+            "theft": 31,
+            "age": 65,
+            "volact": 0.5,
+            "involact": 0.9,
+            "income": 5583
+          },
+          {
+            "race": 73.5,
+            "fire": 9,
+            "theft": 39,
+            "age": 75.4,
+            "volact": 2.7,
+            "involact": 0.4,
+            "income": 8564
+          },
+          {
+            "race": 10.7,
+            "fire": 3.6,
+            "theft": 15,
+            "age": 20.8,
+            "volact": 9.1,
+            "involact": 0,
+            "income": 12102
+          },
+          {
+            "race": 1.5,
+            "fire": 5,
+            "theft": 32,
+            "age": 61.8,
+            "volact": 11.6,
+            "involact": 0,
+            "income": 11876
+          },
+          {
+            "race": 4.8,
+            "fire": 28.6,
+            "theft": 27,
+            "age": 78.1,
+            "volact": 4,
+            "involact": 1.4,
+            "income": 9742
+          },
+          {
+            "race": 98.9,
+            "fire": 17.4,
+            "theft": 32,
+            "age": 68.6,
+            "volact": 1.7,
+            "involact": 2.2,
+            "income": 7520
+          },
+          {
+            "race": 90.6,
+            "fire": 11.3,
+            "theft": 34,
+            "age": 73.4,
+            "volact": 1.9,
+            "involact": 0.8,
+            "income": 7388
+          },
+          {
+            "race": 1.4,
+            "fire": 3.4,
+            "theft": 17,
+            "age": 2,
+            "volact": 12.9,
+            "involact": 0,
+            "income": 13842
+          },
+          {
+            "race": 71.2,
+            "fire": 11.9,
+            "theft": 46,
+            "age": 57,
+            "volact": 4.8,
+            "involact": 0.9,
+            "income": 11040
+          },
+          {
+            "race": 94.1,
+            "fire": 10.5,
+            "theft": 42,
+            "age": 55.9,
+            "volact": 6.6,
+            "involact": 0.9,
+            "income": 10332
+          },
+          {
+            "race": 66.1,
+            "fire": 10.7,
+            "theft": 43,
+            "age": 67.5,
+            "volact": 3.1,
+            "involact": 0.4,
+            "income": 10908
+          },
+          {
+            "race": 36.4,
+            "fire": 10.8,
+            "theft": 34,
+            "age": 58,
+            "volact": 7.8,
+            "involact": 0.9,
+            "income": 11156
+          },
+          {
+            "race": 1,
+            "fire": 4.8,
+            "theft": 19,
+            "age": 15.2,
+            "volact": 13,
+            "involact": 0,
+            "income": 13323
+          },
+          {
+            "race": 42.5,
+            "fire": 10.4,
+            "theft": 25,
+            "age": 40.8,
+            "volact": 10.2,
+            "involact": 0.5,
+            "income": 12960
+          },
+          {
+            "race": 35.1,
+            "fire": 15.6,
+            "theft": 28,
+            "age": 57.8,
+            "volact": 7.5,
+            "involact": 1,
+            "income": 11260
+          },
+          {
+            "race": 47.4,
+            "fire": 7,
+            "theft": 3,
+            "age": 11.4,
+            "volact": 7.7,
+            "involact": 0.2,
+            "income": 10080
+          },
+          {
+            "race": 34,
+            "fire": 7.1,
+            "theft": 23,
+            "age": 49.2,
+            "volact": 11.6,
+            "involact": 0.3,
+            "income": 11428
+          },
+          {
+            "race": 3.1,
+            "fire": 4.9,
+            "theft": 27,
+            "age": 46.6,
+            "volact": 10.9,
+            "involact": 0,
+            "income": 13731
+          }
+        ]
+      }
+    },
+    {
+      "type": "SelectData",
+      "status": "Success",
+      "parameters": {
+        "columnSelections": {}
+      },
+      "inputs": [
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "data_out",
+          "type": "data"
+        }
+      ],
+      "id": "module-1766383087957-1",
+      "name": "Select Data 1",
+      "position": {
+        "x": 100,
+        "y": 247.64413205404253
+      },
+      "outputData": {
+        "type": "DataPreview",
+        "columns": [
+          {
+            "name": "race",
+            "type": "number"
+          },
+          {
+            "name": "fire",
+            "type": "number"
+          },
+          {
+            "name": "theft",
+            "type": "number"
+          },
+          {
+            "name": "age",
+            "type": "number"
+          },
+          {
+            "name": "volact",
+            "type": "number"
+          },
+          {
+            "name": "involact",
+            "type": "number"
+          },
+          {
+            "name": "income",
+            "type": "number"
+          }
+        ],
+        "totalRowCount": 47,
+        "rows": [
+          {
+            "race": 10,
+            "fire": 6.2,
+            "theft": 29,
+            "age": 60.4,
+            "volact": 5.3,
+            "involact": 0,
+            "income": 11744
+          },
+          {
+            "race": 22.2,
+            "fire": 9.5,
+            "theft": 44,
+            "age": 76.5,
+            "volact": 3.1,
+            "involact": 0.1,
+            "income": 9323
+          },
+          {
+            "race": 19.6,
+            "fire": 10.5,
+            "theft": 36,
+            "age": 73.5,
+            "volact": 4.8,
+            "involact": 1.2,
+            "income": 9948
+          },
+          {
+            "race": 17.3,
+            "fire": 7.7,
+            "theft": 37,
+            "age": 66.9,
+            "volact": 5.7,
+            "involact": 0.5,
+            "income": 10656
+          },
+          {
+            "race": 24.5,
+            "fire": 8.6,
+            "theft": 53,
+            "age": 81.4,
+            "volact": 5.9,
+            "involact": 0.7,
+            "income": 9730
+          },
+          {
+            "race": 54,
+            "fire": 34.1,
+            "theft": 68,
+            "age": 52.6,
+            "volact": 4,
+            "involact": 0.3,
+            "income": 8231
+          },
+          {
+            "race": 4.9,
+            "fire": 11,
+            "theft": 75,
+            "age": 42.6,
+            "volact": 7.9,
+            "involact": 0,
+            "income": 21480
+          },
+          {
+            "race": 7.1,
+            "fire": 6.9,
+            "theft": 18,
+            "age": 78.5,
+            "volact": 6.9,
+            "involact": 0,
+            "income": 11104
+          },
+          {
+            "race": 5.3,
+            "fire": 7.3,
+            "theft": 31,
+            "age": 90.1,
+            "volact": 7.6,
+            "involact": 0.4,
+            "income": 10694
+          },
+          {
+            "race": 21.5,
+            "fire": 15.1,
+            "theft": 25,
+            "age": 89.8,
+            "volact": 3.1,
+            "involact": 1.1,
+            "income": 9631
+          },
+          {
+            "race": 43.1,
+            "fire": 29.1,
+            "theft": 34,
+            "age": 82.7,
+            "volact": 1.3,
+            "involact": 1.9,
+            "income": 7995
+          },
+          {
+            "race": 1.1,
+            "fire": 2.2,
+            "theft": 14,
+            "age": 40.2,
+            "volact": 14.3,
+            "involact": 0,
+            "income": 13722
+          },
+          {
+            "race": 1,
+            "fire": 5.7,
+            "theft": 11,
+            "age": 27.9,
+            "volact": 12.1,
+            "involact": 0,
+            "income": 16250
+          },
+          {
+            "race": 1.7,
+            "fire": 2,
+            "theft": 11,
+            "age": 7.7,
+            "volact": 10.9,
+            "involact": 0,
+            "income": 13686
+          },
+          {
+            "race": 1.6,
+            "fire": 2.5,
+            "theft": 22,
+            "age": 63.8,
+            "volact": 10.7,
+            "involact": 0,
+            "income": 12405
+          },
+          {
+            "race": 1.5,
+            "fire": 3,
+            "theft": 17,
+            "age": 51.2,
+            "volact": 13.8,
+            "involact": 0,
+            "income": 12198
+          },
+          {
+            "race": 1.8,
+            "fire": 5.4,
+            "theft": 27,
+            "age": 85.1,
+            "volact": 8.9,
+            "involact": 0,
+            "income": 11600
+          },
+          {
+            "race": 1,
+            "fire": 2.2,
+            "theft": 9,
+            "age": 44.4,
+            "volact": 11.5,
+            "involact": 0,
+            "income": 12765
+          },
+          {
+            "race": 2.5,
+            "fire": 7.2,
+            "theft": 29,
+            "age": 84.2,
+            "volact": 8.5,
+            "involact": 0.2,
+            "income": 11084
+          },
+          {
+            "race": 13.4,
+            "fire": 15.1,
+            "theft": 30,
+            "age": 89.8,
+            "volact": 5.2,
+            "involact": 0.8,
+            "income": 10510
+          },
+          {
+            "race": 59.8,
+            "fire": 16.5,
+            "theft": 40,
+            "age": 72.7,
+            "volact": 2.7,
+            "involact": 0.8,
+            "income": 9784
+          },
+          {
+            "race": 94.4,
+            "fire": 18.4,
+            "theft": 32,
+            "age": 72.9,
+            "volact": 1.2,
+            "involact": 1.8,
+            "income": 7342
+          },
+          {
+            "race": 86.2,
+            "fire": 36.2,
+            "theft": 41,
+            "age": 63.1,
+            "volact": 0.8,
+            "involact": 1.8,
+            "income": 6565
+          },
+          {
+            "race": 50.2,
+            "fire": 39.7,
+            "theft": 147,
+            "age": 83,
+            "volact": 5.2,
+            "involact": 0.9,
+            "income": 7459
+          },
+          {
+            "race": 74.2,
+            "fire": 18.5,
+            "theft": 22,
+            "age": 78.3,
+            "volact": 1.8,
+            "involact": 1.9,
+            "income": 8014
+          },
+          {
+            "race": 55.5,
+            "fire": 23.3,
+            "theft": 29,
+            "age": 79,
+            "volact": 2.1,
+            "involact": 1.5,
+            "income": 8177
+          },
+          {
+            "race": 62.3,
+            "fire": 12.2,
+            "theft": 46,
+            "age": 48,
+            "volact": 3.4,
+            "involact": 0.6,
+            "income": 8212
+          },
+          {
+            "race": 4.4,
+            "fire": 5.6,
+            "theft": 23,
+            "age": 71.5,
+            "volact": 8,
+            "involact": 0.3,
+            "income": 11230
+          },
+          {
+            "race": 46.2,
+            "fire": 21.8,
+            "theft": 4,
+            "age": 73.1,
+            "volact": 2.6,
+            "involact": 1.3,
+            "income": 8330
+          },
+          {
+            "race": 99.7,
+            "fire": 21.6,
+            "theft": 31,
+            "age": 65,
+            "volact": 0.5,
+            "involact": 0.9,
+            "income": 5583
+          },
+          {
+            "race": 73.5,
+            "fire": 9,
+            "theft": 39,
+            "age": 75.4,
+            "volact": 2.7,
+            "involact": 0.4,
+            "income": 8564
+          },
+          {
+            "race": 10.7,
+            "fire": 3.6,
+            "theft": 15,
+            "age": 20.8,
+            "volact": 9.1,
+            "involact": 0,
+            "income": 12102
+          },
+          {
+            "race": 1.5,
+            "fire": 5,
+            "theft": 32,
+            "age": 61.8,
+            "volact": 11.6,
+            "involact": 0,
+            "income": 11876
+          },
+          {
+            "race": 4.8,
+            "fire": 28.6,
+            "theft": 27,
+            "age": 78.1,
+            "volact": 4,
+            "involact": 1.4,
+            "income": 9742
+          },
+          {
+            "race": 98.9,
+            "fire": 17.4,
+            "theft": 32,
+            "age": 68.6,
+            "volact": 1.7,
+            "involact": 2.2,
+            "income": 7520
+          },
+          {
+            "race": 90.6,
+            "fire": 11.3,
+            "theft": 34,
+            "age": 73.4,
+            "volact": 1.9,
+            "involact": 0.8,
+            "income": 7388
+          },
+          {
+            "race": 1.4,
+            "fire": 3.4,
+            "theft": 17,
+            "age": 2,
+            "volact": 12.9,
+            "involact": 0,
+            "income": 13842
+          },
+          {
+            "race": 71.2,
+            "fire": 11.9,
+            "theft": 46,
+            "age": 57,
+            "volact": 4.8,
+            "involact": 0.9,
+            "income": 11040
+          },
+          {
+            "race": 94.1,
+            "fire": 10.5,
+            "theft": 42,
+            "age": 55.9,
+            "volact": 6.6,
+            "involact": 0.9,
+            "income": 10332
+          },
+          {
+            "race": 66.1,
+            "fire": 10.7,
+            "theft": 43,
+            "age": 67.5,
+            "volact": 3.1,
+            "involact": 0.4,
+            "income": 10908
+          },
+          {
+            "race": 36.4,
+            "fire": 10.8,
+            "theft": 34,
+            "age": 58,
+            "volact": 7.8,
+            "involact": 0.9,
+            "income": 11156
+          },
+          {
+            "race": 1,
+            "fire": 4.8,
+            "theft": 19,
+            "age": 15.2,
+            "volact": 13,
+            "involact": 0,
+            "income": 13323
+          },
+          {
+            "race": 42.5,
+            "fire": 10.4,
+            "theft": 25,
+            "age": 40.8,
+            "volact": 10.2,
+            "involact": 0.5,
+            "income": 12960
+          },
+          {
+            "race": 35.1,
+            "fire": 15.6,
+            "theft": 28,
+            "age": 57.8,
+            "volact": 7.5,
+            "involact": 1,
+            "income": 11260
+          },
+          {
+            "race": 47.4,
+            "fire": 7,
+            "theft": 3,
+            "age": 11.4,
+            "volact": 7.7,
+            "involact": 0.2,
+            "income": 10080
+          },
+          {
+            "race": 34,
+            "fire": 7.1,
+            "theft": 23,
+            "age": 49.2,
+            "volact": 11.6,
+            "involact": 0.3,
+            "income": 11428
+          },
+          {
+            "race": 3.1,
+            "fire": 4.9,
+            "theft": 27,
+            "age": 46.6,
+            "volact": 10.9,
+            "involact": 0,
+            "income": 13731
+          }
+        ]
+      }
+    },
+    {
+      "type": "Statistics",
+      "status": "Success",
+      "parameters": {},
+      "inputs": [
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [],
+      "id": "module-1766383087957-2",
+      "name": "Statistics 1",
+      "position": {
+        "x": 400,
+        "y": 142.40562302723464
+      },
+      "outputData": {
+        "type": "StatisticsOutput",
+        "stats": {
+          "race": {
+            "count": 47,
+            "mean": 34.04893617021276,
+            "std": 32.81334479552108,
+            "min": 1,
+            "25%": 3.75,
+            "50%": 22.2,
+            "75%": 57.65,
+            "max": 99.7,
+            "nulls": 0,
+            "mode": 1,
+            "variance": 1076.7155966697503,
+            "skewness": 0.6522804134421053,
+            "kurtosis": -0.9097289161405651
+          },
+          "fire": {
+            "count": 47,
+            "mean": 12.278723404255317,
+            "std": 9.302265646656306,
+            "min": 2,
+            "25%": 5.65,
+            "50%": 10.4,
+            "75%": 16.05,
+            "max": 39.7,
+            "nulls": 0,
+            "mode": 2.2,
+            "variance": 86.53214616096207,
+            "skewness": 1.3565475996790497,
+            "kurtosis": 1.379915860903309
+          },
+          "theft": {
+            "count": 47,
+            "mean": 32.361702127659576,
+            "std": 22.290986218761056,
+            "min": 3,
+            "25%": 22,
+            "50%": 29,
+            "75%": 38,
+            "max": 147,
+            "nulls": 0,
+            "mode": 27,
+            "variance": 496.88806660499523,
+            "skewness": 3.154229129854477,
+            "kurtosis": 14.899502198364104
+          },
+          "age": {
+            "count": 47,
+            "mean": 60.32765957446808,
+            "std": 22.5749640293195,
+            "min": 2,
+            "25%": 48.6,
+            "50%": 65,
+            "75%": 77.3,
+            "max": 90.1,
+            "nulls": 0,
+            "mode": 89.8,
+            "variance": 509.62900092506936,
+            "skewness": -0.9829384680811099,
+            "kurtosis": 0.3846648443843801
+          },
+          "volact": {
+            "count": 47,
+            "mean": 6.529787234042553,
+            "std": 3.96648540593378,
+            "min": 0.5,
+            "25%": 3.1,
+            "50%": 5.9,
+            "75%": 9.649999999999999,
+            "max": 14.3,
+            "nulls": 0,
+            "mode": 3.1,
+            "variance": 15.733006475485665,
+            "skewness": 0.2896985472876613,
+            "kurtosis": -1.0862089134936794
+          },
+          "involact": {
+            "count": 47,
+            "mean": 0.6148936170212765,
+            "std": 0.6338216466333257,
+            "min": 0,
+            "25%": 0,
+            "50%": 0.4,
+            "75%": 0.9,
+            "max": 2.2,
+            "nulls": 0,
+            "mode": 0,
+            "variance": 0.40172987974098046,
+            "skewness": 0.8622141174562293,
+            "kurtosis": -0.2180983062524633
+          },
+          "income": {
+            "count": 47,
+            "mean": 10695.829787234043,
+            "std": 2754.1980077782996,
+            "min": 5583,
+            "25%": 8447,
+            "50%": 10694,
+            "75%": 11989,
+            "max": 21480,
+            "nulls": 0,
+            "mode": 5583,
+            "variance": 7585606.666049954,
+            "skewness": 1.2325576709556714,
+            "kurtosis": 3.9610950261415603
+          }
+        },
+        "correlation": {
+          "race": {
+            "race": 1,
+            "fire": 0.5375718083539606,
+            "theft": 0.2603216980960686,
+            "age": 0.22583960679893825,
+            "volact": -0.7356035498814578,
+            "involact": 0.6727357554973088,
+            "income": -0.6887963848797412
+          },
+          "fire": {
+            "race": 0.5375718083539606,
+            "fire": 1,
+            "theft": 0.5562104516823857,
+            "age": 0.4122225321862357,
+            "volact": -0.686476637097934,
+            "involact": 0.703039742398562,
+            "income": -0.6104480748634057
+          },
+          "theft": {
+            "race": 0.2603216980960686,
+            "fire": 0.5562104516823857,
+            "theft": 1,
+            "age": 0.3176308015838565,
+            "volact": -0.31161827148606264,
+            "involact": 0.1496308609959193,
+            "income": -0.17292256930874306
+          },
+          "age": {
+            "race": 0.22583960679893825,
+            "fire": 0.4122225321862357,
+            "theft": 0.3176308015838565,
+            "age": 1,
+            "volact": -0.6057428151640418,
+            "involact": 0.47572911081600905,
+            "income": -0.5286695275254742
+          },
+          "volact": {
+            "race": -0.7356035498814578,
+            "fire": -0.686476637097934,
+            "theft": -0.31161827148606264,
+            "age": -0.6057428151640418,
+            "volact": 1,
+            "involact": -0.7464228979801933,
+            "income": 0.7509779870899715
+          },
+          "involact": {
+            "race": 0.6727357554973088,
+            "fire": 0.703039742398562,
+            "theft": 0.1496308609959193,
+            "age": 0.47572911081600905,
+            "volact": -0.7464228979801933,
+            "involact": 1,
+            "income": -0.6648471481768019
+          },
+          "income": {
+            "race": -0.6887963848797412,
+            "fire": -0.6104480748634057,
+            "theft": -0.17292256930874306,
+            "age": -0.5286695275254742,
+            "volact": 0.7509779870899715,
+            "involact": -0.6648471481768019,
+            "income": 1
+          }
+        },
+        "columns": [
+          {
+            "name": "race",
+            "type": "number"
+          },
+          {
+            "name": "fire",
+            "type": "number"
+          },
+          {
+            "name": "theft",
+            "type": "number"
+          },
+          {
+            "name": "age",
+            "type": "number"
+          },
+          {
+            "name": "volact",
+            "type": "number"
+          },
+          {
+            "name": "involact",
+            "type": "number"
+          },
+          {
+            "name": "income",
+            "type": "number"
+          }
+        ]
+      }
+    },
+    {
+      "type": "StatModels",
+      "status": "Success",
+      "parameters": {
+        "model": "OLS"
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model_out",
+          "type": "model"
+        }
+      ],
+      "id": "module-1766383087957-3",
+      "name": "Stat Models 1",
+      "position": {
+        "x": 1.7940533558094245,
+        "y": 407.1974114987514
+      },
+      "outputData": {
+        "type": "ModelDefinitionOutput",
+        "modelFamily": "statsmodels",
+        "modelType": "OLS",
+        "parameters": {}
+      }
+    },
+    {
+      "type": "ResultModel",
+      "status": "Success",
+      "parameters": {
+        "feature_columns": [
+          "race",
+          "fire",
+          "theft",
+          "age",
+          "volact",
+          "involact"
+        ],
+        "label_column": "income"
+      },
+      "inputs": [
+        {
+          "name": "model_in",
+          "type": "model"
+        },
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result_out",
+          "type": "evaluation"
+        }
+      ],
+      "id": "module-1766383087957-4",
+      "name": "Result Model 1",
+      "position": {
+        "x": 260.8572634083664,
+        "y": 402.93890560837445
+      },
+      "outputData": {
+        "type": "StatsModelsResultOutput",
+        "modelType": "OLS",
+        "summary": {
+          "coefficients": {
+            "const": {
+              "coef": 14203.767778072332,
+              "std err": 1963.8901899676812,
+              "t": 7.232465364219817,
+              "z": 7.232465364219817,
+              "P>|t|": 8.918659407442329e-9,
+              "P>|z|": 8.918659407442329e-9,
+              "[0.025": 10234.597660222615,
+              "0.975]": 18172.93789592205
+            },
+            "race": {
+              "coef": -42.29943121138398,
+              "std err": 12.989669638124038,
+              "t": -3.2563900691698304,
+              "z": -3.2563900691698304,
+              "P>|t|": 0.002302099969134073,
+              "P>|z|": 0.002302099969134073,
+              "[0.025": -68.55253275023843,
+              "0.975]": -16.046329672529538
+            },
+            "fire": {
+              "coef": -119.47030726255602,
+              "std err": 50.053434926274726,
+              "t": -2.386855316493815,
+              "z": -2.386855316493815,
+              "P>|t|": 0.0218112609301811,
+              "P>|z|": 0.0218112609301811,
+              "[0.025": -220.6320724264089,
+              "0.975]": -18.30854209870313
+            },
+            "theft": {
+              "coef": 37.53950691698995,
+              "std err": 15.295523837105218,
+              "t": 2.4542805670978938,
+              "z": 2.4542805670978938,
+              "P>|t|": 0.018565055908495526,
+              "P>|z|": 0.018565055908495526,
+              "[0.025": 6.626100219798207,
+              "0.975]": 68.4529136141817
+            },
+            "age": {
+              "coef": -44.08886402512892,
+              "std err": 15.763984746179828,
+              "t": -2.7968096096904187,
+              "z": -2.7968096096904187,
+              "P>|t|": 0.007895777745712792,
+              "P>|z|": 0.007895777745712792,
+              "[0.025": -75.94906553354697,
+              "0.975]": -12.22866251671087
+            },
+            "volact": {
+              "coef": 65.82552066643572,
+              "std err": 132.79493672270564,
+              "t": 0.4956930007345731,
+              "z": 0.4956930007345731,
+              "P>|t|": 0.6228236165840654,
+              "P>|z|": 0.6228236165840654,
+              "[0.025": -202.56305693024817,
+              "0.975]": 334.2140982631196
+            },
+            "involact": {
+              "coef": 673.8799744975431,
+              "std err": 747.0398356937019,
+              "t": 0.9020669879963998,
+              "z": 0.9020669879963998,
+              "P>|t|": 0.37242127065377517,
+              "P>|z|": 0.37242127065377517,
+              "[0.025": -835.9438475398792,
+              "0.975]": 2183.7037965349655
+            }
+          },
+          "metrics": {
+            "Log-Likelihood": "-410.169546",
+            "AIC": "834.339093",
+            "BIC": "847.290126",
+            "R-squared": "0.700041",
+            "Adj. R-squared": "0.655048",
+            "F-statistic": "15.558621",
+            "Prob (F-statistic)": "0.000000"
+          }
+        },
+        "featureColumns": [
+          "race",
+          "fire",
+          "theft",
+          "age",
+          "volact",
+          "involact"
+        ],
+        "labelColumn": "income"
+      }
+    },
+    {
+      "type": "PredictModel",
+      "status": "Success",
+      "parameters": {},
+      "inputs": [
+        {
+          "name": "model_in",
+          "type": "evaluation"
+        },
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "scored_data_out",
+          "type": "data"
+        }
+      ],
+      "id": "module-1766383087957-5",
+      "name": "Predict Model 1",
+      "position": {
+        "x": 553.9084409547847,
+        "y": 406.59171457106305
+      },
+      "outputData": {
+        "type": "DataPreview",
+        "columns": [
+          {
+            "name": "race",
+            "type": "number"
+          },
+          {
+            "name": "fire",
+            "type": "number"
+          },
+          {
+            "name": "theft",
+            "type": "number"
+          },
+          {
+            "name": "age",
+            "type": "number"
+          },
+          {
+            "name": "volact",
+            "type": "number"
+          },
+          {
+            "name": "involact",
+            "type": "number"
+          },
+          {
+            "name": "income",
+            "type": "number"
+          },
+          {
+            "name": "y_pred_prob",
+            "type": "number"
+          }
+        ],
+        "totalRowCount": 47,
+        "rows": [
+          {
+            "race": 10,
+            "fire": 6.2,
+            "theft": 29,
+            "age": 60.4,
+            "volact": 5.3,
+            "involact": 0,
+            "income": 11744,
+            "y_pred_prob": 11814.6111
+          },
+          {
+            "race": 22.2,
+            "fire": 9.5,
+            "theft": 44,
+            "age": 76.5,
+            "volact": 3.1,
+            "involact": 0.1,
+            "income": 9323,
+            "y_pred_prob": 10680.1398
+          },
+          {
+            "race": 19.6,
+            "fire": 10.5,
+            "theft": 36,
+            "age": 73.5,
+            "volact": 4.8,
+            "involact": 1.2,
+            "income": 9948,
+            "y_pred_prob": 11355.7699
+          },
+          {
+            "race": 17.3,
+            "fire": 7.7,
+            "theft": 37,
+            "age": 66.9,
+            "volact": 5.7,
+            "involact": 0.5,
+            "income": 10656,
+            "y_pred_prob": 11703.6285
+          },
+          {
+            "race": 24.5,
+            "fire": 8.6,
+            "theft": 53,
+            "age": 81.4,
+            "volact": 5.9,
+            "involact": 0.7,
+            "income": 9730,
+            "y_pred_prob": 11400.834
+          },
+          {
+            "race": 54,
+            "fire": 34.1,
+            "theft": 68,
+            "age": 52.6,
+            "volact": 4,
+            "involact": 0.3,
+            "income": 8231,
+            "y_pred_prob": 8544.7393
+          },
+          {
+            "race": 4.9,
+            "fire": 11,
+            "theft": 75,
+            "age": 42.6,
+            "volact": 7.9,
+            "involact": 0,
+            "income": 21480,
+            "y_pred_prob": 14139.6262
+          },
+          {
+            "race": 7.1,
+            "fire": 6.9,
+            "theft": 18,
+            "age": 78.5,
+            "volact": 6.9,
+            "involact": 0,
+            "income": 11104,
+            "y_pred_prob": 10748.0281
+          },
+          {
+            "race": 5.3,
+            "fire": 7.3,
+            "theft": 31,
+            "age": 90.1,
+            "volact": 7.6,
+            "involact": 0.4,
+            "income": 10694,
+            "y_pred_prob": 11068.5916
+          },
+          {
+            "race": 21.5,
+            "fire": 15.1,
+            "theft": 25,
+            "age": 89.8,
+            "volact": 3.1,
+            "involact": 1.1,
+            "income": 9631,
+            "y_pred_prob": 9414.9631
+          },
+          {
+            "race": 43.1,
+            "fire": 29.1,
+            "theft": 34,
+            "age": 82.7,
+            "volact": 1.3,
+            "involact": 1.9,
+            "income": 7995,
+            "y_pred_prob": 7900.2157
+          },
+          {
+            "race": 1.1,
+            "fire": 2.2,
+            "theft": 14,
+            "age": 40.2,
+            "volact": 14.3,
+            "involact": 0,
+            "income": 13722,
+            "y_pred_prob": 13588.8894
+          },
+          {
+            "race": 1,
+            "fire": 5.7,
+            "theft": 11,
+            "age": 27.9,
+            "volact": 12.1,
+            "involact": 0,
+            "income": 16250,
+            "y_pred_prob": 13459.8317
+          },
+          {
+            "race": 1.7,
+            "fire": 2,
+            "theft": 11,
+            "age": 7.7,
+            "volact": 10.9,
+            "involact": 0,
+            "income": 13686,
+            "y_pred_prob": 14683.8666
+          },
+          {
+            "race": 1.6,
+            "fire": 2.5,
+            "theft": 22,
+            "age": 63.8,
+            "volact": 10.7,
+            "involact": 0,
+            "income": 12405,
+            "y_pred_prob": 12554.7456
+          },
+          {
+            "race": 1.5,
+            "fire": 3,
+            "theft": 17,
+            "age": 51.2,
+            "volact": 13.8,
+            "involact": 0,
+            "income": 12198,
+            "y_pred_prob": 13071.1217
+          },
+          {
+            "race": 1.8,
+            "fire": 5.4,
+            "theft": 27,
+            "age": 85.1,
+            "volact": 8.9,
+            "involact": 0,
+            "income": 11600,
+            "y_pred_prob": 11329.9406
+          },
+          {
+            "race": 1,
+            "fire": 2.2,
+            "theft": 9,
+            "age": 44.4,
+            "volact": 11.5,
+            "involact": 0,
+            "income": 12765,
+            "y_pred_prob": 13035.9372
+          },
+          {
+            "race": 2.5,
+            "fire": 7.2,
+            "theft": 29,
+            "age": 84.2,
+            "volact": 8.5,
+            "involact": 0.2,
+            "income": 11084,
+            "y_pred_prob": 11308.4893
+          },
+          {
+            "race": 13.4,
+            "fire": 15.1,
+            "theft": 30,
+            "age": 89.8,
+            "volact": 5.2,
+            "involact": 0.8,
+            "income": 10510,
+            "y_pred_prob": 9881.3557
+          },
+          {
+            "race": 59.8,
+            "fire": 16.5,
+            "theft": 40,
+            "age": 72.7,
+            "volact": 2.7,
+            "involact": 0.8,
+            "income": 9784,
+            "y_pred_prob": 8716.1545
+          },
+          {
+            "race": 94.4,
+            "fire": 18.4,
+            "theft": 32,
+            "age": 72.9,
+            "volact": 1.2,
+            "involact": 1.8,
+            "income": 7342,
+            "y_pred_prob": 7291.6084
+          },
+          {
+            "race": 86.2,
+            "fire": 36.2,
+            "theft": 41,
+            "age": 63.1,
+            "volact": 0.8,
+            "involact": 1.8,
+            "income": 6565,
+            "y_pred_prob": 6255.4885
+          },
+          {
+            "race": 50.2,
+            "fire": 39.7,
+            "theft": 147,
+            "age": 83,
+            "volact": 5.2,
+            "involact": 0.9,
+            "income": 7459,
+            "y_pred_prob": 10145.0816
+          },
+          {
+            "race": 74.2,
+            "fire": 18.5,
+            "theft": 22,
+            "age": 78.3,
+            "volact": 1.8,
+            "involact": 1.9,
+            "income": 8014,
+            "y_pred_prob": 7627.5183
+          },
+          {
+            "race": 55.5,
+            "fire": 23.3,
+            "theft": 29,
+            "age": 79,
+            "volact": 2.1,
+            "involact": 1.5,
+            "income": 8177,
+            "y_pred_prob": 7827.1702
+          },
+          {
+            "race": 62.3,
+            "fire": 12.2,
+            "theft": 46,
+            "age": 48,
+            "volact": 3.4,
+            "involact": 0.6,
+            "income": 8212,
+            "y_pred_prob": 10349.6621
+          },
+          {
+            "race": 4.4,
+            "fire": 5.6,
+            "theft": 23,
+            "age": 71.5,
+            "volact": 8,
+            "involact": 0.3,
+            "income": 11230,
+            "y_pred_prob": 11788.4396
+          },
+          {
+            "race": 46.2,
+            "fire": 21.8,
+            "theft": 4,
+            "age": 73.1,
+            "volact": 2.6,
+            "involact": 1.3,
+            "income": 8330,
+            "y_pred_prob": 7619.5337
+          },
+          {
+            "race": 99.7,
+            "fire": 21.6,
+            "theft": 31,
+            "age": 65,
+            "volact": 0.5,
+            "involact": 0.9,
+            "income": 5583,
+            "y_pred_prob": 6343.3091
+          },
+          {
+            "race": 73.5,
+            "fire": 9,
+            "theft": 39,
+            "age": 75.4,
+            "volact": 2.7,
+            "involact": 0.4,
+            "income": 8564,
+            "y_pred_prob": 8606.5481
+          },
+          {
+            "race": 10.7,
+            "fire": 3.6,
+            "theft": 15,
+            "age": 20.8,
+            "volact": 9.1,
+            "involact": 0,
+            "income": 12102,
+            "y_pred_prob": 13566.1272
+          },
+          {
+            "race": 1.5,
+            "fire": 5,
+            "theft": 32,
+            "age": 61.8,
+            "volact": 11.6,
+            "involact": 0,
+            "income": 11876,
+            "y_pred_prob": 12783.1156
+          },
+          {
+            "race": 4.8,
+            "fire": 28.6,
+            "theft": 27,
+            "age": 78.1,
+            "volact": 4,
+            "involact": 1.4,
+            "income": 9742,
+            "y_pred_prob": 9360.8402
+          },
+          {
+            "race": 98.9,
+            "fire": 17.4,
+            "theft": 32,
+            "age": 68.6,
+            "volact": 1.7,
+            "involact": 2.2,
+            "income": 7520,
+            "y_pred_prob": 7712.7782
+          },
+          {
+            "race": 90.6,
+            "fire": 11.3,
+            "theft": 34,
+            "age": 73.4,
+            "volact": 1.9,
+            "involact": 0.8,
+            "income": 7388,
+            "y_pred_prob": 7725.8179
+          },
+          {
+            "race": 1.4,
+            "fire": 3.4,
+            "theft": 17,
+            "age": 2,
+            "volact": 12.9,
+            "involact": 0,
+            "income": 13842,
+            "y_pred_prob": 15137.4926
+          },
+          {
+            "race": 71.2,
+            "fire": 11.9,
+            "theft": 46,
+            "age": 57,
+            "volact": 4.8,
+            "involact": 0.9,
+            "income": 11040,
+            "y_pred_prob": 9906.5582
+          },
+          {
+            "race": 94.1,
+            "fire": 10.5,
+            "theft": 42,
+            "age": 55.9,
+            "volact": 6.6,
+            "involact": 0.9,
+            "income": 10332,
+            "y_pred_prob": 9121.9853
+          },
+          {
+            "race": 66.1,
+            "fire": 10.7,
+            "theft": 43,
+            "age": 67.5,
+            "volact": 3.1,
+            "involact": 0.4,
+            "income": 10908,
+            "y_pred_prob": 9241.2547
+          },
+          {
+            "race": 36.4,
+            "fire": 10.8,
+            "theft": 34,
+            "age": 58,
+            "volact": 7.8,
+            "involact": 0.9,
+            "income": 11156,
+            "y_pred_prob": 11212.9093
+          },
+          {
+            "race": 1,
+            "fire": 4.8,
+            "theft": 19,
+            "age": 15.2,
+            "volact": 13,
+            "involact": 0,
+            "income": 13323,
+            "y_pred_prob": 14486.8425
+          },
+          {
+            "race": 42.5,
+            "fire": 10.4,
+            "theft": 25,
+            "age": 40.8,
+            "volact": 10.2,
+            "involact": 0.5,
+            "income": 12960,
+            "y_pred_prob": 11311.5731
+          },
+          {
+            "race": 35.1,
+            "fire": 15.6,
+            "theft": 28,
+            "age": 57.8,
+            "volact": 7.5,
+            "involact": 1,
+            "income": 11260,
+            "y_pred_prob": 10525.6622
+          },
+          {
+            "race": 47.4,
+            "fire": 7,
+            "theft": 3,
+            "age": 11.4,
+            "volact": 7.7,
+            "involact": 0.2,
+            "income": 10080,
+            "y_pred_prob": 11614.1206
+          },
+          {
+            "race": 34,
+            "fire": 7.1,
+            "theft": 23,
+            "age": 49.2,
+            "volact": 11.6,
+            "involact": 0.3,
+            "income": 11428,
+            "y_pred_prob": 11577.3245
+          },
+          {
+            "race": 3.1,
+            "fire": 4.9,
+            "theft": 27,
+            "age": 46.6,
+            "volact": 10.9,
+            "involact": 0,
+            "income": 13731,
+            "y_pred_prob": 13163.7588
+          }
+        ]
+      }
+    },
+    {
+      "type": "DiversionChecker",
+      "status": "Success",
+      "parameters": {
+        "feature_columns": [
+          "race",
+          "fire",
+          "theft",
+          "age",
+          "volact",
+          "involact"
+        ],
+        "label_column": "income",
+        "max_iter": 100
+      },
+      "inputs": [
+        {
+          "name": "data_in",
+          "type": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result_out",
+          "type": "evaluation"
+        }
+      ],
+      "id": "module-1766383087957-6",
+      "name": "Diversion Checker 1",
+      "position": {
+        "x": 447.47373926423575,
+        "y": 272.76363738765133
+      },
+      "outputData": {
+        "type": "DiversionCheckerOutput",
+        "phi": 15298907.758533452,
+        "recommendation": "NegativeBinomial",
+        "poissonAic": 8373.57956203731,
+        "negativeBinomialAic": 817.2168442040115,
+        "aicComparison": "Negative Binomial이 더 낮은 AIC를 가짐 (더 나은 적합도)",
+        "cameronTrivediCoef": 227492735.13659364,
+        "cameronTrivediPvalue": 0.0004423951986510132,
+        "cameronTrivediConclusion": "과대산포가 통계적으로 유의함 (p < 0.05)",
+        "methodsUsed": [
+          "1. 포아송 모델 적합",
+          "2. Dispersion φ 계산",
+          "3. φ 기준 모델 추천",
+          "4. 포아송 vs 음이항 AIC 비교",
+          "5. Cameron–Trivedi test"
+        ],
+        "results": {
+          "phi": 15298907.758533452,
+          "phi_interpretation": "φ = 15298907.758533",
+          "recommendation": "NegativeBinomial",
+          "poisson_aic": 8373.57956203731,
+          "negative_binomial_aic": 817.2168442040115,
+          "cameron_trivedi_coef": 227492735.13659364,
+          "cameron_trivedi_pvalue": 0.0004423951986510132,
+          "cameron_trivedi_conclusion": "과대산포가 통계적으로 유의함 (p < 0.05)"
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "connection-1766383087957-0",
+      "from": {
+        "moduleId": "module-1766383087957-0",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1766383087957-1",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1766383087957-1",
+      "from": {
+        "moduleId": "module-1766383087957-0",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1766383087957-2",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1766383087957-2",
+      "from": {
+        "moduleId": "module-1766383087957-3",
+        "portName": "model_out"
+      },
+      "to": {
+        "moduleId": "module-1766383087957-4",
+        "portName": "model_in"
+      }
+    },
+    {
+      "id": "connection-1766383087957-3",
+      "from": {
+        "moduleId": "module-1766383087957-1",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1766383087957-4",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1766383087957-4",
+      "from": {
+        "moduleId": "module-1766383087957-4",
+        "portName": "result_out"
+      },
+      "to": {
+        "moduleId": "module-1766383087957-5",
+        "portName": "model_in"
+      }
+    },
+    {
+      "id": "connection-1766383087957-5",
+      "from": {
+        "moduleId": "module-1766383087957-1",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1766383087957-5",
+        "portName": "data_in"
+      }
+    },
+    {
+      "id": "connection-1766383087957-6",
+      "from": {
+        "moduleId": "module-1766383087957-1",
+        "portName": "data_out"
+      },
+      "to": {
+        "moduleId": "module-1766383087957-6",
+        "portName": "data_in"
+      }
+    }
+  ],
+  "projectName": "Stat Model"
+}

@@ -998,7 +998,7 @@ ${header}
       const pipelineState = { modules, connections, projectName };
       
       await savePipeline(pipelineState, {
-        extension: ".mla",
+        extension: ".ins",
               description: "ML Pipeline File",
         onSuccess: (fileName) => {
           addLog("SUCCESS", `Pipeline saved to '${fileName}'.`);
@@ -1112,7 +1112,7 @@ ${header}
 
   const handleLoadPipeline = useCallback(async () => {
     const savedState = await loadPipeline({
-      extension: ".mla",
+      extension: ".ins",
       onError: (error) => {
         addLog("ERROR", error.message);
       },
@@ -7013,7 +7013,7 @@ ${header}
                       e.stopPropagation();
                       const input = document.createElement("input");
                       input.type = "file";
-                      input.accept = ".json,.mla";
+                      input.accept = ".json,.ins";
                       input.onchange = (event: Event) => {
                         const target = event.target as HTMLInputElement;
                         const file = target.files?.[0];

@@ -15,7 +15,12 @@ export default defineConfig(({ mode }) => {
             secure: false,
           },
           '/api/samples': {
-            target: 'http://localhost:3002',
+            target: 'http://localhost:3001',
+            changeOrigin: true,
+            secure: false,
+          },
+          '/api/generate-ppts': {
+            target: 'http://localhost:3001',
             changeOrigin: true,
             secure: false,
           }

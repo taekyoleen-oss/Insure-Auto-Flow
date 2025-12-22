@@ -37,9 +37,11 @@ app.get('/api/samples/list', (req, res) => {
     const sampleFiles = files
       .filter(file => {
         const isJson = file.endsWith('.json');
+        const isIns = file.endsWith('.ins');
         const isMla = file.endsWith('.mla');
-        if (isJson || isMla) {
-          console.log(`Processing file: ${file} (${isMla ? '.mla' : '.json'})`);
+        if (isJson || isIns || isMla) {
+          const ext = isIns ? '.ins' : (isMla ? '.mla' : '.json');
+          console.log(`Processing file: ${file} (${ext})`);
           return true;
         }
         return false;
@@ -58,10 +60,11 @@ app.get('/api/samples/list', (req, res) => {
           const data = JSON.parse(content);
           console.log(`Parsed file ${file}, has modules: ${!!data.modules}, has connections: ${!!data.connections}, has projectName: ${!!data.projectName}`);
           
-          // .mla 파일 형식 (Save 버튼으로 저장한 파일) 변환
-          if (file.endsWith('.mla') && data.modules && data.connections) {
-            const projectName = data.projectName || file.replace('.mla', '');
-            console.log(`Converting .mla file: ${file} -> ${projectName}`);
+          // .ins 또는 .mla 파일 형식 (Save 버튼으로 저장한 파일) 변환
+          if ((file.endsWith('.ins') || file.endsWith('.mla')) && data.modules && data.connections) {
+            const ext = file.endsWith('.ins') ? '.ins' : '.mla';
+            const projectName = data.projectName || file.replace(ext, '');
+            console.log(`Converting ${ext} file: ${file} -> ${projectName}`);
             console.log(`  Modules count: ${data.modules.length}, Connections count: ${data.connections.length}`);
             
             const convertedData = {
@@ -90,14 +93,14 @@ app.get('/api/samples/list', (req, res) => {
                 }).filter((c) => c.fromModuleIndex >= 0 && c.toModuleIndex >= 0),
               }
             };
-            console.log(`Successfully converted .mla file: ${file} -> ${convertedData.name} (${convertedData.data.modules.length} modules, ${convertedData.data.connections.length} connections)`);
+            console.log(`Successfully converted ${ext} file: ${file} -> ${convertedData.name} (${convertedData.data.modules.length} modules, ${convertedData.data.connections.length} connections)`);
             return convertedData;
           }
           
           // .json 파일 형식 (기존 samples 형식)
           const jsonData = {
             filename: file,
-            name: data.name || file.replace('.json', '').replace('.mla', ''),
+            name: data.name || file.replace('.json', '').replace('.ins', '').replace('.mla', ''),
             data: data
           };
           console.log(`Loaded .json file: ${file} -> ${jsonData.name}`);
@@ -136,11 +139,12 @@ app.get('/api/samples/:filename', (req, res) => {
     const content = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(content);
     
-    // .mla 파일 형식 (Save 버튼으로 저장한 파일) 변환
+    // .ins 또는 .mla 파일 형식 (Save 버튼으로 저장한 파일) 변환
     // projectName이 없어도 파일명에서 추출 가능하도록 수정
-    if (filename.endsWith('.mla') && data.modules && data.connections) {
-      console.log(`Converting .mla file: ${filename}`);
-      const projectName = data.projectName || filename.replace('.mla', '').trim();
+    if ((filename.endsWith('.ins') || filename.endsWith('.mla')) && data.modules && data.connections) {
+      const ext = filename.endsWith('.ins') ? '.ins' : '.mla';
+      console.log(`Converting ${ext} file: ${filename}`);
+      const projectName = data.projectName || filename.replace(ext, '').trim();
       const convertedData = {
         name: projectName,
         modules: data.modules.map((m) => ({
