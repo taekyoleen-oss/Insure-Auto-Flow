@@ -88,7 +88,10 @@ import { AIPlanDisplayModal } from "./components/AIPlanDisplayModal";
 import { PipelineCodePanel } from "./components/PipelineCodePanel";
 import { GoogleGenAI, Type } from "@google/genai";
 import { savePipeline, loadPipeline } from "../shared/utils/fileOperations";
-import { loadSampleFromFolder, loadFolderSamples } from "../shared/utils/samples";
+import {
+  loadSampleFromFolder,
+  loadFolderSamples,
+} from "../shared/utils/samples";
 
 type TerminalLog = {
   id: number;
@@ -996,15 +999,15 @@ ${header}
   const handleSavePipeline = useCallback(async () => {
     try {
       const pipelineState = { modules, connections, projectName };
-      
+
       await savePipeline(pipelineState, {
         extension: ".ins",
-              description: "ML Pipeline File",
+        description: "ML Pipeline File",
         onSuccess: (fileName) => {
           addLog("SUCCESS", `Pipeline saved to '${fileName}'.`);
-      setIsDirty(false);
-      setSaveButtonText("Saved!");
-      setTimeout(() => setSaveButtonText("Save"), 2000);
+          setIsDirty(false);
+          setSaveButtonText("Saved!");
+          setTimeout(() => setSaveButtonText("Save"), 2000);
         },
         onError: (error) => {
           console.error("Failed to save pipeline:", error);
@@ -1061,13 +1064,13 @@ ${header}
       if (result.success) {
         const fileCount = result.files?.length || 0;
         const downloadPath = result.downloadPath || result.files?.[0]?.filepath;
-        
+
         if (fileCount > 0) {
           addLog(
             "SUCCESS",
             `PPT 파일이 생성되었습니다. (${fileCount}개 모듈 포함)`
           );
-          
+
           if (downloadPath) {
             addLog(
               "SUCCESS",
@@ -1075,17 +1078,16 @@ ${header}
             );
           } else {
             // stdout에서 경로 추출 시도
-            const pathMatch = result.message?.match(/다운로드 폴더에 저장되었습니다:\s*(.+)/);
+            const pathMatch = result.message?.match(
+              /다운로드 폴더에 저장되었습니다:\s*(.+)/
+            );
             if (pathMatch) {
               addLog(
                 "SUCCESS",
                 `다운로드 폴더에 저장되었습니다: ${pathMatch[1]}`
               );
             } else {
-              addLog(
-                "INFO",
-                "파일이 PC의 다운로드 폴더에 저장되었습니다."
-              );
+              addLog("INFO", "파일이 PC의 다운로드 폴더에 저장되었습니다.");
             }
           }
         } else {
@@ -1097,10 +1099,16 @@ ${header}
     } catch (error: any) {
       console.error("PPT 생성 오류:", error);
       const errorMessage = error.message || "알 수 없는 오류";
-      
+
       // 서버 연결 오류인 경우 안내 메시지 추가
-      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("ECONNREFUSED")) {
-        addLog("ERROR", `PPT 생성 실패: 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요. (http://localhost:3002)`);
+      if (
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("ECONNREFUSED")
+      ) {
+        addLog(
+          "ERROR",
+          `PPT 생성 실패: 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요. (http://localhost:3002)`
+        );
         addLog("INFO", "서버를 시작하려면: npm run samples-server");
       } else {
         addLog("ERROR", `PPT 생성 실패: ${errorMessage}`);
@@ -1119,18 +1127,18 @@ ${header}
     });
 
     if (savedState) {
-          if (savedState.modules && savedState.connections) {
-            resetModules(savedState.modules);
-            _setConnections(savedState.connections);
-            if (savedState.projectName) {
-              setProjectName(savedState.projectName);
-            }
-            setSelectedModuleIds([]);
-            setIsDirty(false);
+      if (savedState.modules && savedState.connections) {
+        resetModules(savedState.modules);
+        _setConnections(savedState.connections);
+        if (savedState.projectName) {
+          setProjectName(savedState.projectName);
+        }
+        setSelectedModuleIds([]);
+        setIsDirty(false);
         addLog("SUCCESS", "Pipeline loaded successfully.");
-          } else {
-            addLog("WARN", "Invalid pipeline file format.");
-          }
+      } else {
+        addLog("WARN", "Invalid pipeline file format.");
+      }
     }
   }, [resetModules, addLog]);
 
@@ -1156,7 +1164,7 @@ ${header}
           try {
             sampleModel = await loadSampleFromFolder(
               filename,
-              "http://localhost:3002/api/samples"
+              "http://localhost:3001/api/samples"
             );
             if (!sampleModel) {
               addLog("ERROR", `Failed to load sample file: ${filename}`);
@@ -1178,8 +1186,8 @@ ${header}
               const myWorkModels = JSON.parse(myWorkModelsStr);
               if (Array.isArray(myWorkModels)) {
                 sampleModel = myWorkModels.find(
-          (m: any) => m.name === sampleName
-        );
+                  (m: any) => m.name === sampleName
+                );
               }
             } catch (error) {
               console.error("Failed to parse my work models:", error);
@@ -1272,8 +1280,10 @@ ${header}
   const loadFolderSamplesLocal = useCallback(async () => {
     setIsLoadingSamples(true);
     try {
-      const samples = await loadFolderSamples("http://localhost:3002/api/samples/list");
-      
+      const samples = await loadFolderSamples(
+        "http://localhost:3001/api/samples/list"
+      );
+
       if (Array.isArray(samples) && samples.length > 0) {
         console.log(
           `Loaded ${samples.length} samples from server:`,
@@ -1877,7 +1887,10 @@ ${header}
   const handleViewDetails = (moduleId: string) => {
     const module = modules.find((m) => m.id === moduleId);
     if (module?.outputData) {
-      if (module.type === ModuleType.PredictModel && module.outputData.type === "DataPreview") {
+      if (
+        module.type === ModuleType.PredictModel &&
+        module.outputData.type === "DataPreview"
+      ) {
         setViewingPredictModel(module);
       } else if (module.outputData.type === "StatsModelsResultOutput") {
         setViewingStatsModelsResult(module);
@@ -3309,12 +3322,12 @@ ${header}
               } else {
                 // 기존 모듈 (deprecated)
                 distributionType =
-                modelSourceModule.parameters.distribution_type ||
-                (modelSourceModule.type === ModuleType.PoissonRegression
-                  ? "Poisson"
-                  : "NegativeBinomial");
+                  modelSourceModule.parameters.distribution_type ||
+                  (modelSourceModule.type === ModuleType.PoissonRegression
+                    ? "Poisson"
+                    : "NegativeBinomial");
                 maxIter =
-                parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
+                  parseInt(modelSourceModule.parameters.max_iter, 10) || 100;
                 disp = parseFloat(modelSourceModule.parameters.disp) || 1.0;
               }
 
@@ -3389,8 +3402,7 @@ ${header}
             } else if (modelSourceModule.type === ModuleType.DecisionTree) {
               // Pyodide를 사용하여 Python으로 Decision Tree 훈련 (회귀)
               const modelPurpose = "regression";
-              const criterion =
-                modelSourceModule.parameters.criterion || "mse";
+              const criterion = modelSourceModule.parameters.criterion || "mse";
               const maxDepth =
                 modelSourceModule.parameters.max_depth === "" ||
                 modelSourceModule.parameters.max_depth === null ||
@@ -3451,10 +3463,7 @@ ${header}
                   (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
                 );
 
-                addLog(
-                  "SUCCESS",
-                  `Python으로 Decision Tree 모델 훈련 완료`
-                );
+                addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -3737,12 +3746,10 @@ ${header}
                 modelSourceModule.parameters.model_purpose || "classification";
               const nNeighbors =
                 parseInt(modelSourceModule.parameters.n_neighbors, 10) || 3;
-              const weights =
-                modelSourceModule.parameters.weights || "uniform";
+              const weights = modelSourceModule.parameters.weights || "uniform";
               const algorithm =
                 modelSourceModule.parameters.algorithm || "auto";
-              const metric =
-                modelSourceModule.parameters.metric || "minkowski";
+              const metric = modelSourceModule.parameters.metric || "minkowski";
 
               if (X.length < ordered_feature_columns.length) {
                 throw new Error(
@@ -3805,23 +3812,19 @@ ${header}
                     (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
                   );
                   metrics["Root Mean Squared Error"] = parseFloat(
-                    (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(4)
+                    (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(
+                      4
+                    )
                   );
                   metrics["Mean Absolute Error"] = parseFloat(
                     (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
                   );
                 }
 
-                addLog(
-                  "SUCCESS",
-                  `Python으로 KNN 모델 훈련 완료`
-                );
+                addLog("SUCCESS", `Python으로 KNN 모델 훈련 완료`);
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
-                addLog(
-                  "ERROR",
-                  `Python KNN 훈련 실패: ${errorMessage}`
-                );
+                addLog("ERROR", `Python KNN 훈련 실패: ${errorMessage}`);
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
             } else if (modelSourceModule.type === ModuleType.DecisionTree) {
@@ -3912,10 +3915,7 @@ ${header}
                   );
                 }
 
-                addLog(
-                  "SUCCESS",
-                  `Python으로 Decision Tree 모델 훈련 완료`
-                );
+                addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -4147,10 +4147,7 @@ ${header}
                   );
                 }
 
-                addLog(
-                  "SUCCESS",
-                  `Python으로 Naive Bayes 모델 훈련 완료`
-                );
+                addLog("SUCCESS", `Python으로 Naive Bayes 모델 훈련 완료`);
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -4247,10 +4244,7 @@ ${header}
                   );
                 }
 
-                addLog(
-                  "SUCCESS",
-                  `Python으로 Decision Tree 모델 훈련 완료`
-                );
+                addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -4482,10 +4476,7 @@ ${header}
                   );
                 }
 
-                addLog(
-                  "SUCCESS",
-                  `Python으로 Naive Bayes 모델 훈련 완료`
-                );
+                addLog("SUCCESS", `Python으로 Naive Bayes 모델 훈련 완료`);
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -4600,7 +4591,7 @@ ${header}
             const trainModelModule = currentModules.find(
               (m) => m.id === trainedModelSourceModule.id
             );
-            
+
             if (!trainModelModule) {
               throw new Error("Train Model module not found.");
             }
@@ -4629,7 +4620,9 @@ ${header}
             let trainingData: DataPreview | null = null;
             if (trainDataSourceModule.outputData.type === "DataPreview") {
               trainingData = trainDataSourceModule.outputData;
-            } else if (trainDataSourceModule.outputData.type === "SplitDataOutput") {
+            } else if (
+              trainDataSourceModule.outputData.type === "SplitDataOutput"
+            ) {
               const portName = trainDataInputConnection.from.portName;
               if (portName === "train_data_out") {
                 trainingData = trainDataSourceModule.outputData.train;
@@ -4685,8 +4678,7 @@ ${header}
                 const nNeighbors =
                   parseInt(modelDefModule.parameters.n_neighbors, 10) || 3;
                 const weights = modelDefModule.parameters.weights || "uniform";
-                const algorithm =
-                  modelDefModule.parameters.algorithm || "auto";
+                const algorithm = modelDefModule.parameters.algorithm || "auto";
                 const metric = modelDefModule.parameters.metric || "minkowski";
 
                 const { scoreKNNPython } = pyodideModule;
@@ -4714,8 +4706,7 @@ ${header}
 
                 const modelPurpose =
                   modelDefModule.parameters.model_purpose || "classification";
-                const criterion =
-                  modelDefModule.parameters.criterion || "gini";
+                const criterion = modelDefModule.parameters.criterion || "gini";
                 const maxDepth =
                   modelDefModule.parameters.max_depth === "" ||
                   modelDefModule.parameters.max_depth === null ||
@@ -4726,8 +4717,7 @@ ${header}
                   parseInt(modelDefModule.parameters.min_samples_split, 10) ||
                   2;
                 const minSamplesLeaf =
-                  parseInt(modelDefModule.parameters.min_samples_leaf, 10) ||
-                  1;
+                  parseInt(modelDefModule.parameters.min_samples_leaf, 10) || 1;
 
                 const { scoreDecisionTreePython } = pyodideModule;
                 result = await scoreDecisionTreePython(
@@ -4745,10 +4735,7 @@ ${header}
                   60000
                 );
 
-                addLog(
-                  "SUCCESS",
-                  "Python으로 Decision Tree 모델 예측 완료"
-                );
+                addLog("SUCCESS", "Python으로 Decision Tree 모델 예측 완료");
               } else if (trainedModel.modelType === ModuleType.SVM) {
                 addLog(
                   "INFO",
@@ -4849,10 +4836,7 @@ ${header}
                   60000
                 );
 
-                addLog(
-                  "SUCCESS",
-                  "Python으로 Naive Bayes 모델 예측 완료"
-                );
+                addLog("SUCCESS", "Python으로 Naive Bayes 모델 예측 완료");
               } else {
                 throw new Error(
                   `Unsupported model type for ScoreModel: ${trainedModel.modelType}`
@@ -4875,145 +4859,145 @@ ${header}
             }
           } else {
             // 기존 방식 (coefficients/intercept 사용)
-          // Pyodide를 사용하여 Python으로 예측 수행
-          try {
-            addLog(
-              "INFO",
-              "Pyodide를 사용하여 Python으로 모델 예측 수행 중..."
-            );
-
-            const pyodideModule = await import("./utils/pyodideRunner");
-            const { scoreModelPython } = pyodideModule;
-
-            const result = await scoreModelPython(
-              inputData.rows || [],
-              trainedModel.featureColumns,
-              trainedModel.coefficients,
-              trainedModel.intercept,
-              labelColumn,
-              modelIsClassification ? "classification" : "regression",
-              60000 // 타임아웃: 60초
-            );
-
-            newOutputData = {
-              type: "DataPreview",
-              columns: result.columns,
-              totalRowCount: inputData.totalRowCount,
-              rows: result.rows,
-            };
-
-            addLog("SUCCESS", "Python으로 모델 예측 완료");
-
-            // 연결된 Evaluate Model의 파라미터 자동 설정
-            const evaluateModelConnections = connections.filter(
-              (c) =>
-                c.from.moduleId === module.id &&
-                currentModules.find((m) => m.id === c.to.moduleId)?.type ===
-                  ModuleType.EvaluateModel
-            );
-
-            for (const evalConn of evaluateModelConnections) {
-              const evalModule = currentModules.find(
-                (m) => m.id === evalConn.to.moduleId
+            // Pyodide를 사용하여 Python으로 예측 수행
+            try {
+              addLog(
+                "INFO",
+                "Pyodide를 사용하여 Python으로 모델 예측 수행 중..."
               );
-              if (evalModule) {
-                const evalParams = evalModule.parameters || {};
-                const updates: Record<string, any> = {};
 
-                const inputColumns = result.columns.map((c) => c.name);
+              const pyodideModule = await import("./utils/pyodideRunner");
+              const { scoreModelPython } = pyodideModule;
 
-                // label_column 자동 설정 (항상 업데이트)
-                if (inputColumns.includes(labelColumn)) {
-                  updates.label_column = labelColumn;
-                } else if (inputColumns.length > 0) {
-                  updates.label_column = inputColumns[0];
-                }
+              const result = await scoreModelPython(
+                inputData.rows || [],
+                trainedModel.featureColumns,
+                trainedModel.coefficients,
+                trainedModel.intercept,
+                labelColumn,
+                modelIsClassification ? "classification" : "regression",
+                60000 // 타임아웃: 60초
+              );
 
-                // prediction_column 자동 설정 (항상 업데이트)
-                if (modelIsClassification) {
-                  const probaColumn = `${labelColumn}_Predict_Proba_1`;
-                  if (inputColumns.includes(probaColumn)) {
-                    updates.prediction_column = probaColumn;
-                  } else if (inputColumns.includes("Predict")) {
-                    updates.prediction_column = "Predict";
+              newOutputData = {
+                type: "DataPreview",
+                columns: result.columns,
+                totalRowCount: inputData.totalRowCount,
+                rows: result.rows,
+              };
+
+              addLog("SUCCESS", "Python으로 모델 예측 완료");
+
+              // 연결된 Evaluate Model의 파라미터 자동 설정
+              const evaluateModelConnections = connections.filter(
+                (c) =>
+                  c.from.moduleId === module.id &&
+                  currentModules.find((m) => m.id === c.to.moduleId)?.type ===
+                    ModuleType.EvaluateModel
+              );
+
+              for (const evalConn of evaluateModelConnections) {
+                const evalModule = currentModules.find(
+                  (m) => m.id === evalConn.to.moduleId
+                );
+                if (evalModule) {
+                  const evalParams = evalModule.parameters || {};
+                  const updates: Record<string, any> = {};
+
+                  const inputColumns = result.columns.map((c) => c.name);
+
+                  // label_column 자동 설정 (항상 업데이트)
+                  if (inputColumns.includes(labelColumn)) {
+                    updates.label_column = labelColumn;
+                  } else if (inputColumns.length > 0) {
+                    updates.label_column = inputColumns[0];
                   }
-                } else {
-                  if (inputColumns.includes("Predict")) {
-                    updates.prediction_column = "Predict";
+
+                  // prediction_column 자동 설정 (항상 업데이트)
+                  if (modelIsClassification) {
+                    const probaColumn = `${labelColumn}_Predict_Proba_1`;
+                    if (inputColumns.includes(probaColumn)) {
+                      updates.prediction_column = probaColumn;
+                    } else if (inputColumns.includes("Predict")) {
+                      updates.prediction_column = "Predict";
+                    }
+                  } else {
+                    if (inputColumns.includes("Predict")) {
+                      updates.prediction_column = "Predict";
+                    }
                   }
-                }
 
-                // model_type 자동 설정 (항상 업데이트)
-                const detectedModelType = modelIsClassification
-                  ? "classification"
-                  : "regression";
-                updates.model_type = detectedModelType;
+                  // model_type 자동 설정 (항상 업데이트)
+                  const detectedModelType = modelIsClassification
+                    ? "classification"
+                    : "regression";
+                  updates.model_type = detectedModelType;
 
-                // threshold 기본값 설정 (분류 모델인 경우, 값이 없을 때만)
-                // threshold가 이미 설정되어 있으면 절대 변경하지 않음
-                if (
-                  modelIsClassification &&
-                  (evalParams.threshold === undefined ||
-                    evalParams.threshold === null)
-                ) {
-                  // threshold가 없을 때만 기본값 설정
-                  updates.threshold = 0.5;
-                }
-                // threshold가 이미 설정되어 있으면 updates에 추가하지 않음
+                  // threshold 기본값 설정 (분류 모델인 경우, 값이 없을 때만)
+                  // threshold가 이미 설정되어 있으면 절대 변경하지 않음
+                  if (
+                    modelIsClassification &&
+                    (evalParams.threshold === undefined ||
+                      evalParams.threshold === null)
+                  ) {
+                    // threshold가 없을 때만 기본값 설정
+                    updates.threshold = 0.5;
+                  }
+                  // threshold가 이미 설정되어 있으면 updates에 추가하지 않음
 
-                // 파라미터 업데이트 (threshold는 절대 덮어쓰지 않음)
-                if (Object.keys(updates).length > 0) {
-                  setModules(
-                    (prev) =>
-                      prev.map((m) => {
-                        if (m.id === evalModule.id) {
-                          // threshold를 제외한 파라미터만 업데이트
-                          const finalUpdates = { ...updates };
-                          const existingThreshold = m.parameters?.threshold;
+                  // 파라미터 업데이트 (threshold는 절대 덮어쓰지 않음)
+                  if (Object.keys(updates).length > 0) {
+                    setModules(
+                      (prev) =>
+                        prev.map((m) => {
+                          if (m.id === evalModule.id) {
+                            // threshold를 제외한 파라미터만 업데이트
+                            const finalUpdates = { ...updates };
+                            const existingThreshold = m.parameters?.threshold;
 
-                          // threshold가 이미 있으면 절대 덮어쓰지 않음
-                          if (
-                            existingThreshold !== undefined &&
-                            existingThreshold !== null
-                          ) {
-                            delete finalUpdates.threshold;
+                            // threshold가 이미 있으면 절대 덮어쓰지 않음
+                            if (
+                              existingThreshold !== undefined &&
+                              existingThreshold !== null
+                            ) {
+                              delete finalUpdates.threshold;
+                            }
+
+                            // threshold를 제외한 파라미터만 업데이트하고, threshold는 기존 값 유지
+                            return {
+                              ...m,
+                              parameters: {
+                                ...m.parameters,
+                                ...finalUpdates,
+                                // threshold는 기존 값 명시적으로 유지
+                                threshold:
+                                  existingThreshold !== undefined &&
+                                  existingThreshold !== null
+                                    ? existingThreshold
+                                    : finalUpdates.threshold !== undefined
+                                    ? finalUpdates.threshold
+                                    : m.parameters?.threshold,
+                              },
+                            };
                           }
+                          return m;
+                        }),
+                      true
+                    );
 
-                          // threshold를 제외한 파라미터만 업데이트하고, threshold는 기존 값 유지
-                          return {
-                            ...m,
-                            parameters: {
-                              ...m.parameters,
-                              ...finalUpdates,
-                              // threshold는 기존 값 명시적으로 유지
-                              threshold:
-                                existingThreshold !== undefined &&
-                                existingThreshold !== null
-                                  ? existingThreshold
-                                  : finalUpdates.threshold !== undefined
-                                  ? finalUpdates.threshold
-                                  : m.parameters?.threshold,
-                            },
-                          };
-                        }
-                        return m;
-                      }),
-                    true
-                  );
-
-                  // 파라미터 업데이트만 하고 자동 재실행은 하지 않음
-                  // 사용자가 수동으로 실행하거나, Score Model이 완료된 후에 실행되도록 함
-                  addLog(
-                    "INFO",
-                    `Evaluate Model [${evalModule.name}] 파라미터가 자동으로 설정되었습니다. 실행하려면 모듈을 클릭하세요.`
-                  );
+                    // 파라미터 업데이트만 하고 자동 재실행은 하지 않음
+                    // 사용자가 수동으로 실행하거나, Score Model이 완료된 후에 실행되도록 함
+                    addLog(
+                      "INFO",
+                      `Evaluate Model [${evalModule.name}] 파라미터가 자동으로 설정되었습니다. 실행하려면 모듈을 클릭하세요.`
+                    );
+                  }
                 }
               }
-            }
-          } catch (error: any) {
-            const errorMessage = error.message || String(error);
-            addLog("ERROR", `Python ScoreModel 실패: ${errorMessage}`);
-            throw new Error(`모델 예측 실패: ${errorMessage}`);
+            } catch (error: any) {
+              const errorMessage = error.message || String(error);
+              addLog("ERROR", `Python ScoreModel 실패: ${errorMessage}`);
+              throw new Error(`모델 예측 실패: ${errorMessage}`);
             }
           }
         } else if (module.type === ModuleType.EvaluateModel) {
@@ -5596,7 +5580,7 @@ ${header}
                   "P>|z|": coefData["P>|z|"],
                   "[0.025": coefData["[0.025"],
                   "0.975]": coefData["0.975]"],
-            };
+                };
               }
             );
 
@@ -5605,19 +5589,19 @@ ${header}
               ([key, value]) => {
                 if (typeof value === "number") {
                   metrics[key] = value.toFixed(6);
-          } else {
+                } else {
                   metrics[key] = value;
-          }
+                }
               }
             );
 
-          newOutputData = {
-            type: "StatsModelsResultOutput",
-            modelType: modelDefinition.modelType,
-            summary: { coefficients: summaryCoefficients, metrics },
-            featureColumns: ordered_feature_columns,
-            labelColumn: label_column,
-          };
+            newOutputData = {
+              type: "StatsModelsResultOutput",
+              modelType: modelDefinition.modelType,
+              summary: { coefficients: summaryCoefficients, metrics },
+              featureColumns: ordered_feature_columns,
+              labelColumn: label_column,
+            };
 
             addLog(
               "SUCCESS",
@@ -6624,6 +6608,49 @@ ${header}
               `${newModules.length} module(s) pasted from clipboard.`
             );
           }
+        } else if (e.key === "x") {
+          // Cut (copy and delete)
+          if (selectedModuleIds.length > 0) {
+            e.preventDefault();
+            pasteOffset.current = 0;
+            const selectedModules = modules.filter((m) =>
+              selectedModuleIds.includes(m.id)
+            );
+            const selectedIdsSet = new Set(selectedModuleIds);
+            const internalConnections = connections.filter(
+              (c) =>
+                selectedIdsSet.has(c.from.moduleId) &&
+                selectedIdsSet.has(c.to.moduleId)
+            );
+            setClipboard({
+              modules: JSON.parse(JSON.stringify(selectedModules)),
+              connections: JSON.parse(JSON.stringify(internalConnections)),
+            });
+            deleteModules([...selectedModuleIds]);
+            addLog("INFO", `${selectedModuleIds.length} module(s) cut.`);
+          }
+        } else if (e.key === "s") {
+          e.preventDefault();
+          handleSavePipeline();
+        } else if (e.key === "=" || e.key === "+") {
+          // Zoom in (step by step)
+          e.preventDefault();
+          const newScale = Math.min(2, scale + 0.1);
+          setScale(newScale);
+        } else if (e.key === "-" || e.key === "_") {
+          // Zoom out (step by step)
+          e.preventDefault();
+          const newScale = Math.max(0.2, scale - 0.1);
+          setScale(newScale);
+        } else if (e.key === "0") {
+          // Fit to view
+          e.preventDefault();
+          handleFitToView();
+        } else if (e.key === "1") {
+          // 100% view
+          e.preventDefault();
+          setScale(1);
+          setPan({ x: 0, y: 0 });
         }
       } else if (selectedModuleIds.length > 0) {
         if (e.key === "Delete" || e.key === "Backspace") {
@@ -6646,6 +6673,11 @@ ${header}
     clipboard,
     deleteModules,
     addLog,
+    scale,
+    setScale,
+    setPan,
+    handleFitToView,
+    handleSavePipeline,
   ]);
 
   useEffect(() => {
@@ -6959,17 +6991,17 @@ ${header}
                         Default Samples
                       </div>
                       {SAMPLE_MODELS.map((sample: any) => (
-                      <button
-                        key={sample.name}
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        <button
+                          key={sample.name}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             handleLoadSample(sample.name, "samples");
-                        }}
+                          }}
                           className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 last:rounded-b-md transition-colors cursor-pointer"
-                        type="button"
-                      >
-                        {sample.name}
-                      </button>
+                          type="button"
+                        >
+                          {sample.name}
+                        </button>
                       ))}
                     </>
                   ) : (
@@ -7330,72 +7362,72 @@ ${header}
             className="bg-gray-900/80 backdrop-blur-md rounded-full px-3 py-1.5 flex items-center gap-3 shadow-2xl z-[100] border border-gray-700 select-none transition-none active:scale-95"
           >
             <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                adjustScale(-0.1);
-              }}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  adjustScale(-0.1);
+                }}
                 className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
-              title="Zoom Out"
-            >
-              <MinusIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
+                title="Zoom Out"
+              >
+                <MinusIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   setScale(1);
                   setPan({ x: 0, y: 0 });
-              }}
+                }}
                 className="px-2 text-xs font-medium text-gray-300 hover:text-white min-w-[2.5rem] text-center"
                 title="Reset View"
-            >
+              >
                 {Math.round(scale * 100)}%
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   adjustScale(0.1);
-              }}
+                }}
                 className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
                 title="Zoom In"
-            >
+              >
                 <PlusIcon className="w-4 h-4" />
-            </button>
+              </button>
             </div>
 
             <div className="w-px h-3 bg-gray-700"></div>
 
             <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleFitToView();
-              }}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFitToView();
+                }}
                 className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
-              title="Fit to View"
-            >
-              <ArrowsPointingOutIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
+                title="Fit to View"
+              >
+                <ArrowsPointingOutIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   handleRearrangeModules();
-              }}
+                }}
                 className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
                 title="Auto Layout"
-            >
+              >
                 <SparklesIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   handleRotateModules();
-              }}
+                }}
                 className="p-1.5 hover:bg-gray-700/50 rounded-full text-gray-400 hover:text-white transition-colors"
                 title="Rotate Modules"
-            >
+              >
                 <ArrowPathIcon className="w-4 h-4" />
-            </button>
+              </button>
             </div>
           </div>
         </main>
@@ -7491,13 +7523,13 @@ ${header}
           viewingDataForModule.outputData?.type === "EncoderOutput" ||
           viewingDataForModule.outputData?.type === "NormalizerOutput") && (
           <ErrorBoundary>
-          <DataPreviewModal
-            module={viewingDataForModule}
-            projectName={projectName}
-            onClose={handleCloseModal}
-            modules={modules}
-            connections={connections}
-          />
+            <DataPreviewModal
+              module={viewingDataForModule}
+              projectName={projectName}
+              onClose={handleCloseModal}
+              modules={modules}
+              connections={connections}
+            />
           </ErrorBoundary>
         )}
       {viewingDataForModule &&

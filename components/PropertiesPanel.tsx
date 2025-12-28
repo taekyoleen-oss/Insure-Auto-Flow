@@ -41,6 +41,7 @@ import { SAMPLE_DATA } from "../sampleData";
 import { GoogleGenAI, Type } from "@google/genai";
 import { DEFAULT_MODULES } from "../constants";
 import { ExcelInputModal } from "./ExcelInputModal";
+import { DataAnalysisRAGModal } from "./DataAnalysisRAGModal";
 
 // Dynamic import for xlsx to handle module resolution issues
 let XLSX: any = null;
@@ -498,7 +499,8 @@ const renderParameters = (
   updateModuleParameters: (id: string, newParams: Record<string, any>) => void,
   onSampleLoad: (sample: { name: string; content: string }) => void,
   folderHandle: FileSystemDirectoryHandle | null,
-  onOpenExcelModal?: () => void
+  onOpenExcelModal?: () => void,
+  onOpenRAGModal?: () => void
 ) => {
   // Use the helper function
   const getConnectedDataSource = (moduleId: string, portNameToFind?: string) =>
@@ -641,6 +643,15 @@ const renderParameters = (
           >
             엑셀 데이터 직접 입력
           </button>
+          <div className="mt-4">
+            <button
+              onClick={() => onOpenRAGModal?.()}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-purple-600 hover:bg-purple-700 rounded-md font-semibold text-white transition-colors"
+            >
+              <SparklesIcon className="h-4 w-4" />
+              AI로 데이터 사전 분석하기
+            </button>
+          </div>
           <div className="mt-4">
             <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
               Examples
@@ -2446,6 +2457,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [localModuleName, setLocalModuleName] = useState("");
   const [isCopied, setIsCopied] = useState(false);
   const [showExcelModal, setShowExcelModal] = useState(false);
+  const [showRAGModal, setShowRAGModal] = useState(false);
 
   useEffect(() => {
     if (logContainerRef.current) {
@@ -3312,7 +3324,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       updateModuleParameters,
                       handleLoadSample,
                       folderHandle,
-                      () => setShowExcelModal(true)
+                      () => setShowExcelModal(true),
+                      () => setShowRAGModal(true)
                     )}
                   </PropertyGroup>
                   {canVisualize() && (
@@ -3480,6 +3493,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             });
             setShowExcelModal(false);
           }}
+        />
+      )}
+
+      {/* RAG Analysis Modal */}
+      {showRAGModal && module && module.type === ModuleType.LoadData && (
+        <DataAnalysisRAGModal
+          module={module}
+          onClose={() => setShowRAGModal(false)}
         />
       )}
     </div>
