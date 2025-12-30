@@ -189,6 +189,7 @@ const App: React.FC = () => {
   const [isMyWorkMenuOpen, setIsMyWorkMenuOpen] = useState(false);
   const myWorkMenuRef = useRef<HTMLDivElement>(null);
   const [myWorkModels, setMyWorkModels] = useState<any[]>([]);
+  const isSavingRef = useRef(false); // 저장 중 플래그
 
   const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(false);
   const [isRightPanelVisible, setIsRightPanelVisible] = useState(false);
@@ -1346,9 +1347,63 @@ ${header}
     if (initialModelStr && modules.length === 0) {
       try {
         const initialModel = JSON.parse(initialModelStr);
-        handleLoadSample(initialModel.name);
+        
+        // initialModel 객체를 직접 사용하여 모델 로드
+        if (initialModel.modules && initialModel.connections) {
+          // Convert initial model format to app format
+          const newModules: CanvasModule[] = initialModel.modules.map(
+            (m: any, index: number) => {
+              const moduleId = `module-${Date.now()}-${index}`;
+              const defaultModule = DEFAULT_MODULES.find(
+                (dm) => dm.type === m.type
+              );
+              if (!defaultModule) {
+                console.error(`Module type "${m.type}" not found in DEFAULT_MODULES.`);
+                throw new Error(`Module type "${m.type}" not found`);
+              }
+              const moduleInfo = TOOLBOX_MODULES.find((tm) => tm.type === m.type);
+              const defaultName = moduleInfo ? moduleInfo.name : m.type;
+              return {
+                ...defaultModule,
+                id: moduleId,
+                name: m.name || defaultName,
+                position: m.position,
+                parameters: m.parameters || defaultModule.parameters,
+                status: ModuleStatus.Pending,
+              };
+            }
+          );
+
+          const newConnections: Connection[] = initialModel.connections.map(
+            (conn: any, index: number) => {
+              const fromModule = newModules[conn.fromModuleIndex];
+              const toModule = newModules[conn.toModuleIndex];
+              if (!fromModule || !toModule) {
+                console.error(`Invalid connection at index ${index}.`);
+                throw new Error(`Invalid connection at index ${index}`);
+              }
+              return {
+                id: `connection-${Date.now()}-${index}`,
+                from: { moduleId: fromModule.id, portName: conn.fromPort },
+                to: { moduleId: toModule.id, portName: conn.toPort },
+              };
+            }
+          );
+
+          resetModules(newModules);
+          _setConnections(newConnections);
+          setSelectedModuleIds([]);
+          setIsDirty(false);
+          setProjectName(initialModel.name || "Data Analysis");
+          addLog("SUCCESS", `Initial model "${initialModel.name || 'My Model'}" loaded successfully.`);
+          setTimeout(() => handleFitToView(), 100);
+        } else {
+          // 기존 방식 (name으로 찾기) - 하위 호환성
+          handleLoadSample(initialModel.name);
+        }
       } catch (error) {
         console.error("Failed to load initial model:", error);
+        addLog("ERROR", `Failed to load initial model: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3415,6 +3470,10 @@ ${header}
               const minSamplesLeaf =
                 parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
                 1;
+              const classWeight = 
+                modelPurpose === "classification" 
+                  ? (modelSourceModule.parameters.class_weight || null)
+                  : null;
 
               if (X.length < ordered_feature_columns.length) {
                 throw new Error(
@@ -3439,15 +3498,24 @@ ${header}
                   maxDepth,
                   minSamplesSplit,
                   minSamplesLeaf,
+                  classWeight,
                   ordered_feature_columns,
                   60000 // 타임아웃: 60초
                 );
 
-                // Decision Tree는 coefficients와 intercept가 없으므로 메트릭만 사용
+                // Decision Tree는 coefficients와 intercept가 없으므로 Feature Importance 사용
                 intercept = 0;
-                ordered_feature_columns.forEach((col) => {
-                  coefficients[col] = 0;
-                });
+                if (fitResult.featureImportances && Object.keys(fitResult.featureImportances).length > 0) {
+                  // Feature Importance를 coefficients로 사용
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  // Feature Importance가 없는 경우 0으로 설정
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
 
                 // Python에서 계산된 메트릭 사용
                 metrics["R-squared"] = parseFloat(
@@ -3464,6 +3532,48 @@ ${header}
                 );
 
                 addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
+                
+                // Decision Tree plot_tree 생성을 위한 훈련 데이터와 모델 파라미터 저장
+                const trainingDataForPlot = rows.map((row) => {
+                  const dataRow: any = {};
+                  ordered_feature_columns.forEach((col) => {
+                    dataRow[col] = row[col];
+                  });
+                  dataRow[label_column] = row[label_column];
+                  return dataRow;
+                });
+                
+                // trainedModelOutput에 훈련 데이터와 모델 파라미터 추가
+                if (!trainedModelOutput) {
+                  trainedModelOutput = {
+                    type: "TrainedModelOutput",
+                    modelType: modelSourceModule.type,
+                    modelPurpose: modelPurpose,
+                    coefficients,
+                    intercept,
+                    metrics,
+                    featureColumns: ordered_feature_columns,
+                    labelColumn: label_column,
+                    tuningSummary: undefined,
+                    trainingData: trainingDataForPlot,
+                    modelParameters: {
+                      criterion,
+                      maxDepth,
+                      minSamplesSplit,
+                      minSamplesLeaf,
+                      classWeight,
+                    },
+                  };
+                } else {
+                  trainedModelOutput.trainingData = trainingDataForPlot;
+                  trainedModelOutput.modelParameters = {
+                    criterion,
+                    maxDepth,
+                    minSamplesSplit,
+                    minSamplesLeaf,
+                    classWeight,
+                  };
+                }
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -3845,6 +3955,10 @@ ${header}
               const minSamplesLeaf =
                 parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
                 1;
+              const classWeight = 
+                modelPurpose === "classification" 
+                  ? (modelSourceModule.parameters.class_weight || null)
+                  : null;
 
               if (X.length < ordered_feature_columns.length) {
                 throw new Error(
@@ -3869,15 +3983,24 @@ ${header}
                   maxDepth,
                   minSamplesSplit,
                   minSamplesLeaf,
+                  classWeight,
                   ordered_feature_columns,
                   60000 // 타임아웃: 60초
                 );
 
-                // Decision Tree는 coefficients와 intercept가 없으므로 메트릭만 사용
+                // Decision Tree는 coefficients와 intercept가 없으므로 Feature Importance 사용
                 intercept = 0;
-                ordered_feature_columns.forEach((col) => {
-                  coefficients[col] = 0;
-                });
+                if (fitResult.featureImportances && Object.keys(fitResult.featureImportances).length > 0) {
+                  // Feature Importance를 coefficients로 사용
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  // Feature Importance가 없는 경우 0으로 설정
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
 
                 // Python에서 계산된 메트릭 사용
                 if (modelPurpose === "classification") {
@@ -3916,6 +4039,48 @@ ${header}
                 }
 
                 addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
+                
+                // Decision Tree plot_tree 생성을 위한 훈련 데이터와 모델 파라미터 저장
+                const trainingDataForPlot = rows.map((row) => {
+                  const dataRow: any = {};
+                  ordered_feature_columns.forEach((col) => {
+                    dataRow[col] = row[col];
+                  });
+                  dataRow[label_column] = row[label_column];
+                  return dataRow;
+                });
+                
+                // trainedModelOutput에 훈련 데이터와 모델 파라미터 추가
+                if (!trainedModelOutput) {
+                  trainedModelOutput = {
+                    type: "TrainedModelOutput",
+                    modelType: modelSourceModule.type,
+                    modelPurpose: modelPurpose,
+                    coefficients,
+                    intercept,
+                    metrics,
+                    featureColumns: ordered_feature_columns,
+                    labelColumn: label_column,
+                    tuningSummary: undefined,
+                    trainingData: trainingDataForPlot,
+                    modelParameters: {
+                      criterion,
+                      maxDepth,
+                      minSamplesSplit,
+                      minSamplesLeaf,
+                      classWeight,
+                    },
+                  };
+                } else {
+                  trainedModelOutput.trainingData = trainingDataForPlot;
+                  trainedModelOutput.modelParameters = {
+                    criterion,
+                    maxDepth,
+                    minSamplesSplit,
+                    minSamplesLeaf,
+                    classWeight,
+                  };
+                }
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -4174,6 +4339,10 @@ ${header}
               const minSamplesLeaf =
                 parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
                 1;
+              const classWeight = 
+                modelPurpose === "classification" 
+                  ? (modelSourceModule.parameters.class_weight || null)
+                  : null;
 
               if (X.length < ordered_feature_columns.length) {
                 throw new Error(
@@ -4198,15 +4367,24 @@ ${header}
                   maxDepth,
                   minSamplesSplit,
                   minSamplesLeaf,
+                  classWeight,
                   ordered_feature_columns,
                   60000 // 타임아웃: 60초
                 );
 
-                // Decision Tree는 coefficients와 intercept가 없으므로 메트릭만 사용
+                // Decision Tree는 coefficients와 intercept가 없으므로 Feature Importance 사용
                 intercept = 0;
-                ordered_feature_columns.forEach((col) => {
-                  coefficients[col] = 0;
-                });
+                if (fitResult.featureImportances && Object.keys(fitResult.featureImportances).length > 0) {
+                  // Feature Importance를 coefficients로 사용
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  // Feature Importance가 없는 경우 0으로 설정
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
 
                 // Python에서 계산된 메트릭 사용
                 if (modelPurpose === "classification") {
@@ -4245,6 +4423,48 @@ ${header}
                 }
 
                 addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
+                
+                // Decision Tree plot_tree 생성을 위한 훈련 데이터와 모델 파라미터 저장
+                const trainingDataForPlot = rows.map((row) => {
+                  const dataRow: any = {};
+                  ordered_feature_columns.forEach((col) => {
+                    dataRow[col] = row[col];
+                  });
+                  dataRow[label_column] = row[label_column];
+                  return dataRow;
+                });
+                
+                // trainedModelOutput에 훈련 데이터와 모델 파라미터 추가
+                if (!trainedModelOutput) {
+                  trainedModelOutput = {
+                    type: "TrainedModelOutput",
+                    modelType: modelSourceModule.type,
+                    modelPurpose: modelPurpose,
+                    coefficients,
+                    intercept,
+                    metrics,
+                    featureColumns: ordered_feature_columns,
+                    labelColumn: label_column,
+                    tuningSummary: undefined,
+                    trainingData: trainingDataForPlot,
+                    modelParameters: {
+                      criterion,
+                      maxDepth,
+                      minSamplesSplit,
+                      minSamplesLeaf,
+                      classWeight,
+                    },
+                  };
+                } else {
+                  trainedModelOutput.trainingData = trainingDataForPlot;
+                  trainedModelOutput.modelParameters = {
+                    criterion,
+                    maxDepth,
+                    minSamplesSplit,
+                    minSamplesLeaf,
+                    classWeight,
+                  };
+                }
               } catch (error: any) {
                 const errorMessage = error.message || String(error);
                 addLog(
@@ -7100,6 +7320,13 @@ ${header}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault();
+                      
+                      // 이미 저장 중이면 중복 실행 방지
+                      if (isSavingRef.current) {
+                        return;
+                      }
+                      
                       if (modules.length === 0) {
                         addLog(
                           "WARN",
@@ -7109,11 +7336,15 @@ ${header}
                         return;
                       }
 
+                      // 저장 시작 플래그 설정
+                      isSavingRef.current = true;
+
                       const modelName = prompt(
                         "모델 이름을 입력하세요:",
                         projectName || "My Model"
                       );
                       if (!modelName || !modelName.trim()) {
+                        isSavingRef.current = false;
                         setIsMyWorkMenuOpen(false);
                         return;
                       }
@@ -7148,6 +7379,7 @@ ${header}
                           `모델 "${trimmedName}"이 이미 존재합니다. 덮어쓰시겠습니까?`
                         );
                         if (!shouldOverwrite) {
+                          isSavingRef.current = false;
                           setIsMyWorkMenuOpen(false);
                           return;
                         }
@@ -7198,6 +7430,11 @@ ${header}
                         `모델 "${trimmedName}"이 저장되었습니다. (개인용)`
                       );
                       setIsMyWorkMenuOpen(false);
+                      
+                      // 저장 완료 후 플래그 해제 (약간의 지연을 두어 중복 클릭 방지)
+                      setTimeout(() => {
+                        isSavingRef.current = false;
+                      }, 500);
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer flex items-center gap-2 border-b border-gray-700"
                     type="button"

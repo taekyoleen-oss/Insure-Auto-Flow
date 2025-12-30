@@ -1166,14 +1166,21 @@ try:
     
     if p_model_purpose == 'classification':
         accuracy = accuracy_score(y_train, y_pred)
-        precision = precision_score(y_train, y_pred, average='weighted', zero_division=0)
-        recall = recall_score(y_train, y_pred, average='weighted', zero_division=0)
-        f1 = f1_score(y_train, y_pred, average='binary', zero_division=0)
+        
+        # 이진 분류인지 확인
+        unique_labels = np.unique(y_train)
+        is_binary = len(unique_labels) == 2
+        
+        # average 파라미터 결정: 이진 분류면 'binary', 다중 분류면 'weighted'
+        avg_param = 'binary' if is_binary else 'weighted'
+        
+        precision = precision_score(y_train, y_pred, average=avg_param, zero_division=0)
+        recall = recall_score(y_train, y_pred, average=avg_param, zero_division=0)
+        f1 = f1_score(y_train, y_pred, average=avg_param, zero_division=0)
         
         # ROC AUC (이진 분류인 경우만)
         roc_auc = None
-        unique_labels = np.unique(y_train)
-        if len(unique_labels) == 2:
+        if is_binary:
             try:
                 y_pred_proba = trained_model.predict_proba(X_train)[:, 1]
                 roc_auc = roc_auc_score(y_train, y_pred_proba)
@@ -1294,10 +1301,12 @@ export async function fitDecisionTreePython(
   maxDepth: number | null = null,
   minSamplesSplit: number = 2,
   minSamplesLeaf: number = 1,
+  classWeight: string | null = null,
   featureColumns?: string[],
   timeoutMs: number = 60000
 ): Promise<{
   metrics: Record<string, number>;
+  featureImportances?: Record<string, number>;
 }> {
   try {
     // Pyodide 로드 (타임아웃: 30초)
@@ -1374,6 +1383,7 @@ try:
     p_max_depth = ${maxDepth !== null ? maxDepth : "None"}
     p_min_samples_split = ${minSamplesSplit}
     p_min_samples_leaf = ${minSamplesLeaf}
+    p_class_weight = ${classWeight !== null ? `'${classWeight}'` : "None"}
     
     if p_model_purpose == 'classification':
         model = DecisionTreeClassifier(
@@ -1381,6 +1391,7 @@ try:
             max_depth=p_max_depth,
             min_samples_split=p_min_samples_split,
             min_samples_leaf=p_min_samples_leaf,
+            class_weight=p_class_weight,
             random_state=42
         )
     else:
@@ -1402,9 +1413,17 @@ try:
     # 메트릭 계산
     if p_model_purpose == 'classification':
         accuracy = float(accuracy_score(y_train, y_pred))
-        precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
-        recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
-        f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+        
+        # 이진 분류인지 확인
+        unique_labels = np.unique(y_train)
+        is_binary = len(unique_labels) == 2
+        
+        # average 파라미터 결정: 이진 분류면 'binary', 다중 분류면 'weighted'
+        avg_param = 'binary' if is_binary else 'weighted'
+        
+        precision = float(precision_score(y_train, y_pred, average=avg_param, zero_division=0))
+        recall = float(recall_score(y_train, y_pred, average=avg_param, zero_division=0))
+        f1 = float(f1_score(y_train, y_pred, average=avg_param, zero_division=0))
         
         metrics_dict = {
             'Accuracy': accuracy,
@@ -1413,14 +1432,14 @@ try:
             'F1-Score': f1
         }
         
-        # ROC-AUC 계산 (이진 분류인 경우)
-        try:
-            if len(np.unique(y_train)) == 2:
+        # ROC-AUC 계산 (이진 분류인 경우만)
+        if is_binary:
+            try:
                 y_pred_proba = model.predict_proba(X_train)[:, 1]
                 roc_auc = float(roc_auc_score(y_train, y_pred_proba))
                 metrics_dict['ROC-AUC'] = roc_auc
-        except Exception:
-            pass
+            except Exception:
+                pass
     else:
         mse = float(mean_squared_error(y_train, y_pred))
         rmse = float(np.sqrt(mse))
@@ -1434,9 +1453,17 @@ try:
             'Mean Absolute Error': mae
         }
     
+    # Feature Importance 추출 (Decision Tree의 경우)
+    feature_importances = {}
+    if hasattr(model, 'feature_importances_'):
+        importances = model.feature_importances_
+        for i, feature in enumerate(p_feature_columns):
+            feature_importances[feature] = float(importances[i])
+    
     result = {
         'metrics': metrics_dict,
-        'feature_columns': p_feature_columns
+        'feature_columns': p_feature_columns,
+        'feature_importances': feature_importances
     }
     
     # 전역 변수에 저장
@@ -1497,6 +1524,7 @@ except Exception as e:
 
     return {
       metrics: result.metrics,
+      featureImportances: result.feature_importances || {},
     };
   } catch (error: any) {
     // 정리
@@ -1620,9 +1648,17 @@ try:
     
     if p_model_purpose == 'classification':
         accuracy = float(accuracy_score(y_train, y_pred))
-        precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
-        recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
-        f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+        
+        # 이진 분류인지 확인
+        unique_labels = np.unique(y_train)
+        is_binary = len(unique_labels) == 2
+        
+        # average 파라미터 결정: 이진 분류면 'binary', 다중 분류면 'weighted'
+        avg_param = 'binary' if is_binary else 'weighted'
+        
+        precision = float(precision_score(y_train, y_pred, average=avg_param, zero_division=0))
+        recall = float(recall_score(y_train, y_pred, average=avg_param, zero_division=0))
+        f1 = float(f1_score(y_train, y_pred, average=avg_param, zero_division=0))
         
         metrics_dict = {
             'Accuracy': accuracy,
@@ -1632,7 +1668,7 @@ try:
         }
         
         try:
-            if len(np.unique(y_train)) == 2:
+            if is_binary:
                 y_pred_proba = model.predict_proba(X_train)[:, 1]
                 roc_auc = float(roc_auc_score(y_train, y_pred_proba))
                 metrics_dict['ROC-AUC'] = roc_auc
@@ -1814,9 +1850,17 @@ try:
     y_pred = model.predict(X_train)
     
     accuracy = float(accuracy_score(y_train, y_pred))
-    precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
-    recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
-    f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+    
+    # 이진 분류인지 확인
+    unique_labels = np.unique(y_train)
+    is_binary = len(unique_labels) == 2
+    
+    # average 파라미터 결정: 이진 분류면 'binary', 다중 분류면 'weighted'
+    avg_param = 'binary' if is_binary else 'weighted'
+    
+    precision = float(precision_score(y_train, y_pred, average=avg_param, zero_division=0))
+    recall = float(recall_score(y_train, y_pred, average=avg_param, zero_division=0))
+    f1 = float(f1_score(y_train, y_pred, average=avg_param, zero_division=0))
     
     metrics_dict = {
         'Accuracy': accuracy,
@@ -1826,7 +1870,7 @@ try:
     }
     
     try:
-        if len(np.unique(y_train)) == 2:
+        if is_binary:
             y_pred_proba = model.predict_proba(X_train)[:, 1]
             roc_auc = float(roc_auc_score(y_train, y_pred_proba))
             metrics_dict['ROC-AUC'] = roc_auc
@@ -1996,9 +2040,17 @@ try:
     y_pred = model.predict(X_train)
     
     accuracy = float(accuracy_score(y_train, y_pred))
-    precision = float(precision_score(y_train, y_pred, average='binary', zero_division=0))
-    recall = float(recall_score(y_train, y_pred, average='binary', zero_division=0))
-    f1 = float(f1_score(y_train, y_pred, average='binary', zero_division=0))
+    
+    # 이진 분류인지 확인
+    unique_labels = np.unique(y_train)
+    is_binary = len(unique_labels) == 2
+    
+    # average 파라미터 결정: 이진 분류면 'binary', 다중 분류면 'weighted'
+    avg_param = 'binary' if is_binary else 'weighted'
+    
+    precision = float(precision_score(y_train, y_pred, average=avg_param, zero_division=0))
+    recall = float(recall_score(y_train, y_pred, average=avg_param, zero_division=0))
+    f1 = float(f1_score(y_train, y_pred, average=avg_param, zero_division=0))
     
     metrics_dict = {
         'Accuracy': accuracy,
@@ -2008,7 +2060,7 @@ try:
     }
     
     try:
-        if len(np.unique(y_train)) == 2:
+        if is_binary:
             y_pred_proba = model.predict_proba(X_train)[:, 1]
             roc_auc = float(roc_auc_score(y_train, y_pred_proba))
             metrics_dict['ROC-AUC'] = roc_auc
@@ -3464,6 +3516,223 @@ except Exception as e:
 }
 
 /**
+ * Decision Tree 모델을 사용하여 예측을 수행합니다
+ * 타임아웃: 60초
+ */
+export async function scoreDecisionTreePython(
+  data: any[],
+  featureColumns: string[],
+  labelColumn: string,
+  modelPurpose: "classification" | "regression",
+  criterion: string,
+  maxDepth: number | null,
+  minSamplesSplit: number,
+  minSamplesLeaf: number,
+  trainingData: any[],
+  trainingFeatureColumns: string[],
+  trainingLabelColumn: string,
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    // Pyodide 로드 (타임아웃: 30초)
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // 데이터를 Python에 전달
+    py.globals.set("js_data", data);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_model_purpose", modelPurpose);
+    py.globals.set("js_criterion", criterion);
+    py.globals.set("js_max_depth", maxDepth);
+    py.globals.set("js_min_samples_split", minSamplesSplit);
+    py.globals.set("js_min_samples_leaf", minSamplesLeaf);
+    py.globals.set("js_training_data", trainingData);
+    py.globals.set("js_training_feature_columns", trainingFeatureColumns);
+    py.globals.set("js_training_label_column", trainingLabelColumn);
+
+    // Python 코드 실행
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+
+try:
+    # 데이터 준비
+    df = pd.DataFrame(js_data.to_py())
+    feature_columns = js_feature_columns.to_py()
+    label_column = str(js_label_column)
+    model_purpose = str(js_model_purpose)
+    
+    # 훈련 데이터 준비
+    training_df = pd.DataFrame(js_training_data.to_py())
+    training_feature_columns = js_training_feature_columns.to_py()
+    training_label_column = str(js_training_label_column)
+    
+    # 모델 파라미터
+    criterion = str(js_criterion)
+    max_depth = js_max_depth if js_max_depth is not None else None
+    min_samples_split = int(js_min_samples_split)
+    min_samples_leaf = int(js_min_samples_leaf)
+    
+    # 훈련 데이터에서 특성과 레이블 추출
+    X_train = training_df[training_feature_columns]
+    y_train = training_df[training_label_column]
+    
+    # 모델 생성 및 훈련
+    if model_purpose == 'classification':
+        model = DecisionTreeClassifier(
+            criterion=criterion.lower(),
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            random_state=42
+        )
+    else:
+        criterion_reg = 'squared_error' if criterion == 'mse' else 'absolute_error'
+        model = DecisionTreeRegressor(
+            criterion=criterion_reg,
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            random_state=42
+        )
+    
+    # 모델 훈련
+    model.fit(X_train, y_train)
+    
+    # 예측 수행
+    X = df[feature_columns]
+    predictions = model.predict(X)
+    
+    # 결과 데이터프레임 생성
+    result_df = df.copy()
+    result_df['Predict'] = predictions
+    
+    # 분류 모델인 경우 확률도 계산
+    if model_purpose == 'classification':
+        try:
+            probabilities = model.predict_proba(X)
+            if probabilities.shape[1] == 2:
+                # 이진 분류
+                result_df[f"{label_column}_Predict_Proba_0"] = probabilities[:, 0]
+                result_df[f"{label_column}_Predict_Proba_1"] = probabilities[:, 1]
+            else:
+                # 다중 클래스
+                for i in range(probabilities.shape[1]):
+                    result_df[f"{label_column}_Predict_Proba_{i}"] = probabilities[:, i]
+        except Exception:
+            pass
+    
+    # 결과를 딕셔너리 리스트로 변환
+    result_rows = result_df.to_dict('records')
+    result_columns = [{'name': col, 'type': 'number' if pd.api.types.is_numeric_dtype(result_df[col]) else 'string'} for col in result_df.columns]
+    
+    result = {
+        'rows': result_rows,
+        'columns': result_columns
+    }
+    
+    # 전역 변수에 저장
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    # 전역 변수에 저장
+    js_result = error_result
+`;
+
+    // Python 코드 실행
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Decision Tree ScoreModel 실행 타임아웃 (60초 초과)"
+    );
+
+    // 전역 변수에서 결과 가져오기
+    const resultPyObj = py.globals.get("js_result");
+
+    // 결과 객체 검증
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Decision Tree ScoreModel error: Python code returned None or undefined.`
+      );
+    }
+
+    // Python 딕셔너리를 JavaScript 객체로 변환
+    const result = fromPython(resultPyObj);
+
+    // 에러가 발생한 경우 처리
+    if (result && result.__error__) {
+      throw new Error(
+        `Python Decision Tree ScoreModel error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    // 필수 속성 검증
+    if (!result || !result.rows || !result.columns) {
+      throw new Error(
+        `Python Decision Tree ScoreModel error: Missing or invalid 'rows' or 'columns' in result.`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_model_purpose");
+    py.globals.delete("js_criterion");
+    py.globals.delete("js_max_depth");
+    py.globals.delete("js_min_samples_split");
+    py.globals.delete("js_min_samples_leaf");
+    py.globals.delete("js_training_data");
+    py.globals.delete("js_training_feature_columns");
+    py.globals.delete("js_training_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      rows: result.rows,
+      columns: result.columns,
+    };
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_model_purpose");
+        py.globals.delete("js_criterion");
+        py.globals.delete("js_max_depth");
+        py.globals.delete("js_min_samples_split");
+        py.globals.delete("js_min_samples_leaf");
+        py.globals.delete("js_training_data");
+        py.globals.delete("js_training_feature_columns");
+        py.globals.delete("js_training_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Decision Tree ScoreModel error: ${errorMessage}`);
+  }
+}
+
+/**
  * EvaluateModel을 Python으로 실행합니다 (평가 메트릭 계산)
  * 타임아웃: 60초
  */
@@ -3528,17 +3797,33 @@ metrics = {}
 threshold_metrics_list = []
 
 if model_type == 'classification':
-    # 분류 모델: prediction_column이 확률값인 경우 threshold로 이진 분류 수행
-    y_pred_proba = df[prediction_column].values
+    # 분류 모델: prediction_column이 확률값인지 예측값인지 확인
+    y_pred_raw = df[prediction_column].values
     
-    # 확률값을 threshold 기반으로 이진 분류로 변환
-    y_pred = (y_pred_proba >= threshold).astype(int)
+    # 예측값이 확률 범위(0~1)에 있는지 확인
+    is_probability = np.all((y_pred_raw >= 0) & (y_pred_raw <= 1)) and np.any((y_pred_raw > 0) & (y_pred_raw < 1))
+    
+    if is_probability:
+        # 확률값인 경우 threshold로 이진 분류로 변환
+        y_pred = (y_pred_raw >= threshold).astype(int)
+        y_pred_proba = y_pred_raw
+    else:
+        # 이미 예측값인 경우 그대로 사용
+        y_pred = y_pred_raw.astype(int)
+        y_pred_proba = None
+    
+    # 이진 분류인지 다중 분류인지 확인
+    unique_labels = np.unique(y_true)
+    is_binary = len(unique_labels) == 2
+    
+    # average 파라미터 결정: 이진 분류면 'binary', 다중 분류면 'weighted'
+    avg_param = 'binary' if is_binary else 'weighted'
     
     # 분류 메트릭 계산
     accuracy = float(accuracy_score(y_true, y_pred))
-    precision = float(precision_score(y_true, y_pred, average='weighted', zero_division=0))
-    recall = float(recall_score(y_true, y_pred, average='weighted', zero_division=0))
-    f1 = float(f1_score(y_true, y_pred, average='binary', zero_division=0))
+    precision = float(precision_score(y_true, y_pred, average=avg_param, zero_division=0))
+    recall = float(recall_score(y_true, y_pred, average=avg_param, zero_division=0))
+    f1 = float(f1_score(y_true, y_pred, average=avg_param, zero_division=0))
     
     # 혼동 행렬
     cm = confusion_matrix(y_true, y_pred)
@@ -3562,15 +3847,15 @@ if model_type == 'classification':
     metrics['FN'] = fn
     
     # 여러 threshold에 대한 모든 통계량 계산 (0부터 1까지 0.01 단위)
-    if calculate_threshold_metrics:
+    if calculate_threshold_metrics and y_pred_proba is not None:
         threshold_list = np.arange(0, 1.01, 0.01)
         for th in threshold_list:
             y_pred_th = (y_pred_proba >= th).astype(int)
             try:
                 acc = float(accuracy_score(y_true, y_pred_th))
-                prec = float(precision_score(y_true, y_pred_th, average='weighted', zero_division=0))
-                rec = float(recall_score(y_true, y_pred_th, average='weighted', zero_division=0))
-                f1 = float(f1_score(y_true, y_pred_th, average='binary', zero_division=0))
+                prec = float(precision_score(y_true, y_pred_th, average=avg_param, zero_division=0))
+                rec = float(recall_score(y_true, y_pred_th, average=avg_param, zero_division=0))
+                f1 = float(f1_score(y_true, y_pred_th, average=avg_param, zero_division=0))
                 
                 # 혼동 행렬
                 cm_th = confusion_matrix(y_true, y_pred_th)
@@ -5185,5 +5470,220 @@ except Exception as e:
 
     const errorMessage = error.message || String(error);
     throw new Error(`Python Diversion Checker error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * Decision Tree 모델의 plot_tree를 생성하여 base64 이미지로 반환합니다
+ * 타임아웃: 60초
+ */
+export async function generateDecisionTreePlot(
+  trainingData: any[],
+  featureColumns: string[],
+  labelColumn: string,
+  modelPurpose: "classification" | "regression",
+  criterion: string,
+  maxDepth: number | null,
+  minSamplesSplit: number,
+  minSamplesLeaf: number,
+  classWeight: string | null,
+  timeoutMs: number = 60000
+): Promise<string> {
+  try {
+    // Pyodide 로드 (타임아웃: 30초)
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // matplotlib 패키지 설치
+    await withTimeout(
+      py.loadPackage(["matplotlib"]),
+      60000,
+      "matplotlib 패키지 설치 타임아웃 (60초 초과)"
+    );
+
+    // 데이터를 Python에 전달
+    py.globals.set("js_training_data", trainingData);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_model_purpose", modelPurpose);
+    py.globals.set("js_criterion", criterion);
+    py.globals.set("js_max_depth", maxDepth);
+    py.globals.set("js_min_samples_split", minSamplesSplit);
+    py.globals.set("js_min_samples_leaf", minSamplesLeaf);
+    py.globals.set("js_class_weight", classWeight);
+
+    // Python 코드 실행
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+import base64
+import io
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
+import matplotlib
+matplotlib.use('Agg')  # GUI 백엔드 사용 안 함
+import matplotlib.pyplot as plt
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_training_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    p_model_purpose = str(js_model_purpose)
+    
+    # 데이터 검증
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    # 모델 파라미터
+    p_criterion = str(js_criterion)
+    p_max_depth = js_max_depth if js_max_depth is not None else None
+    p_min_samples_split = int(js_min_samples_split)
+    p_min_samples_leaf = int(js_min_samples_leaf)
+    p_class_weight = str(js_class_weight) if js_class_weight is not None else None
+    
+    # 모델 생성 및 훈련
+    if p_model_purpose == 'classification':
+        model = DecisionTreeClassifier(
+            criterion=p_criterion.lower(),
+            max_depth=p_max_depth,
+            min_samples_split=p_min_samples_split,
+            min_samples_leaf=p_min_samples_leaf,
+            class_weight=p_class_weight,
+            random_state=42
+        )
+        # class_names 생성 (이진 분류인 경우)
+        unique_labels = np.unique(y_train)
+        if len(unique_labels) == 2:
+            class_names = [str(int(unique_labels[0])), str(int(unique_labels[1]))]
+        else:
+            class_names = [str(int(label)) for label in unique_labels]
+    else:
+        criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
+        model = DecisionTreeRegressor(
+            criterion=criterion_reg,
+            max_depth=p_max_depth,
+            min_samples_split=p_min_samples_split,
+            min_samples_leaf=p_min_samples_leaf,
+            random_state=42
+        )
+        class_names = None
+    
+    # 모델 훈련
+    model.fit(X_train, y_train)
+    
+    # plot_tree 생성
+    plt.figure(figsize=(10, 8))
+    if p_model_purpose == 'classification' and class_names:
+        plot_tree(model, feature_names=list(X_train.columns), class_names=class_names, filled=True, fontsize=10)
+    else:
+        plot_tree(model, feature_names=list(X_train.columns), filled=True, fontsize=10)
+    
+    # 이미지를 base64로 변환
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    buf.seek(0)
+    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    plt.close()
+    
+    result = {
+        'image_base64': image_base64
+    }
+    
+    # 전역 변수에 저장
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    # 전역 변수에 저장
+    js_result = error_result
+`;
+
+    // Python 코드 실행
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Decision Tree Plot 생성 타임아웃 (60초 초과)"
+    );
+
+    // 전역 변수에서 결과 가져오기
+    const resultPyObj = py.globals.get("js_result");
+
+    // 결과 객체 검증
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Decision Tree Plot error: Python code returned None or undefined.`
+      );
+    }
+
+    // Python 딕셔너리를 JavaScript 객체로 변환
+    const result = fromPython(resultPyObj);
+
+    // 에러가 발생한 경우 처리
+    if (result && result.__error__) {
+      throw new Error(
+        `Python Decision Tree Plot error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    // 필수 속성 검증
+    if (!result || !result.image_base64) {
+      throw new Error(
+        `Python Decision Tree Plot error: Missing or invalid 'image_base64' in result.`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_training_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_model_purpose");
+    py.globals.delete("js_criterion");
+    py.globals.delete("js_max_depth");
+    py.globals.delete("js_min_samples_split");
+    py.globals.delete("js_min_samples_leaf");
+    py.globals.delete("js_class_weight");
+    py.globals.delete("js_result");
+
+    return result.image_base64;
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_training_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_model_purpose");
+        py.globals.delete("js_criterion");
+        py.globals.delete("js_max_depth");
+        py.globals.delete("js_min_samples_split");
+        py.globals.delete("js_min_samples_leaf");
+        py.globals.delete("js_class_weight");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Decision Tree Plot error: ${errorMessage}`);
   }
 }

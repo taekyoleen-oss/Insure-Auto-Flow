@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CanvasModule, TrainedModelOutput, ModuleType } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
@@ -302,11 +302,47 @@ const complexModels = [
 export const TrainedModelPreviewModal: React.FC<TrainedModelPreviewModalProps> = ({ module, projectName, onClose }) => {
     const [isInterpreting, setIsInterpreting] = useState(false);
     const [aiInterpretation, setAiInterpretation] = useState<string | null>(null);
+    const [plotTreeImage, setPlotTreeImage] = useState<string | null>(null);
+    const [isLoadingPlot, setIsLoadingPlot] = useState(false);
 
     const output = module.outputData as TrainedModelOutput;
     if (!output || output.type !== 'TrainedModelOutput') return null;
 
-    const { modelType, coefficients, intercept, metrics, featureColumns, labelColumn, tuningSummary } = output;
+    const { modelType, coefficients, intercept, metrics, featureColumns, labelColumn, tuningSummary, trainingData, modelParameters } = output;
+    
+    // Decision Tree인 경우 plot_tree 생성
+    useEffect(() => {
+        if (modelType === ModuleType.DecisionTree && trainingData && modelParameters && featureColumns && labelColumn) {
+            setIsLoadingPlot(true);
+            const generatePlot = async () => {
+                try {
+                    const pyodideModule = await import('../utils/pyodideRunner');
+                    const { generateDecisionTreePlot } = pyodideModule;
+                    
+                    const imageBase64 = await generateDecisionTreePlot(
+                        trainingData,
+                        featureColumns,
+                        labelColumn,
+                        output.modelPurpose || "classification",
+                        modelParameters.criterion || "gini",
+                        modelParameters.maxDepth || null,
+                        modelParameters.minSamplesSplit || 2,
+                        modelParameters.minSamplesLeaf || 1,
+                        modelParameters.classWeight || null
+                    );
+                    
+                    setPlotTreeImage(`data:image/png;base64,${imageBase64}`);
+                } catch (error) {
+                    console.error("Failed to generate Decision Tree plot:", error);
+                    setPlotTreeImage(null);
+                } finally {
+                    setIsLoadingPlot(false);
+                }
+            };
+            
+            generatePlot();
+        }
+    }, [modelType, trainingData, modelParameters, featureColumns, labelColumn, output.modelPurpose]);
 
     const handleInterpret = async () => {
         setIsInterpreting(true);
@@ -498,43 +534,76 @@ ${topFeatures}
                         </div>
                     )}
 
-                    <div>
-                        <h4 className="text-md font-semibold text-gray-700 mb-2">Model Equation</h4>
-                        <div className="bg-gray-50 rounded-lg p-3 font-mono text-xs text-green-700 whitespace-normal break-words border border-gray-200">
-                            {formulaParts.length > 0 ? (
-                                <>
-                                    <span>{formulaParts[0]}</span>
-                                    {formulaParts.slice(1).map((part, i) => <span key={i}>{part}</span>)}
-                                </>
+                    {formulaParts.length > 0 && (
+                        <div>
+                            <h4 className="text-md font-semibold text-gray-700 mb-2">Model Equation</h4>
+                            <div className="bg-gray-50 rounded-lg p-3 font-mono text-xs text-green-700 whitespace-normal break-words border border-gray-200">
+                                <span>{formulaParts[0]}</span>
+                                {formulaParts.slice(1).map((part, i) => <span key={i}>{part}</span>)}
+                            </div>
+                        </div>
+                    )}
+                    {formulaParts.length === 0 && complexModels.includes(modelType) && (
+                        <div>
+                            <h4 className="text-md font-semibold text-gray-700 mb-2">Model Information</h4>
+                            {modelType === ModuleType.DecisionTree && plotTreeImage ? (
+                                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                    {isLoadingPlot ? (
+                                        <div className="text-center p-8 text-gray-600">
+                                            <p>Decision Tree 시각화 생성 중...</p>
+                                        </div>
+                                    ) : (
+                                        <img 
+                                            src={plotTreeImage} 
+                                            alt="Decision Tree" 
+                                            className="w-full h-auto"
+                                            style={{ maxHeight: '600px', objectFit: 'contain' }}
+                                        />
+                                    )}
+                                </div>
                             ) : (
-                                <span className="text-gray-500 font-sans text-sm">Model equation is not available for this model type.</span>
+                                <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800 border border-blue-200">
+                                    <p className="font-sans">
+                                        {modelType === ModuleType.DecisionTree || modelType === ModuleType.RandomForest
+                                            ? "Decision Tree 기반 모델은 트리 구조로 예측을 수행하므로 선형 방정식으로 표현할 수 없습니다. 대신 Feature Importance를 통해 각 변수의 중요도를 확인할 수 있습니다."
+                                            : "이 모델 타입은 선형 방정식으로 표현할 수 없습니다. Feature Importance를 통해 각 변수의 중요도를 확인할 수 있습니다."}
+                                    </p>
+                                </div>
                             )}
                         </div>
-                    </div>
+                    )}
                     
                     <ModalModelMetrics metrics={metrics} />
 
                     <div>
-                        <h4 className="text-md font-semibold text-gray-700 mb-2">Coefficients / Feature Importances</h4>
+                        <h4 className="text-md font-semibold text-gray-700 mb-2">
+                            {complexModels.includes(modelType) ? "Feature Importances" : "Coefficients"}
+                        </h4>
                         <div className="bg-gray-50 rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
                             <table className="w-full text-sm">
                                 <thead className="sticky top-0 bg-gray-100">
                                     <tr className="text-left">
                                         <th className="p-2 font-semibold">Feature</th>
-                                        <th className="p-2 font-semibold text-right">Value</th>
+                                        <th className="p-2 font-semibold text-right">
+                                            {complexModels.includes(modelType) ? "Importance" : "Coefficient"}
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr className="border-t">
-                                        <td className="p-2 font-mono text-gray-600">(Intercept)</td>
-                                        <td className="p-2 font-mono text-right">{intercept.toFixed(4)}</td>
-                                    </tr>
-                                    {Object.entries(coefficients).map(([feature, value]) => (
-                                        <tr key={feature} className="border-t">
-                                            <td className="p-2 font-mono">{feature}</td>
-                                            <td className="p-2 font-mono text-right">{value.toFixed(4)}</td>
+                                    {!complexModels.includes(modelType) && (
+                                        <tr className="border-t">
+                                            <td className="p-2 font-mono text-gray-600">(Intercept)</td>
+                                            <td className="p-2 font-mono text-right">{intercept.toFixed(4)}</td>
                                         </tr>
-                                    ))}
+                                    )}
+                                    {Object.entries(coefficients)
+                                        .sort(([, a], [, b]) => Math.abs(b as number) - Math.abs(a as number))
+                                        .map(([feature, value]) => (
+                                            <tr key={feature} className="border-t">
+                                                <td className="p-2 font-mono">{feature}</td>
+                                                <td className="p-2 font-mono text-right">{(value as number).toFixed(4)}</td>
+                                            </tr>
+                                        ))}
                                 </tbody>
                             </table>
                         </div>

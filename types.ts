@@ -160,6 +160,8 @@ export interface TrainedModelOutput {
   labelColumn: string;
   tuningSummary?: TuningSummary;
   statsModelsResult?: StatsModelsResultOutput; // statsmodels 결과 (포아송/음이항 회귀용)
+  trainingData?: any[]; // Decision Tree plot_tree 생성을 위한 훈련 데이터 (선택적)
+  modelParameters?: Record<string, any>; // 모델 파라미터 (Decision Tree 등)
 }
 
 export type StatsModelFamily =
