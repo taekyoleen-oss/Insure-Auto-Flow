@@ -212,6 +212,7 @@ const noRunButtonTypes = [
     ModuleType.NegativeBinomialModel,
     ModuleType.DecisionTree,
     ModuleType.RandomForest,
+    ModuleType.NeuralNetwork,
     ModuleType.SVM,
     ModuleType.LinearDiscriminantAnalysis,
     ModuleType.NaiveBayes,

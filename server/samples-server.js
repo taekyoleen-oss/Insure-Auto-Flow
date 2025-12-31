@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3002;
+const PORT = process.env.SAMPLES_SERVER_PORT || 3003;
 
 app.use(cors());
 app.use(express.json());
@@ -113,7 +113,45 @@ app.get('/api/samples/list', (req, res) => {
       })
       .filter(file => file !== null);
 
-    console.log(`Returning ${sampleFiles.length} sample files`);
+    // 샘플 목록 정렬: 특정 순서를 지정하고 나머지는 알파벳 순으로 정렬
+    const sortOrder = [
+      'Linear Regression',
+      'Logistic Regression',
+      'Decision Tree',
+      'Random Forest',
+      'Neural Network',
+      'SVM',
+      'KNN',
+      'Naive Bayes',
+      'LDA',
+      'GLM Model',
+      'Stat Model'
+    ];
+
+    sampleFiles.sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      
+      const indexA = sortOrder.findIndex(order => nameA.includes(order));
+      const indexB = sortOrder.findIndex(order => nameB.includes(order));
+      
+      // 둘 다 순서에 있으면 순서대로 정렬
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      // A만 순서에 있으면 A를 앞으로
+      if (indexA !== -1) {
+        return -1;
+      }
+      // B만 순서에 있으면 B를 앞으로
+      if (indexB !== -1) {
+        return 1;
+      }
+      // 둘 다 순서에 없으면 알파벳 순으로 정렬
+      return nameA.localeCompare(nameB);
+    });
+
+    console.log(`Returning ${sampleFiles.length} sample files (sorted)`);
     res.json(sampleFiles);
   } catch (error) {
     console.error('Error listing samples:', error);

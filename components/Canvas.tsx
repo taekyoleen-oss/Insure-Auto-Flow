@@ -67,9 +67,12 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === ' ' || e.key === 'Space') {
+            if ((e.code === 'Space' || e.key === ' ') && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
                 e.preventDefault();
                 isSpacePressed.current = true;
+                if (canvasContainerRef.current) {
+                    canvasContainerRef.current.style.cursor = 'grabbing';
+                }
             }
         };
 
@@ -79,9 +82,11 @@ export const Canvas: React.FC<CanvasProps> = ({
                 setDragConnection(null);
                 setIsSuggestionDrag(false);
             }
-            if (e.key === ' ' || e.key === 'Space') {
-                e.preventDefault();
+            if (e.code === 'Space' || e.key === ' ') {
                 isSpacePressed.current = false;
+                if (!isPanning.current && canvasContainerRef.current) {
+                    canvasContainerRef.current.style.cursor = 'grab';
+                }
             }
         };
 
@@ -91,7 +96,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
         };
-    }, [isSuggestionDrag, onClearSuggestion]);
+    }, [isSuggestionDrag, onClearSuggestion, canvasContainerRef]);
     
     const cancelDragConnection = useCallback(() => {
         setDragConnection(null);
@@ -442,13 +447,14 @@ export const Canvas: React.FC<CanvasProps> = ({
         onClearSuggestion();
         setTappedSourcePort(null);
         
-        if (e.shiftKey) {
-            // Shift 키를 누른 상태에서만 패닝
+        if (isSpacePressed.current) {
+            // Space 키를 누른 상태에서만 패닝
+            e.preventDefault();
             isPanning.current = true;
             panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
             (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
         } else {
-            // 일반 드래그 시 선택 박스 모드 (Space 키 없이도 작동)
+            // 일반 드래그 시 선택 박스 모드
             if (!e.shiftKey) {
                 setSelectedModuleIds([]);
             }
@@ -508,24 +514,51 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
   
   const handleWheel = (e: React.WheelEvent) => {
+        // Ctrl + Wheel: Natural zoom
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const delta = e.deltaY * -0.001;
+            const newScale = Math.max(0.2, Math.min(2, scale + delta));
+            if (!canvasContainerRef.current) return;
+            const canvasRect = canvasContainerRef.current.getBoundingClientRect();
+            const mousePoint = { x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top };
+            const canvasPoint = {
+                x: (mousePoint.x - pan.x) / scale,
+                y: (mousePoint.y - pan.y) / scale,
+            };
+            const newPan = {
+                x: mousePoint.x - canvasPoint.x * newScale,
+                y: mousePoint.y - canvasPoint.y * newScale,
+            };
+            setScale(newScale);
+            setPan(newPan);
+            return;
+        }
+        
+        // Shift + Wheel: Horizontal scroll
+        if (e.shiftKey) {
+            e.preventDefault();
+            const deltaX = e.deltaY; // Use deltaY for horizontal scrolling when Shift is pressed
+            if (!canvasContainerRef.current) return;
+            setPan(prev => ({ x: prev.x - deltaX, y: prev.y }));
+            return;
+        }
+        
+        // Default: Normal zoom (if not Ctrl or Shift)
         e.preventDefault();
         const delta = e.deltaY * -0.001;
         const newScale = Math.max(0.2, Math.min(2, scale + delta));
-        
         if (!canvasContainerRef.current) return;
         const canvasRect = canvasContainerRef.current.getBoundingClientRect();
         const mousePoint = { x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top };
-        
         const canvasPoint = {
             x: (mousePoint.x - pan.x) / scale,
             y: (mousePoint.y - pan.y) / scale,
         };
-
         const newPan = {
             x: mousePoint.x - canvasPoint.x * newScale,
             y: mousePoint.y - canvasPoint.y * newScale,
         };
-
         setScale(newScale);
         setPan(newPan);
   };

@@ -189,18 +189,23 @@ app.get('/api/samples/list', (req, res) => {
         const filePath = path.join(SAMPLES_DIR, file);
         try {
           console.log(`Reading file: ${filePath}`);
-          const content = fs.readFileSync(filePath, 'utf-8');
+          let content = fs.readFileSync(filePath, 'utf-8');
           
           if (!content || content.trim().length === 0) {
             console.warn(`File ${file} is empty`);
             return null;
           }
           
+          // BOM 제거 (UTF-8 BOM: \uFEFF)
+          if (content.length > 0 && content.charCodeAt(0) === 0xFEFF) {
+            content = content.slice(1);
+          }
+          
           const data = JSON.parse(content);
           console.log(`Parsed file ${file}, has modules: ${!!data.modules}, has connections: ${!!data.connections}, has projectName: ${!!data.projectName}`);
           
           // .ins 또는 .mla 파일 형식 (Save 버튼으로 저장한 파일) 변환
-          if ((file.endsWith('.ins') || file.endsWith('.mla')) && data.modules && data.connections) {
+          if ((file.endsWith('.ins') || file.endsWith('.mla')) && Array.isArray(data.modules) && Array.isArray(data.connections)) {
             const ext = file.endsWith('.ins') ? '.ins' : '.mla';
             const projectName = data.projectName || file.replace(ext, '');
             console.log(`Converting ${ext} file: ${file} -> ${projectName}`);
@@ -218,18 +223,23 @@ app.get('/api/samples/list', (req, res) => {
                   parameters: m.parameters || {},
                 })),
                 connections: data.connections.map((c) => {
-                  const fromIndex = data.modules.findIndex((m) => m.id === c.from.moduleId);
-                  const toIndex = data.modules.findIndex((m) => m.id === c.to.moduleId);
+                  if (!c || !c.from || !c.to) {
+                    console.warn(`Invalid connection structure in ${file}`);
+                    return null;
+                  }
+                  const fromIndex = data.modules.findIndex((m) => m && m.id === c.from.moduleId);
+                  const toIndex = data.modules.findIndex((m) => m && m.id === c.to.moduleId);
                   if (fromIndex < 0 || toIndex < 0) {
                     console.warn(`Invalid connection in ${file}: fromIndex=${fromIndex}, toIndex=${toIndex}`);
+                    return null;
                   }
                   return {
-                    fromModuleIndex: fromIndex >= 0 ? fromIndex : -1,
-                    fromPort: c.from.portName,
-                    toModuleIndex: toIndex >= 0 ? toIndex : -1,
-                    toPort: c.to.portName,
+                    fromModuleIndex: fromIndex,
+                    fromPort: c.from.portName || '',
+                    toModuleIndex: toIndex,
+                    toPort: c.to.portName || '',
                   };
-                }).filter((c) => c.fromModuleIndex >= 0 && c.toModuleIndex >= 0),
+                }).filter((c) => c !== null && c.fromModuleIndex >= 0 && c.toModuleIndex >= 0),
               }
             };
             console.log(`Successfully converted ${ext} file: ${file} -> ${convertedData.name} (${convertedData.data.modules.length} modules, ${convertedData.data.connections.length} connections)`);
@@ -247,16 +257,68 @@ app.get('/api/samples/list', (req, res) => {
         } catch (error) {
           console.error(`Error reading file ${file}:`, error.message);
           console.error(`Stack:`, error.stack);
+          // 에러가 발생한 파일은 건너뛰고 계속 진행
           return null;
         }
       })
       .filter(file => file !== null);
 
-    console.log(`Returning ${sampleFiles.length} sample files`);
+    // 샘플 목록 정렬: 특정 순서를 지정하고 나머지는 알파벳 순으로 정렬
+    if (sampleFiles.length > 0) {
+      const sortOrder = [
+        'Linear Regression',
+        'Logistic Regression',
+        'Decision Tree',
+        'Random Forest',
+        'Neural Network',
+        'SVM',
+        'KNN',
+        'Naive Bayes',
+        'LDA',
+        'GLM Model',
+        'Stat Model'
+      ];
+
+      try {
+        sampleFiles.sort((a, b) => {
+          const nameA = (a && a.name) ? String(a.name) : (a && a.filename ? String(a.filename) : '');
+          const nameB = (b && b.name) ? String(b.name) : (b && b.filename ? String(b.filename) : '');
+          
+          const indexA = sortOrder.findIndex(order => nameA.includes(order));
+          const indexB = sortOrder.findIndex(order => nameB.includes(order));
+          
+          // 둘 다 순서에 있으면 순서대로 정렬
+          if (indexA !== -1 && indexB !== -1) {
+            return indexA - indexB;
+          }
+          // A만 순서에 있으면 A를 앞으로
+          if (indexA !== -1) {
+            return -1;
+          }
+          // B만 순서에 있으면 B를 앞으로
+          if (indexB !== -1) {
+            return 1;
+          }
+          // 둘 다 순서에 없으면 알파벳 순으로 정렬
+          return nameA.localeCompare(nameB);
+        });
+      } catch (sortError) {
+        console.error('Error sorting samples:', sortError);
+        // 정렬 실패해도 계속 진행
+      }
+    }
+
+    console.log(`Returning ${sampleFiles.length} sample files (sorted)`);
+    console.log(`Sample names:`, sampleFiles.map(s => (s && s.name) || (s && s.filename) || 'unknown'));
     res.json(sampleFiles);
   } catch (error) {
     console.error('Error listing samples:', error);
-    res.status(500).json({ error: 'Failed to list samples' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to list samples',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

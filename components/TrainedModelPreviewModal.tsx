@@ -293,6 +293,7 @@ const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) 
 const complexModels = [
     ModuleType.DecisionTree,
     ModuleType.RandomForest,
+    ModuleType.NeuralNetwork,
     ModuleType.SVM,
     ModuleType.KNN,
     ModuleType.NaiveBayes,
@@ -543,7 +544,7 @@ ${topFeatures}
                             </div>
                         </div>
                     )}
-                    {formulaParts.length === 0 && complexModels.includes(modelType) && (
+                    {formulaParts.length === 0 && complexModels.includes(modelType) && modelType !== ModuleType.NeuralNetwork && (
                         <div>
                             <h4 className="text-md font-semibold text-gray-700 mb-2">Model Information</h4>
                             {modelType === ModuleType.DecisionTree && plotTreeImage ? (

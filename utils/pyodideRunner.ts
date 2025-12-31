@@ -1544,6 +1544,463 @@ except Exception as e:
 }
 
 /**
+ * Neural Network 모델을 Python으로 실행합니다
+ * 타임아웃: 60초
+ */
+export async function fitNeuralNetworkPython(
+  X: number[][],
+  y: number[],
+  modelPurpose: string = "classification",
+  hiddenLayerSizes: string = "100",
+  activation: string = "relu",
+  maxIter: number = 200,
+  randomState: number = 2022,
+  featureColumns?: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  metrics: Record<string, number>;
+  featureImportances?: Record<string, number>;
+}> {
+  try {
+    // Pyodide 로드 (타임아웃: 30초)
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // 데이터를 Python에 전달
+    const dataRows: any[] = [];
+    for (let i = 0; i < X.length; i++) {
+      const row: any = {};
+      if (featureColumns) {
+        featureColumns.forEach((col, idx) => {
+          row[col] = X[i][idx];
+        });
+      } else {
+        X[i].forEach((val, idx) => {
+          row[`x${idx}`] = val;
+        });
+      }
+      row["y"] = y[i];
+      dataRows.push(row);
+    }
+
+    py.globals.set("js_data", dataRows);
+    py.globals.set(
+      "js_feature_columns",
+      featureColumns || X[0].map((_, idx) => `x${idx}`)
+    );
+    py.globals.set("js_label_column", "y");
+
+    // Python 코드 실행
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, mean_squared_error, r2_score, mean_absolute_error
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    
+    # 데이터 검증
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    # 데이터 검증
+    if X_train.empty:
+        raise ValueError("X_train is empty")
+    if y_train.empty:
+        raise ValueError("y_train is empty")
+    if len(X_train) != len(y_train):
+        raise ValueError(f"X_train and y_train must have same number of samples: X_train.shape[0]={len(X_train)}, y_train.shape[0]={len(y_train)}")
+    if len(X_train) < 1:
+        raise ValueError(f"Need at least 1 sample, got {len(X_train)}")
+    
+    # 모델 생성
+    p_model_purpose = '${modelPurpose}'
+    p_hidden_layer_sizes = '${hiddenLayerSizes}'
+    p_activation = '${activation}'
+    p_max_iter = ${maxIter}
+    p_random_state = ${randomState}
+    
+    # Parse hidden_layer_sizes (e.g., "100" -> (100,), "100,50" -> (100, 50))
+    if isinstance(p_hidden_layer_sizes, str):
+        hidden_layers = tuple(int(x.strip()) for x in p_hidden_layer_sizes.split(','))
+    else:
+        hidden_layers = (100,) if p_hidden_layer_sizes is None else (p_hidden_layer_sizes,)
+    
+    if p_model_purpose == 'classification':
+        model = MLPClassifier(
+            hidden_layer_sizes=hidden_layers,
+            activation=p_activation,
+            max_iter=p_max_iter,
+            random_state=p_random_state
+        )
+    else:
+        model = MLPRegressor(
+            hidden_layer_sizes=hidden_layers,
+            activation=p_activation,
+            max_iter=p_max_iter,
+            random_state=p_random_state
+        )
+    
+    # 모델 훈련
+    model.fit(X_train, y_train)
+    
+    # 예측
+    y_pred = model.predict(X_train)
+    
+    # 메트릭 계산
+    metrics = {}
+    if p_model_purpose == 'classification':
+        # 분류 메트릭
+        accuracy = accuracy_score(y_train, y_pred)
+        metrics['Accuracy'] = float(accuracy)
+        
+        # 이진 분류인지 다중 분류인지 확인
+        unique_labels = np.unique(y_train)
+        is_binary = len(unique_labels) == 2
+        
+        if is_binary:
+            # 이진 분류
+            precision = precision_score(y_train, y_pred, average='binary', zero_division=0)
+            recall = recall_score(y_train, y_pred, average='binary', zero_division=0)
+            f1 = f1_score(y_train, y_pred, average='binary', zero_division=0)
+            
+            # ROC-AUC (이진 분류만)
+            try:
+                y_pred_proba = model.predict_proba(X_train)[:, 1]
+                roc_auc = roc_auc_score(y_train, y_pred_proba)
+                metrics['ROC-AUC'] = float(roc_auc)
+            except:
+                metrics['ROC-AUC'] = 0.0
+        else:
+            # 다중 분류
+            precision = precision_score(y_train, y_pred, average='weighted', zero_division=0)
+            recall = recall_score(y_train, y_pred, average='weighted', zero_division=0)
+            f1 = f1_score(y_train, y_pred, average='weighted', zero_division=0)
+            metrics['ROC-AUC'] = 0.0  # 다중 분류는 ROC-AUC 계산 안 함
+        
+        metrics['Precision'] = float(precision)
+        metrics['Recall'] = float(recall)
+        metrics['F1-Score'] = float(f1)
+    else:
+        # 회귀 메트릭
+        mse = mean_squared_error(y_train, y_pred)
+        rmse = np.sqrt(mse)
+        mae = mean_absolute_error(y_train, y_pred)
+        r2 = r2_score(y_train, y_pred)
+        
+        metrics['MSE'] = float(mse)
+        metrics['RMSE'] = float(rmse)
+        metrics['MAE'] = float(mae)
+        metrics['R-squared'] = float(r2)
+    
+    # Feature Importance는 Neural Network에서 직접 제공하지 않으므로 빈 딕셔너리 반환
+    feature_importances = {}
+    
+    # 결과 반환
+    result = {
+        'metrics': metrics,
+        'feature_importances': feature_importances
+    }
+    
+    js_result = result
+    
+except Exception as e:
+    error_type = type(e).__name__
+    error_message = str(e)
+    error_traceback = traceback.format_exc()
+    
+    result = {
+        '__error__': True,
+        'error_type': error_type,
+        'error_message': error_message,
+        'error_traceback': error_traceback
+    }
+    js_result = result
+`;
+
+    await withTimeout(
+      py.runPythonAsync(code),
+      timeoutMs,
+      `Neural Network 훈련 타임아웃 (${timeoutMs}ms 초과)`
+    );
+
+    // 결과 가져오기
+    const resultPyObj = py.globals.get("js_result");
+    
+    // Python 딕셔너리를 JavaScript 객체로 변환
+    let result: any;
+    if (resultPyObj && typeof resultPyObj.toJs === "function") {
+      result = resultPyObj.toJs({ dict_converter: Object.fromEntries });
+    } else {
+      // JSON을 통해 변환
+      const jsonStr = py.runPython("import json; json.dumps(js_result)");
+      result = JSON.parse(jsonStr);
+    }
+
+    // 에러가 발생한 경우 처리
+    if (result.__error__) {
+      throw new Error(
+        `Python Neural Network error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    // 필수 속성 검증
+    if (!result.metrics || typeof result.metrics !== "object") {
+      throw new Error(
+        `Python Neural Network error: Missing or invalid 'metrics' in result.`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      metrics: result.metrics,
+      featureImportances: result.feature_importances || {},
+    };
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Neural Network error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * Neural Network 모델로 예측을 수행합니다
+ * Decision Tree와 유사하게 재훈련하는 방식으로 구현
+ */
+export async function scoreNeuralNetworkPython(
+  data: any[],
+  featureColumns: string[],
+  labelColumn: string,
+  modelPurpose: "classification" | "regression",
+  hiddenLayerSizes: string,
+  activation: string,
+  maxIter: number,
+  randomState: number,
+  trainingData: any[],
+  trainingFeatureColumns: string[],
+  trainingLabelColumn: string,
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    // Pyodide 로드 (타임아웃: 30초)
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // 데이터를 Python에 전달
+    py.globals.set("js_data", data);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_model_purpose", modelPurpose);
+    py.globals.set("js_hidden_layer_sizes", hiddenLayerSizes);
+    py.globals.set("js_activation", activation);
+    py.globals.set("js_max_iter", maxIter);
+    py.globals.set("js_random_state", randomState);
+    py.globals.set("js_training_data", trainingData);
+    py.globals.set("js_training_feature_columns", trainingFeatureColumns);
+    py.globals.set("js_training_label_column", trainingLabelColumn);
+
+    // Python 코드 실행
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+
+try:
+    # 데이터 준비
+    df = pd.DataFrame(js_data.to_py())
+    feature_columns = js_feature_columns.to_py()
+    label_column = str(js_label_column)
+    model_purpose = str(js_model_purpose)
+    
+    # 훈련 데이터 준비
+    training_df = pd.DataFrame(js_training_data.to_py())
+    training_feature_columns = js_training_feature_columns.to_py()
+    training_label_column = str(js_training_label_column)
+    
+    # 모델 파라미터
+    hidden_layer_sizes = str(js_hidden_layer_sizes)
+    activation = str(js_activation)
+    max_iter = int(js_max_iter)
+    random_state = int(js_random_state)
+    
+    # Parse hidden_layer_sizes (e.g., "100" -> (100,), "100,50" -> (100, 50))
+    if isinstance(hidden_layer_sizes, str):
+        hidden_layers = tuple(int(x.strip()) for x in hidden_layer_sizes.split(','))
+    else:
+        hidden_layers = (100,) if hidden_layer_sizes is None else (hidden_layer_sizes,)
+    
+    # 훈련 데이터에서 특성과 레이블 추출
+    X_train = training_df[training_feature_columns]
+    y_train = training_df[training_label_column]
+    
+    # 모델 생성 및 훈련
+    if model_purpose == 'classification':
+        model = MLPClassifier(
+            hidden_layer_sizes=hidden_layers,
+            activation=activation,
+            max_iter=max_iter,
+            random_state=random_state
+        )
+    else:
+        model = MLPRegressor(
+            hidden_layer_sizes=hidden_layers,
+            activation=activation,
+            max_iter=max_iter,
+            random_state=random_state
+        )
+    
+    # 모델 훈련
+    model.fit(X_train, y_train)
+    
+    # 예측 수행
+    X = df[feature_columns]
+    predictions = model.predict(X)
+    
+    # 결과 데이터프레임 생성
+    result_df = df.copy()
+    result_df['Predict'] = predictions
+    
+    # 분류 모델인 경우 확률도 계산
+    if model_purpose == 'classification':
+        try:
+            probabilities = model.predict_proba(X)
+            if probabilities.shape[1] == 2:
+                # 이진 분류
+                result_df['Probability_1'] = probabilities[:, 1]
+            else:
+                # 다중 분류
+                for i in range(probabilities.shape[1]):
+                    result_df[f'Probability_{i}'] = probabilities[:, i]
+        except:
+            pass
+    
+    # 결과 반환
+    js_result = {
+        'rows': result_df.to_dict('records'),
+        'columns': [{'name': col, 'type': 'number' if result_df[col].dtype in ['int64', 'float64'] else 'string'} for col in result_df.columns]
+    }
+    
+except Exception as e:
+    error_type = type(e).__name__
+    error_message = str(e)
+    error_traceback = traceback.format_exc()
+    
+    result = {
+        '__error__': True,
+        'error_type': error_type,
+        'error_message': error_message,
+        'error_traceback': error_traceback
+    }
+    js_result = result
+`;
+
+    await withTimeout(
+      py.runPythonAsync(code),
+      timeoutMs,
+      `Neural Network 예측 타임아웃 (${timeoutMs}ms 초과)`
+    );
+
+    // 결과 가져오기
+    const resultPyObj = py.globals.get("js_result");
+    
+    // Python 딕셔너리를 JavaScript 객체로 변환
+    let result: any;
+    if (resultPyObj && typeof resultPyObj.toJs === "function") {
+      result = resultPyObj.toJs({ dict_converter: Object.fromEntries });
+    } else {
+      // JSON을 통해 변환
+      const jsonStr = py.runPython("import json; json.dumps(js_result)");
+      result = JSON.parse(jsonStr);
+    }
+
+    // 에러가 발생한 경우 처리
+    if (result.__error__) {
+      throw new Error(
+        `Python Neural Network 예측 error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_model_purpose");
+    py.globals.delete("js_hidden_layer_sizes");
+    py.globals.delete("js_activation");
+    py.globals.delete("js_max_iter");
+    py.globals.delete("js_training_data");
+    py.globals.delete("js_training_feature_columns");
+    py.globals.delete("js_training_label_column");
+    py.globals.delete("js_result");
+
+    return result;
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_model_purpose");
+        py.globals.delete("js_hidden_layer_sizes");
+        py.globals.delete("js_activation");
+        py.globals.delete("js_max_iter");
+        py.globals.delete("js_training_data");
+        py.globals.delete("js_training_feature_columns");
+        py.globals.delete("js_training_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Neural Network 예측 error:\n${errorMessage}`);
+  }
+}
+
+/**
  * SVM 모델을 Python으로 실행합니다
  * 타임아웃: 60초
  */

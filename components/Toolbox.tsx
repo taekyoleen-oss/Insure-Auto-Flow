@@ -40,6 +40,7 @@ const supervisedLearningTypes = [
   ModuleType.LogisticRegression,
   ModuleType.DecisionTree,
   ModuleType.RandomForest,
+  ModuleType.NeuralNetwork,
   ModuleType.SVM,
   ModuleType.LinearDiscriminantAnalysis,
   ModuleType.NaiveBayes,

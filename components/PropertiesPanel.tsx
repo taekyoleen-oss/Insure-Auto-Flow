@@ -1807,6 +1807,20 @@ const renderParameters = (
                 : ["squared_error", "friedman_mse", "absolute_error", "poisson"]
             }
           />
+          <PropertyInput
+            label="Min Samples Split"
+            type="number"
+            value={module.parameters.min_samples_split ?? 2}
+            onChange={(v) => onParamChange("min_samples_split", v)}
+          />
+          {purpose === "classification" && (
+            <PropertySelect
+              label="Class Weight"
+              value={module.parameters.class_weight ?? "None"}
+              onChange={(v) => onParamChange("class_weight", v === "None" ? null : v)}
+              options={["None", "balanced"]}
+            />
+          )}
         </>
       );
     }
@@ -1857,6 +1871,47 @@ const renderParameters = (
                 ? ["gini", "entropy"]
                 : ["squared_error", "absolute_error", "poisson"]
             }
+          />
+        </>
+      );
+    }
+    case ModuleType.NeuralNetwork: {
+      const purpose = module.parameters.model_purpose;
+      const handlePurposeChange = (newPurpose: string) => {
+        onParamChange("model_purpose", newPurpose);
+      };
+      return (
+        <>
+          <PropertySelect
+            label="Model Purpose"
+            value={purpose}
+            onChange={handlePurposeChange}
+            options={["classification", "regression"]}
+          />
+          <PropertyInput
+            label="Hidden Layer Sizes"
+            type="text"
+            value={module.parameters.hidden_layer_sizes || "100"}
+            onChange={(v) => onParamChange("hidden_layer_sizes", v)}
+            placeholder="100 or 100,50"
+          />
+          <PropertySelect
+            label="Activation"
+            value={module.parameters.activation || "relu"}
+            onChange={(v) => onParamChange("activation", v)}
+            options={["relu", "tanh", "logistic"]}
+          />
+          <PropertyInput
+            label="Max Iter"
+            type="number"
+            value={module.parameters.max_iter || 200}
+            onChange={(v) => onParamChange("max_iter", v)}
+          />
+          <PropertyInput
+            label="Random State"
+            type="number"
+            value={module.parameters.random_state || 2022}
+            onChange={(v) => onParamChange("random_state", v)}
           />
         </>
       );
@@ -3010,6 +3065,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             const complexModels = [
               ModuleType.DecisionTree,
               ModuleType.RandomForest,
+              ModuleType.NeuralNetwork,
               ModuleType.SVM,
               ModuleType.KNN,
               ModuleType.NaiveBayes,
@@ -3050,6 +3106,15 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         <span key={i}>{part}</span>
                       ))}
                     </div>
+                  </div>
+                )}
+                {formulaParts.length === 0 && complexModels.includes(modelType) && modelType !== ModuleType.NeuralNetwork && (
+                  <div className="bg-blue-900/30 p-3 rounded-lg text-xs text-blue-300 border border-blue-700/50">
+                    <p className="font-sans">
+                      {modelType === ModuleType.DecisionTree || modelType === ModuleType.RandomForest
+                        ? "Decision Tree 기반 모델은 트리 구조로 예측을 수행합니다. Feature Importance를 확인하세요."
+                        : "이 모델 타입은 선형 방정식으로 표현할 수 없습니다."}
+                    </p>
                   </div>
                 )}
                 <PanelModelMetrics metrics={outputData.metrics} />
@@ -3224,6 +3289,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 ModuleType.NegativeBinomialRegression,
                 ModuleType.DecisionTree,
                 ModuleType.RandomForest,
+                ModuleType.NeuralNetwork,
                 ModuleType.SVM,
                 ModuleType.LinearDiscriminantAnalysis,
                 ModuleType.NaiveBayes,

@@ -425,32 +425,79 @@ p_criterion = {criterion}
 p_max_depth = {max_depth} if {max_depth} else None
 p_min_samples_split = {min_samples_split}
 p_min_samples_leaf = {min_samples_leaf}
+p_class_weight = {class_weight} if {class_weight} else None
 
 # Create model instance based on model purpose
 if p_model_purpose == 'classification':
     criterion_clf = p_criterion.lower() if p_criterion else 'gini'
-        model = DecisionTreeClassifier(
+    model = DecisionTreeClassifier(
         criterion=criterion_clf,
         max_depth=p_max_depth,
         min_samples_split=p_min_samples_split,
         min_samples_leaf=p_min_samples_leaf,
-            random_state=42
-        )
-    else:
+        class_weight=p_class_weight,
+        random_state=42
+    )
+else:
     criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
-        model = DecisionTreeRegressor(
-            criterion=criterion_reg,
+    model = DecisionTreeRegressor(
+        criterion=criterion_reg,
         max_depth=p_max_depth,
         min_samples_split=p_min_samples_split,
         min_samples_leaf=p_min_samples_leaf,
-            random_state=42
-        )
+        random_state=42
+    )
     
 print(f"Decision Tree model instance created successfully ({p_model_purpose}).")
 print(f"  Criterion: {p_criterion}")
 print(f"  Max Depth: {p_max_depth}")
 print(f"  Min Samples Split: {p_min_samples_split}")
 print(f"  Min Samples Leaf: {p_min_samples_leaf}")
+if p_model_purpose == 'classification':
+    print(f"  Class Weight: {p_class_weight}")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
+`,
+
+    NeuralNetwork: `
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+
+# This module creates a neural network model instance.
+# The model will be trained in the 'Train Model' module.
+# Parameters from UI
+p_model_purpose = {model_purpose}
+p_hidden_layer_sizes = {hidden_layer_sizes}
+p_activation = {activation}
+p_max_iter = {max_iter}
+p_random_state = {random_state}
+
+# Parse hidden_layer_sizes (e.g., "100" -> (100,), "100,50" -> (100, 50))
+if isinstance(p_hidden_layer_sizes, str):
+    hidden_layers = tuple(int(x.strip()) for x in p_hidden_layer_sizes.split(','))
+else:
+    hidden_layers = (100,) if p_hidden_layer_sizes is None else (p_hidden_layer_sizes,)
+
+# Create model instance based on model purpose
+if p_model_purpose == 'classification':
+    model = MLPClassifier(
+        hidden_layer_sizes=hidden_layers,
+        activation=p_activation,
+        max_iter=p_max_iter,
+        random_state=p_random_state
+    )
+else:
+    model = MLPRegressor(
+        hidden_layer_sizes=hidden_layers,
+        activation=p_activation,
+        max_iter=p_max_iter,
+        random_state=p_random_state
+    )
+    
+print(f"Neural Network model instance created successfully ({p_model_purpose}).")
+print(f"  Hidden Layer Sizes: {hidden_layers}")
+print(f"  Activation: {p_activation}")
+print(f"  Max Iter: {p_max_iter}")
 
 # Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
 # model variable contains the model instance ready for training.

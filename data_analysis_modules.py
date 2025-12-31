@@ -755,7 +755,8 @@ def fit_count_regression_statsmodels(df: pd.DataFrame, distribution_type: str, f
 
 
 def create_decision_tree(model_purpose: str = 'classification', criterion: str = 'gini',
-                        max_depth: int = None, min_samples_split: int = 2, min_samples_leaf: int = 1):
+                        max_depth: int = None, min_samples_split: int = 2, min_samples_leaf: int = 1,
+                        class_weight: str = None):
     """
     의사결정나무 모델을 생성합니다.
     
@@ -771,6 +772,8 @@ def create_decision_tree(model_purpose: str = 'classification', criterion: str =
         분할을 위한 최소 샘플 수
     min_samples_leaf : int
         리프 노드의 최소 샘플 수
+    class_weight : str or None
+        클래스 가중치: None, 'balanced'
     
     Returns:
     --------
@@ -784,6 +787,7 @@ def create_decision_tree(model_purpose: str = 'classification', criterion: str =
             max_depth=max_depth,
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
+            class_weight=class_weight,
             random_state=42
         )
     else:
@@ -836,6 +840,55 @@ def create_random_forest(model_purpose: str = 'classification', n_estimators: in
             criterion=criterion_reg,
             max_depth=max_depth,
             random_state=42
+        )
+    
+    print("모델 생성 완료.")
+    return model
+
+
+def create_neural_network(model_purpose: str = 'classification', hidden_layer_sizes: str = '100',
+                         activation: str = 'relu', max_iter: int = 200):
+    """
+    신경망 모델을 생성합니다.
+    
+    Parameters:
+    -----------
+    model_purpose : str
+        모델 목적: 'classification', 'regression'
+    hidden_layer_sizes : str
+        은닉층 크기 (예: "100" 또는 "100,50")
+    activation : str
+        활성화 함수: 'relu', 'tanh', 'logistic'
+    max_iter : int
+        최대 반복 횟수
+    
+    Returns:
+    --------
+    Neural Network 모델 객체
+    """
+    from sklearn.neural_network import MLPClassifier, MLPRegressor
+    
+    print(f"신경망 모델 생성 중 ({model_purpose})...")
+    
+    # Parse hidden_layer_sizes (e.g., "100" -> (100,), "100,50" -> (100, 50))
+    if isinstance(hidden_layer_sizes, str):
+        hidden_layers = tuple(int(x.strip()) for x in hidden_layer_sizes.split(','))
+    else:
+        hidden_layers = (100,) if hidden_layer_sizes is None else (hidden_layer_sizes,)
+    
+    if model_purpose == 'classification':
+        model = MLPClassifier(
+            hidden_layer_sizes=hidden_layers,
+            activation=activation,
+            max_iter=max_iter,
+            random_state=random_state
+        )
+    else:
+        model = MLPRegressor(
+            hidden_layer_sizes=hidden_layers,
+            activation=activation,
+            max_iter=max_iter,
+            random_state=random_state
         )
     
     print("모델 생성 완료.")

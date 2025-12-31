@@ -125,6 +125,7 @@ const isClassification = (
     ModuleType.KNN,
     ModuleType.DecisionTree,
     ModuleType.RandomForest,
+    ModuleType.NeuralNetwork,
     ModuleType.SVM,
   ];
 
@@ -599,6 +600,7 @@ Respond with ONLY the module type string, for example: 'ScoreModel'`;
       ModuleType.NegativeBinomialRegression,
       ModuleType.DecisionTree,
       ModuleType.RandomForest,
+      ModuleType.NeuralNetwork,
       ModuleType.SVM,
       ModuleType.LinearDiscriminantAnalysis,
       ModuleType.NaiveBayes,
@@ -997,31 +999,39 @@ ${header}
     });
   };
 
-  const handleSavePipeline = useCallback(async () => {
-    try {
-      const pipelineState = { modules, connections, projectName };
+  const handleSavePipeline = useCallback(
+    async (e?: React.MouseEvent) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
 
-      await savePipeline(pipelineState, {
-        extension: ".ins",
-        description: "ML Pipeline File",
-        onSuccess: (fileName) => {
-          addLog("SUCCESS", `Pipeline saved to '${fileName}'.`);
-          setIsDirty(false);
-          setSaveButtonText("Saved!");
-          setTimeout(() => setSaveButtonText("Save"), 2000);
-        },
-        onError: (error) => {
+      try {
+        const pipelineState = { modules, connections, projectName };
+
+        await savePipeline(pipelineState, {
+          extension: ".ins",
+          description: "ML Pipeline File",
+          onSuccess: (fileName) => {
+            addLog("SUCCESS", `Pipeline saved to '${fileName}'.`);
+            setIsDirty(false);
+            setSaveButtonText("Saved!");
+            setTimeout(() => setSaveButtonText("Save"), 2000);
+          },
+          onError: (error) => {
+            console.error("Failed to save pipeline:", error);
+            addLog("ERROR", `Failed to save pipeline: ${error.message}`);
+          },
+        });
+      } catch (error: any) {
+        if (error.name !== "AbortError") {
           console.error("Failed to save pipeline:", error);
           addLog("ERROR", `Failed to save pipeline: ${error.message}`);
-        },
-      });
-    } catch (error: any) {
-      if (error.name !== "AbortError") {
-        console.error("Failed to save pipeline:", error);
-        addLog("ERROR", `Failed to save pipeline: ${error.message}`);
+        }
       }
-    }
-  }, [modules, connections, projectName, addLog]);
+    },
+    [modules, connections, projectName, addLog]
+  );
 
   const [isGeneratingPPTs, setIsGeneratingPPTs] = useState(false);
 
@@ -1297,6 +1307,12 @@ ${header}
       }
     } catch (error: any) {
       console.error("Error loading folder samples:", error);
+      console.error("Error details:", error.message, error.stack);
+      const errorMessage = error.message || "Unknown error";
+      addLog(
+        "ERROR",
+        `Samples 로드 실패: ${errorMessage}. 서버가 실행 중인지 확인하세요. (http://localhost:3001)`
+      );
       setFolderSamples([]);
     } finally {
       setIsLoadingSamples(false);
@@ -1347,21 +1363,42 @@ ${header}
     if (initialModelStr && modules.length === 0) {
       try {
         const initialModel = JSON.parse(initialModelStr);
-        
+
         // initialModel 객체를 직접 사용하여 모델 로드
         if (initialModel.modules && initialModel.connections) {
           // Convert initial model format to app format
-          const newModules: CanvasModule[] = initialModel.modules.map(
+          // 존재하지 않는 모듈 타입 필터링
+          const skippedModules = new Set<string>();
+          const validModules = initialModel.modules.filter((m: any) => {
+            const defaultModule = DEFAULT_MODULES.find(
+              (dm) => dm.type === m.type
+            );
+            if (!defaultModule) {
+              // 중복 경고 방지
+              if (!skippedModules.has(m.type)) {
+                skippedModules.add(m.type);
+                console.warn(
+                  `Module type "${m.type}" not found in DEFAULT_MODULES. Skipping...`
+                );
+              }
+              return false;
+            }
+            return true;
+          });
+
+          const newModules: CanvasModule[] = validModules.map(
             (m: any, index: number) => {
               const moduleId = `module-${Date.now()}-${index}`;
               const defaultModule = DEFAULT_MODULES.find(
                 (dm) => dm.type === m.type
               );
               if (!defaultModule) {
-                console.error(`Module type "${m.type}" not found in DEFAULT_MODULES.`);
+                // 이미 필터링했으므로 여기서는 발생하지 않아야 함
                 throw new Error(`Module type "${m.type}" not found`);
               }
-              const moduleInfo = TOOLBOX_MODULES.find((tm) => tm.type === m.type);
+              const moduleInfo = TOOLBOX_MODULES.find(
+                (tm) => tm.type === m.type
+              );
               const defaultName = moduleInfo ? moduleInfo.name : m.type;
               return {
                 ...defaultModule,
@@ -1374,28 +1411,106 @@ ${header}
             }
           );
 
-          const newConnections: Connection[] = initialModel.connections.map(
-            (conn: any, index: number) => {
-              const fromModule = newModules[conn.fromModuleIndex];
-              const toModule = newModules[conn.toModuleIndex];
+          // 유효한 모듈 인덱스 매핑 생성 (필터링된 모듈에 맞게 인덱스 재매핑)
+          const originalToNewIndexMap = new Map<number, number>();
+          let newIndex = 0;
+          initialModel.modules.forEach((m: any, originalIndex: number) => {
+            const defaultModule = DEFAULT_MODULES.find(
+              (dm) => dm.type === m.type
+            );
+            if (defaultModule) {
+              originalToNewIndexMap.set(originalIndex, newIndex);
+              newIndex++;
+            }
+          });
+
+          // 필터링된 connection 개수 추적 (경고 메시지 최소화)
+          let skippedConnections = 0;
+          const newConnections: Connection[] = initialModel.connections
+            .map((conn: any, index: number) => {
+              const newFromIndex = originalToNewIndexMap.get(
+                conn.fromModuleIndex
+              );
+              const newToIndex = originalToNewIndexMap.get(conn.toModuleIndex);
+
+              if (newFromIndex === undefined || newToIndex === undefined) {
+                // 필터링된 모듈과 연결된 connection은 건너뛰기
+                skippedConnections++;
+                return null;
+              }
+
+              const fromModule = newModules[newFromIndex];
+              const toModule = newModules[newToIndex];
               if (!fromModule || !toModule) {
-                console.error(`Invalid connection at index ${index}.`);
-                throw new Error(`Invalid connection at index ${index}`);
+                skippedConnections++;
+                return null;
               }
               return {
                 id: `connection-${Date.now()}-${index}`,
                 from: { moduleId: fromModule.id, portName: conn.fromPort },
                 to: { moduleId: toModule.id, portName: conn.toPort },
               };
-            }
-          );
+            })
+            .filter(
+              (conn: Connection | null): conn is Connection => conn !== null
+            );
+
+          // 건너뛴 connection이 있으면 한 번만 경고 출력
+          if (skippedConnections > 0) {
+            console.warn(
+              `${skippedConnections} connection(s) were skipped due to removed modules.`
+            );
+          }
+
+          // 제거된 모듈이 있으면 localStorage 업데이트
+          if (skippedModules.size > 0 || skippedConnections > 0) {
+            const cleanedModel = {
+              name: initialModel.name || "Data Analysis",
+              modules: newModules.map((m) => ({
+                type: m.type,
+                name: m.name,
+                position: m.position,
+                parameters: m.parameters,
+              })),
+              connections: newConnections.map((c) => {
+                const fromIndex = newModules.findIndex(
+                  (m) => m.id === c.from.moduleId
+                );
+                const toIndex = newModules.findIndex(
+                  (m) => m.id === c.to.moduleId
+                );
+                return {
+                  fromModuleIndex: fromIndex,
+                  fromPort: c.from.portName,
+                  toModuleIndex: toIndex,
+                  toPort: c.to.portName,
+                };
+              }),
+            };
+            localStorage.setItem("initialModel", JSON.stringify(cleanedModel));
+
+            // 제거된 모듈 목록 로그 출력
+            const removedModulesList = Array.from(skippedModules).join(", ");
+            console.log(
+              `Removed modules from initialModel: ${removedModulesList}`
+            );
+            addLog(
+              "INFO",
+              `Cleaned initial model: Removed ${skippedModules.size} module(s) and ${skippedConnections} connection(s).`
+            );
+          }
 
           resetModules(newModules);
           _setConnections(newConnections);
           setSelectedModuleIds([]);
           setIsDirty(false);
           setProjectName(initialModel.name || "Data Analysis");
-          addLog("SUCCESS", `Initial model "${initialModel.name || 'My Model'}" loaded successfully.`);
+          addLog(
+            "SUCCESS",
+            `Initial model "${
+              initialModel.name || "My Model"
+            }" loaded successfully.`
+          );
           setTimeout(() => handleFitToView(), 100);
         } else {
           // 기존 방식 (name으로 찾기) - 하위 호환성
@@ -1403,7 +1518,12 @@ ${header}
         }
       } catch (error) {
         console.error("Failed to load initial model:", error);
-        addLog("ERROR", `Failed to load initial model: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        addLog(
+          "ERROR",
+          `Failed to load initial model: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1993,6 +2113,7 @@ ${header}
     ModuleType.NegativeBinomialRegression,
     ModuleType.DecisionTree,
     ModuleType.RandomForest,
+    ModuleType.NeuralNetwork,
     ModuleType.SVM,
     ModuleType.LinearDiscriminantAnalysis,
     ModuleType.NaiveBayes,
@@ -2184,6 +2305,20 @@ ${header}
     for (const moduleId of runQueue) {
       const module = currentModules.find((m) => m.id === moduleId)!;
       const moduleName = module.name;
+
+      // Skip model definition modules - they should only run through Train Model
+      if (MODEL_DEFINITION_TYPES.includes(module.type)) {
+        addLog(
+          "INFO",
+          `Module [${moduleName}] is a model definition module and will be executed when Train Model runs.`
+        );
+        setModules((prev) =>
+          prev.map((m) =>
+            m.id === moduleId ? { ...m, status: ModuleStatus.Pending } : m
+          )
+        );
+        continue;
+      }
 
       // Check if upstream modules are ready (only for individual runs, not Run All)
       if (
@@ -3470,9 +3605,9 @@ ${header}
               const minSamplesLeaf =
                 parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
                 1;
-              const classWeight = 
-                modelPurpose === "classification" 
-                  ? (modelSourceModule.parameters.class_weight || null)
+              const classWeight =
+                modelPurpose === "classification"
+                  ? modelSourceModule.parameters.class_weight || null
                   : null;
 
               if (X.length < ordered_feature_columns.length) {
@@ -3505,7 +3640,10 @@ ${header}
 
                 // Decision Tree는 coefficients와 intercept가 없으므로 Feature Importance 사용
                 intercept = 0;
-                if (fitResult.featureImportances && Object.keys(fitResult.featureImportances).length > 0) {
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
                   // Feature Importance를 coefficients로 사용
                   ordered_feature_columns.forEach((col) => {
                     coefficients[col] = fitResult.featureImportances[col] || 0;
@@ -3532,7 +3670,7 @@ ${header}
                 );
 
                 addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
-                
+
                 // Decision Tree plot_tree 생성을 위한 훈련 데이터와 모델 파라미터 저장
                 const trainingDataForPlot = rows.map((row) => {
                   const dataRow: any = {};
@@ -3542,7 +3680,7 @@ ${header}
                   dataRow[label_column] = row[label_column];
                   return dataRow;
                 });
-                
+
                 // trainedModelOutput에 훈련 데이터와 모델 파라미터 추가
                 if (!trainedModelOutput) {
                   trainedModelOutput = {
@@ -3579,6 +3717,85 @@ ${header}
                 addLog(
                   "ERROR",
                   `Python Decision Tree 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.NeuralNetwork) {
+              // Pyodide를 사용하여 Python으로 Neural Network 훈련 (회귀)
+              const modelPurpose = "regression";
+              const hiddenLayerSizes =
+                modelSourceModule.parameters.hidden_layer_sizes || "100";
+              const activation =
+                modelSourceModule.parameters.activation || "relu";
+              const maxIter =
+                parseInt(modelSourceModule.parameters.max_iter, 10) || 200;
+              const randomState =
+                parseInt(modelSourceModule.parameters.random_state, 10) || 2022;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Neural Network 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitNeuralNetworkPython } = pyodideModule;
+
+                const fitResult = await fitNeuralNetworkPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  hiddenLayerSizes,
+                  activation,
+                  maxIter,
+                  randomState,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // Neural Network는 coefficients와 intercept가 없으므로 Feature Importance 사용
+                intercept = 0;
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
+                  // Feature Importance를 coefficients로 사용
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  // Feature Importance가 없는 경우 0으로 설정
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
+
+                // Python에서 계산된 메트릭 사용
+                metrics["R-squared"] = parseFloat(
+                  (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                );
+                metrics["MSE"] = parseFloat(
+                  (fitResult.metrics["MSE"] || 0).toFixed(4)
+                );
+                metrics["RMSE"] = parseFloat(
+                  (fitResult.metrics["RMSE"] || 0).toFixed(4)
+                );
+                metrics["MAE"] = parseFloat(
+                  (fitResult.metrics["MAE"] || 0).toFixed(4)
+                );
+
+                addLog("SUCCESS", `Python으로 Neural Network 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Neural Network 훈련 실패: ${errorMessage}`
                 );
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
@@ -3955,9 +4172,9 @@ ${header}
               const minSamplesLeaf =
                 parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
                 1;
-              const classWeight = 
-                modelPurpose === "classification" 
-                  ? (modelSourceModule.parameters.class_weight || null)
+              const classWeight =
+                modelPurpose === "classification"
+                  ? modelSourceModule.parameters.class_weight || null
                   : null;
 
               if (X.length < ordered_feature_columns.length) {
@@ -3990,7 +4207,10 @@ ${header}
 
                 // Decision Tree는 coefficients와 intercept가 없으므로 Feature Importance 사용
                 intercept = 0;
-                if (fitResult.featureImportances && Object.keys(fitResult.featureImportances).length > 0) {
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
                   // Feature Importance를 coefficients로 사용
                   ordered_feature_columns.forEach((col) => {
                     coefficients[col] = fitResult.featureImportances[col] || 0;
@@ -4039,7 +4259,7 @@ ${header}
                 }
 
                 addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
-                
+
                 // Decision Tree plot_tree 생성을 위한 훈련 데이터와 모델 파라미터 저장
                 const trainingDataForPlot = rows.map((row) => {
                   const dataRow: any = {};
@@ -4049,7 +4269,7 @@ ${header}
                   dataRow[label_column] = row[label_column];
                   return dataRow;
                 });
-                
+
                 // trainedModelOutput에 훈련 데이터와 모델 파라미터 추가
                 if (!trainedModelOutput) {
                   trainedModelOutput = {
@@ -4339,9 +4559,9 @@ ${header}
               const minSamplesLeaf =
                 parseInt(modelSourceModule.parameters.min_samples_leaf, 10) ||
                 1;
-              const classWeight = 
-                modelPurpose === "classification" 
-                  ? (modelSourceModule.parameters.class_weight || null)
+              const classWeight =
+                modelPurpose === "classification"
+                  ? modelSourceModule.parameters.class_weight || null
                   : null;
 
               if (X.length < ordered_feature_columns.length) {
@@ -4374,7 +4594,10 @@ ${header}
 
                 // Decision Tree는 coefficients와 intercept가 없으므로 Feature Importance 사용
                 intercept = 0;
-                if (fitResult.featureImportances && Object.keys(fitResult.featureImportances).length > 0) {
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
                   // Feature Importance를 coefficients로 사용
                   ordered_feature_columns.forEach((col) => {
                     coefficients[col] = fitResult.featureImportances[col] || 0;
@@ -4423,7 +4646,7 @@ ${header}
                 }
 
                 addLog("SUCCESS", `Python으로 Decision Tree 모델 훈련 완료`);
-                
+
                 // Decision Tree plot_tree 생성을 위한 훈련 데이터와 모델 파라미터 저장
                 const trainingDataForPlot = rows.map((row) => {
                   const dataRow: any = {};
@@ -4433,7 +4656,7 @@ ${header}
                   dataRow[label_column] = row[label_column];
                   return dataRow;
                 });
-                
+
                 // trainedModelOutput에 훈련 데이터와 모델 파라미터 추가
                 if (!trainedModelOutput) {
                   trainedModelOutput = {
@@ -4705,6 +4928,79 @@ ${header}
                 );
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
+            } else if (modelSourceModule.type === ModuleType.NeuralNetwork) {
+              // Pyodide를 사용하여 Python으로 Neural Network 훈련 (분류)
+              const modelPurpose = "classification";
+              const hiddenLayerSizes =
+                modelSourceModule.parameters.hidden_layer_sizes || "100";
+              const activation =
+                modelSourceModule.parameters.activation || "relu";
+              const maxIter =
+                parseInt(modelSourceModule.parameters.max_iter, 10) || 200;
+              const randomState =
+                parseInt(modelSourceModule.parameters.random_state, 10) || 2022;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Neural Network 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitNeuralNetworkPython } = pyodideModule;
+
+                const fitResult = await fitNeuralNetworkPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  hiddenLayerSizes,
+                  activation,
+                  maxIter,
+                  randomState,
+                  ordered_feature_columns,
+                  60000 // 타임아웃: 60초
+                );
+
+                // Neural Network는 coefficients와 intercept가 없으므로 메트릭만 사용
+                intercept = 0;
+                ordered_feature_columns.forEach((col) => {
+                  coefficients[col] = 0;
+                });
+
+                // Python에서 계산된 메트릭 사용
+                metrics["Accuracy"] = parseFloat(
+                  (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                );
+                metrics["Precision"] = parseFloat(
+                  (fitResult.metrics["Precision"] || 0).toFixed(4)
+                );
+                metrics["Recall"] = parseFloat(
+                  (fitResult.metrics["Recall"] || 0).toFixed(4)
+                );
+                metrics["F1-Score"] = parseFloat(
+                  (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                );
+                if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                  metrics["ROC-AUC"] = parseFloat(
+                    fitResult.metrics["ROC-AUC"].toFixed(4)
+                  );
+                }
+
+                addLog("SUCCESS", `Python으로 Neural Network 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Neural Network 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
             } else {
               // For other classification models, use simulation for now
               intercept = Math.random() - 0.5;
@@ -4803,6 +5099,7 @@ ${header}
           if (
             trainedModel.modelType === ModuleType.KNN ||
             trainedModel.modelType === ModuleType.DecisionTree ||
+            trainedModel.modelType === ModuleType.NeuralNetwork ||
             trainedModel.modelType === ModuleType.SVM ||
             trainedModel.modelType === ModuleType.LinearDiscriminantAnalysis ||
             trainedModel.modelType === ModuleType.NaiveBayes
@@ -4956,6 +5253,40 @@ ${header}
                 );
 
                 addLog("SUCCESS", "Python으로 Decision Tree 모델 예측 완료");
+              } else if (trainedModel.modelType === ModuleType.NeuralNetwork) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 Neural Network 모델 예측 수행 중..."
+                );
+
+                const modelPurpose =
+                  modelDefModule.parameters.model_purpose || "classification";
+                const hiddenLayerSizes =
+                  modelDefModule.parameters.hidden_layer_sizes || "100";
+                const activation =
+                  modelDefModule.parameters.activation || "relu";
+                const maxIter =
+                  parseInt(modelDefModule.parameters.max_iter, 10) || 200;
+                const randomState =
+                  parseInt(modelDefModule.parameters.random_state, 10) || 2022;
+
+                const { scoreNeuralNetworkPython } = pyodideModule;
+                result = await scoreNeuralNetworkPython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  modelIsClassification ? "classification" : "regression",
+                  hiddenLayerSizes,
+                  activation,
+                  maxIter,
+                  randomState,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog("SUCCESS", "Python으로 Neural Network 모델 예측 완료");
               } else if (trainedModel.modelType === ModuleType.SVM) {
                 addLog(
                   "INFO",
@@ -7318,15 +7649,15 @@ ${header}
 
                   {/* 현재 모델 저장 (개인용) */}
                   <button
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      
+
                       // 이미 저장 중이면 중복 실행 방지
                       if (isSavingRef.current) {
                         return;
                       }
-                      
+
                       if (modules.length === 0) {
                         addLog(
                           "WARN",
@@ -7338,6 +7669,9 @@ ${header}
 
                       // 저장 시작 플래그 설정
                       isSavingRef.current = true;
+
+                      // 다음 이벤트 루프에서 prompt 실행하여 첫 번째 클릭이 제대로 처리되도록 함
+                      await new Promise((resolve) => setTimeout(resolve, 0));
 
                       const modelName = prompt(
                         "모델 이름을 입력하세요:",
@@ -7430,7 +7764,7 @@ ${header}
                         `모델 "${trimmedName}"이 저장되었습니다. (개인용)`
                       );
                       setIsMyWorkMenuOpen(false);
-                      
+
                       // 저장 완료 후 플래그 해제 (약간의 지연을 두어 중복 클릭 방지)
                       setTimeout(() => {
                         isSavingRef.current = false;

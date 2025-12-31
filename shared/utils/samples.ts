@@ -9,15 +9,37 @@
  */
 export async function loadFolderSamples(apiUrl: string): Promise<Array<{ filename: string; name: string; data: any }>> {
   try {
+    console.log(`Fetching samples from: ${apiUrl}`);
     const response = await fetch(apiUrl);
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+    
     if (!response.ok) {
-      console.error(`Failed to fetch samples list: ${response.status} ${response.statusText}`);
+      const errorText = await response.text().catch(() => '');
+      console.error(`Failed to fetch samples list: ${response.status} ${response.statusText}`, errorText);
+      if (response.status === 0 || errorText.includes('Failed to fetch')) {
+        console.error('서버가 실행 중이지 않거나 연결할 수 없습니다. 서버를 시작하세요: pnpm run server');
+      }
       return [];
     }
     const samples = await response.json();
-    return Array.isArray(samples) ? samples : [];
-  } catch (error) {
+    console.log(`Received ${Array.isArray(samples) ? samples.length : 0} samples from server`);
+    
+    if (!Array.isArray(samples)) {
+      console.error("Samples API returned non-array response:", samples);
+      return [];
+    }
+    
+    if (samples.length > 0) {
+      console.log('Sample names:', samples.map((s: any) => s.name || s.filename));
+    }
+    
+    return samples;
+  } catch (error: any) {
     console.error("Error loading folder samples:", error);
+    console.error("Error details:", error.message, error.stack);
+    if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+      console.error('서버 연결 실패. 서버를 시작하세요: pnpm run server 또는 pnpm run dev:full');
+    }
     return [];
   }
 }
@@ -52,6 +74,7 @@ export async function loadSampleFromFolder(
     return null;
   }
 }
+
 
 
 

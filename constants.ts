@@ -149,6 +149,13 @@ export const TOOLBOX_MODULES = [
       "An ensemble of decision trees for classification or regression.",
   },
   {
+    type: ModuleType.NeuralNetwork,
+    name: "Neural Network",
+    icon: ShareIcon,
+    description:
+      "A multi-layer perceptron for classification or regression.",
+  },
+  {
     type: ModuleType.SVM,
     name: "Support Vector Machine",
     icon: ShieldCheckIcon,
@@ -480,6 +487,19 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       outputs: [{ name: "model_out", type: "model" }],
     },
     {
+      type: ModuleType.NeuralNetwork,
+      status: ModuleStatus.Pending,
+      parameters: {
+        model_purpose: "classification",
+        hidden_layer_sizes: "100",
+        activation: "relu",
+        max_iter: 200,
+        random_state: 2022,
+      },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
       type: ModuleType.PoissonRegression,
       status: ModuleStatus.Pending,
       parameters: { distribution_type: "Poisson", max_iter: 100 },
@@ -533,6 +553,7 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
         max_depth: null,
         min_samples_split: 2,
         min_samples_leaf: 1,
+        class_weight: null,
       },
       inputs: [],
       outputs: [{ name: "model_out", type: "model" }],
@@ -934,6 +955,196 @@ export const SAMPLE_MODELS = [
       },
       {
         fromModuleIndex: 3,
+        fromPort: "test_data_out",
+        toModuleIndex: 6,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 4,
+        fromPort: "model_out",
+        toModuleIndex: 5,
+        toPort: "model_in",
+      },
+      {
+        fromModuleIndex: 5,
+        fromPort: "trained_model_out",
+        toModuleIndex: 6,
+        toPort: "model_in",
+      },
+      {
+        fromModuleIndex: 6,
+        fromPort: "scored_data_out",
+        toModuleIndex: 7,
+        toPort: "data_in",
+      },
+    ],
+  },
+  {
+    name: "Decision Tree",
+    modules: [
+      {
+        type: ModuleType.LoadData,
+        position: { x: 100, y: 100 },
+        name: "Load Data",
+      },
+      {
+        type: ModuleType.SelectData,
+        position: { x: 100, y: 250 },
+        name: "Select Data 1",
+      },
+      {
+        type: ModuleType.SplitData,
+        position: { x: 100, y: 400 },
+        name: "Split Data",
+      },
+      {
+        type: ModuleType.Statistics,
+        position: { x: 400, y: 100 },
+        name: "Statistics 1",
+      },
+      {
+        type: ModuleType.DecisionTree,
+        position: { x: 100, y: 550 },
+        name: "Decision Tree 1",
+      },
+      {
+        type: ModuleType.TrainModel,
+        position: { x: 350, y: 550 },
+        name: "Train Model",
+      },
+      {
+        type: ModuleType.ScoreModel,
+        position: { x: 600, y: 550 },
+        name: "Score Model",
+      },
+      {
+        type: ModuleType.EvaluateModel,
+        position: { x: 850, y: 550 },
+        name: "Evaluate Model",
+      },
+    ],
+    connections: [
+      {
+        fromModuleIndex: 0,
+        fromPort: "data_out",
+        toModuleIndex: 1,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 0,
+        fromPort: "data_out",
+        toModuleIndex: 3,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 1,
+        fromPort: "data_out",
+        toModuleIndex: 2,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 2,
+        fromPort: "train_data_out",
+        toModuleIndex: 5,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 2,
+        fromPort: "test_data_out",
+        toModuleIndex: 6,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 4,
+        fromPort: "model_out",
+        toModuleIndex: 5,
+        toPort: "model_in",
+      },
+      {
+        fromModuleIndex: 5,
+        fromPort: "trained_model_out",
+        toModuleIndex: 6,
+        toPort: "model_in",
+      },
+      {
+        fromModuleIndex: 6,
+        fromPort: "scored_data_out",
+        toModuleIndex: 7,
+        toPort: "data_in",
+      },
+    ],
+  },
+  {
+    name: "Neural Network",
+    modules: [
+      {
+        type: ModuleType.LoadData,
+        position: { x: 100, y: 100 },
+        name: "Load Data",
+      },
+      {
+        type: ModuleType.SelectData,
+        position: { x: 100, y: 250 },
+        name: "Select Data 1",
+      },
+      {
+        type: ModuleType.SplitData,
+        position: { x: 100, y: 400 },
+        name: "Split Data",
+      },
+      {
+        type: ModuleType.Statistics,
+        position: { x: 400, y: 100 },
+        name: "Statistics 1",
+      },
+      {
+        type: ModuleType.NeuralNetwork,
+        position: { x: 100, y: 550 },
+        name: "Neural Network 1",
+      },
+      {
+        type: ModuleType.TrainModel,
+        position: { x: 350, y: 550 },
+        name: "Train Model",
+      },
+      {
+        type: ModuleType.ScoreModel,
+        position: { x: 600, y: 550 },
+        name: "Score Model",
+      },
+      {
+        type: ModuleType.EvaluateModel,
+        position: { x: 850, y: 550 },
+        name: "Evaluate Model",
+      },
+    ],
+    connections: [
+      {
+        fromModuleIndex: 0,
+        fromPort: "data_out",
+        toModuleIndex: 1,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 0,
+        fromPort: "data_out",
+        toModuleIndex: 3,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 1,
+        fromPort: "data_out",
+        toModuleIndex: 2,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 2,
+        fromPort: "train_data_out",
+        toModuleIndex: 5,
+        toPort: "data_in",
+      },
+      {
+        fromModuleIndex: 2,
         fromPort: "test_data_out",
         toModuleIndex: 6,
         toPort: "data_in",
