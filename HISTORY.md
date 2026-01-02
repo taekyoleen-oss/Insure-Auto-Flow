@@ -1,5 +1,33 @@
 # Change History
 
+## 2026-01-02 15:19:03
+
+### fix(build): Fix import paths in App.tsx for Vercel deployment
+
+**Description:**
+- App.tsx에서 shared 폴더 import 경로 수정 (../shared → ./shared)
+- Vercel 빌드 시 발생하던 "Could not resolve ../shared/utils/fileOperations" 오류 해결
+- fileOperations와 samples 유틸리티 import 경로 수정
+
+**Files Affected:**
+- `App.tsx` - import 경로 수정 (../shared/utils/fileOperations → ./shared/utils/fileOperations, ../shared/utils/samples → ./shared/utils/samples)
+
+**Reason:**
+- App.tsx가 루트 디렉토리에 있고 shared 폴더도 루트 디렉토리에 있어서 상대 경로가 잘못되었음
+- Vercel 빌드 환경에서 경로 해석 오류로 인한 빌드 실패 해결
+
+**Commit Hash:** (will be updated after commit)
+
+**Recovery Command:**
+```bash
+# Backup and recover
+git stash push -u -m "백업"
+git reset --hard <커밋해시>
+
+# Or direct recovery
+git reset --hard <커밋해시>
+```
+
 ## 2025-01-XX XX:XX:XX
 
 ### feat(modules): Update Random Forest module and fix Decision Tree visualization
