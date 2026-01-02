@@ -516,6 +516,7 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
         n_estimators: 100,
         criterion: "gini",
         max_depth: null,
+        max_features: null,
       },
       inputs: [],
       outputs: [{ name: "model_out", type: "model" }],

@@ -997,7 +997,7 @@ def create_decision_tree(model_purpose: str = 'classification', criterion: str =
 
 
 def create_random_forest(model_purpose: str = 'classification', n_estimators: int = 100,
-                        criterion: str = 'gini', max_depth: int = None):
+                        criterion: str = 'gini', max_depth: int = None, max_features = None):
     """
     랜덤 포레스트 모델을 생성합니다.
     
@@ -1011,6 +1011,14 @@ def create_random_forest(model_purpose: str = 'classification', n_estimators: in
         분할 기준
     max_depth : int
         최대 깊이
+    max_features : str, int, float, or None
+        각 트리에서 고려할 최대 특징 수
+        - None: 모든 특징 사용
+        - 'auto': sqrt(n_features)
+        - 'sqrt': sqrt(n_features)
+        - 'log2': log2(n_features)
+        - int: 고정된 특징 수
+        - float: 특징 비율
     
     Returns:
     --------
@@ -1023,6 +1031,7 @@ def create_random_forest(model_purpose: str = 'classification', n_estimators: in
             n_estimators=n_estimators,
             criterion=criterion.lower(),
             max_depth=max_depth,
+            max_features=max_features,
             random_state=42
         )
     else:
@@ -1031,6 +1040,7 @@ def create_random_forest(model_purpose: str = 'classification', n_estimators: in
             n_estimators=n_estimators,
             criterion=criterion_reg,
             max_depth=max_depth,
+            max_features=max_features,
             random_state=42
         )
     

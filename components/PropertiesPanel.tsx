@@ -2114,17 +2114,54 @@ const renderParameters = (
             options={["classification", "regression"]}
           />
           <PropertyInput
-            label="N Estimators"
+            label="n_estimators"
             type="number"
             value={module.parameters.n_estimators}
             onChange={(v) => onParamChange("n_estimators", v)}
           />
           <PropertyInput
-            label="Max Depth"
+            label="max_depth"
             type="number"
             value={module.parameters.max_depth}
             onChange={(v) => onParamChange("max_depth", v)}
           />
+          <PropertySelect
+            label="max_features"
+            value={
+              module.parameters.max_features === null
+                ? "None"
+                : typeof module.parameters.max_features === "number"
+                ? `custom_${module.parameters.max_features}`
+                : String(module.parameters.max_features)
+            }
+            onChange={(v) => {
+              if (v === "None") {
+                onParamChange("max_features", null);
+              } else if (v === "auto" || v === "sqrt" || v === "log2") {
+                onParamChange("max_features", v);
+              } else if (v.startsWith("custom_")) {
+                const numValue = parseFloat(v.replace("custom_", ""));
+                if (!isNaN(numValue)) {
+                  onParamChange("max_features", numValue);
+                }
+              }
+            }}
+            options={["None", "auto", "sqrt", "log2"]}
+          />
+          {typeof module.parameters.max_features === "number" && (
+            <PropertyInput
+              label="max_features (숫자)"
+              type="number"
+              value={module.parameters.max_features}
+              onChange={(v) => {
+                if (typeof v === "number") {
+                  onParamChange("max_features", v);
+                } else if (v === "" || v === null) {
+                  onParamChange("max_features", null);
+                }
+              }}
+            />
+          )}
           <PropertySelect
             label="Criterion"
             value={module.parameters.criterion}

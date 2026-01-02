@@ -153,6 +153,14 @@ export interface TrainedModelOutput {
   labelColumn: string;
   tuningSummary?: TuningSummary;
   statsModelsResult?: StatsModelsResultOutput; // statsmodels 결과 (포아송/음이항 회귀용)
+  trainingData?: Record<string, any>[]; // Decision Tree plot 생성을 위한 훈련 데이터
+  modelParameters?: { // Decision Tree plot 생성을 위한 모델 파라미터
+    criterion?: string;
+    maxDepth?: number | null;
+    minSamplesSplit?: number;
+    minSamplesLeaf?: number;
+    classWeight?: string | null;
+  };
 }
 
 export type StatsModelFamily =
