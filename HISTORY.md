@@ -1,5 +1,47 @@
 # Change History
 
+## 2025-01-XX XX:XX:XX
+
+### feat(modules): Add Column Plot module with comprehensive chart visualization
+
+**Description:**
+- Column Plot 모듈 추가: 단일열 또는 2개열 선택을 통한 다양한 차트 시각화 기능
+- 컬럼 데이터 타입(숫자형/범주형)에 따라 자동으로 적절한 차트 옵션 제공
+- View Details 모달에서 차트 타입 선택 및 실시간 차트 생성
+- matplotlib 기반 Python 차트 생성 (seaborn 의존성 제거)
+- 지원하는 차트 타입:
+  - 단일열 숫자형: Histogram, KDE Plot, Boxplot, Violin Plot, ECDF Plot, QQ-Plot, Line Plot, Area Plot
+  - 단일열 범주형: Bar Plot, Count Plot, Pie Chart, Frequency Table
+  - 2개열 숫자형+숫자형: Scatter Plot, Hexbin Plot, Joint Plot, Line Plot, Regression Plot, Heatmap
+  - 2개열 숫자형+범주형: Box Plot, Violin Plot, Bar Plot, Strip Plot, Swarm Plot
+  - 2개열 범주형+범주형: Grouped Bar Plot, Heatmap, Mosaic Plot
+
+**Files Affected:**
+- `types.ts` - ModuleType.ColumnPlot 및 ColumnPlotOutput 타입 추가
+- `constants.ts` - Column Plot 모듈 정의 추가
+- `components/Toolbox.tsx` - Column Plot 모듈을 Toolbox에 추가
+- `components/PropertiesPanel.tsx` - Column Plot 속성 UI 구현 (단일열/2개열 선택)
+- `components/ColumnPlotPreviewModal.tsx` - View Details 모달 생성 (새 파일)
+- `utils/pyodideRunner.ts` - createColumnPlotPython 함수 추가 (matplotlib만 사용)
+- `App.tsx` - Column Plot 실행 로직 및 모달 연결 추가
+
+**Reason:**
+- 데이터 시각화 기능 확장
+- 사용자가 데이터를 다양한 방식으로 시각화할 수 있도록 지원
+- 컬럼 타입에 따른 자동 차트 옵션 제공으로 사용자 편의성 향상
+
+**Commit Hash:** 1b7ea562b784a8fbd28a3e8041efd74f6ee6d8cf
+
+**Recovery Command:**
+```bash
+# Backup and recover
+git stash push -u -m "백업"
+git reset --hard 1b7ea562b784a8fbd28a3e8041efd74f6ee6d8cf
+
+# Or direct recovery
+git reset --hard 1b7ea562b784a8fbd28a3e8041efd74f6ee6d8cf
+```
+
 ## 2025-12-14 09:35:26
 
 ### feat(pca): Improve PCA visualization with JavaScript-based implementation
