@@ -16,7 +16,7 @@
 - App.tsx가 루트 디렉토리에 있고 shared 폴더도 루트 디렉토리에 있어서 상대 경로가 잘못되었음
 - Vercel 빌드 환경에서 경로 해석 오류로 인한 빌드 실패 해결
 
-**Commit Hash:** (will be updated after commit)
+**Commit Hash:** 371aceb
 
 **Recovery Command:**
 ```bash
