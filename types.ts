@@ -3,6 +3,8 @@ export enum ModuleType {
   LoadData = "LoadData",
   Statistics = "Statistics", // New module type
   SelectData = "SelectData",
+  DataFiltering = "DataFiltering",
+  ColumnPlot = "ColumnPlot",
   HandleMissingValues = "HandleMissingValues",
   TransformData = "TransformData",
   EncodeCategorical = "EncodeCategorical",
@@ -18,7 +20,6 @@ export enum ModuleType {
   NegativeBinomialRegression = "NegativeBinomialRegression",
   DecisionTree = "DecisionTree",
   RandomForest = "RandomForest",
-  NeuralNetwork = "NeuralNetwork",
   SVM = "SVM",
   LinearDiscriminantAnalysis = "LinearDiscriminantAnalysis",
   NaiveBayes = "NaiveBayes",
@@ -35,16 +36,7 @@ export enum ModuleType {
   DBSCAN = "DBSCAN",
   PrincipalComponentAnalysis = "PrincipalComponentAnalysis",
 
-  // Traditional Analysis - Statsmodels Models
-  OLSModel = "OLSModel",
-  LogisticModel = "LogisticModel",
-  PoissonModel = "PoissonModel",
-  QuasiPoissonModel = "QuasiPoissonModel",
-  NegativeBinomialModel = "NegativeBinomialModel",
-  DiversionChecker = "DiversionChecker",
-  EvaluateStat = "EvaluateStat",
-
-  // Legacy/StatModels - Keeping for advanced models (Gamma, Tweedie)
+  // Legacy/StatModels - Keeping for now
   StatModels = "StatModels",
   ResultModel = "ResultModel",
   PredictModel = "PredictModel",
@@ -161,16 +153,12 @@ export interface TrainedModelOutput {
   labelColumn: string;
   tuningSummary?: TuningSummary;
   statsModelsResult?: StatsModelsResultOutput; // statsmodels 결과 (포아송/음이항 회귀용)
-  trainingData?: any[]; // Decision Tree plot_tree 생성을 위한 훈련 데이터 (선택적)
-  modelParameters?: Record<string, any>; // 모델 파라미터 (Decision Tree 등)
 }
 
 export type StatsModelFamily =
   | "OLS"
   | "Logistic"
-  | "Logit"
   | "Poisson"
-  | "QuasiPoisson"
   | "NegativeBinomial"
   | "Gamma"
   | "Tweedie";
@@ -231,42 +219,6 @@ export interface EvaluationOutput {
   confusionMatrix?: ConfusionMatrix;
   threshold?: number;
   thresholdMetrics?: ThresholdMetric[]; // 여러 threshold에 대한 precision/recall
-}
-
-export interface DiversionCheckerOutput {
-  type: "DiversionCheckerOutput";
-  phi: number;
-  recommendation: "Poisson" | "QuasiPoisson" | "NegativeBinomial";
-  poissonAic: number | null;
-  negativeBinomialAic: number | null;
-  aicComparison: string | null;
-  cameronTrivediCoef: number;
-  cameronTrivediPvalue: number;
-  cameronTrivediConclusion: string;
-  methodsUsed: string[];
-  results: {
-    phi: number;
-    phi_interpretation: string;
-    recommendation: string;
-    poisson_aic: number | null;
-    negative_binomial_aic: number | null;
-    cameron_trivedi_coef: number;
-    cameron_trivedi_pvalue: number;
-    cameron_trivedi_conclusion: string;
-  };
-}
-
-export interface EvaluateStatOutput {
-  type: "EvaluateStatOutput";
-  modelType: string;
-  metrics: Record<string, number | string>;
-  residuals?: number[];
-  deviance?: number;
-  pearsonChi2?: number;
-  dispersion?: number;
-  aic?: number;
-  bic?: number;
-  logLikelihood?: number;
 }
 
 // --- New Unsupervised Learning Outputs ---
@@ -377,6 +329,18 @@ export interface NormalizerOutput {
   >;
 }
 
+export interface ColumnPlotOutput {
+  type: "ColumnPlotOutput";
+  plot_type: "single" | "double";
+  column1: string;
+  column2?: string;
+  column1Type: "number" | "string";
+  column2Type?: "number" | "string";
+  availableCharts: string[];
+  selectedChart?: string;
+  imageBase64?: string; // 차트 이미지 (base64)
+}
+
 export interface CanvasModule {
   id: string;
   name: string;
@@ -399,22 +363,18 @@ export interface CanvasModule {
     | XolContractOutput
     | FinalXolPriceOutput
     | EvaluationOutput
-    | DiversionCheckerOutput
-    | EvaluateStatOutput
     | KMeansOutput
     | HierarchicalClusteringOutput
     | PCAOutput
     | DBSCANOutput
     | MissingHandlerOutput
     | EncoderOutput
-    | NormalizerOutput;
+    | NormalizerOutput
+    | ColumnPlotOutput;
   // Shape-specific properties
   shapeData?: {
     // For TextBox
     text?: string;
-    width?: number;
-    height?: number;
-    fontSize?: number;
     // For GroupBox
     moduleIds?: string[]; // IDs of modules in this group
     bounds?: { x: number; y: number; width: number; height: number }; // Bounding box of the group

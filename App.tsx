@@ -82,6 +82,7 @@ import { XoLPricePreviewModal } from "./components/XoLPricePreviewModal";
 import { FinalXolPricePreviewModal } from "./components/FinalXolPricePreviewModal";
 import { PredictModelPreviewModal } from "./components/PredictModelPreviewModal";
 import { EvaluationPreviewModal } from "./components/EvaluationPreviewModal";
+import { ColumnPlotPreviewModal } from "./components/ColumnPlotPreviewModal";
 import { AIPipelineFromGoalModal } from "./components/AIPipelineFromGoalModal";
 import { AIPipelineFromDataModal } from "./components/AIPipelineFromDataModal";
 import { AIPlanDisplayModal } from "./components/AIPlanDisplayModal";
@@ -175,6 +176,8 @@ const App: React.FC = () => {
   const [viewingEvaluation, setViewingEvaluation] =
     useState<CanvasModule | null>(null);
   const [viewingPredictModel, setViewingPredictModel] =
+    useState<CanvasModule | null>(null);
+  const [viewingColumnPlot, setViewingColumnPlot] =
     useState<CanvasModule | null>(null);
 
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -2085,6 +2088,8 @@ ${header}
         setViewingEvaluation(module);
       } else if (module.outputData.type === "StatisticsOutput") {
         setViewingDataForModule(module);
+      } else if (module.type === ModuleType.ColumnPlot && module.outputData.type === "ColumnPlotOutput") {
+        setViewingColumnPlot(module);
       } else {
         setViewingDataForModule(module);
       }
@@ -2102,6 +2107,7 @@ ${header}
     setViewingFinalXolPrice(null);
     setViewingEvaluation(null);
     setViewingPredictModel(null);
+    setViewingColumnPlot(null);
   };
 
   // Model definition modules that should not be executed directly in Run All
@@ -2564,6 +2570,142 @@ ${header}
               "Input data not available or is of the wrong type."
             );
           }
+        } else if (module.type === ModuleType.DataFiltering) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const { filter_type = "row", conditions = [], logical_operator = "AND" } = module.parameters;
+
+          if (!conditions || conditions.length === 0) {
+            throw new Error("At least one condition is required for filtering.");
+          }
+
+          // Pyodide를 사용하여 Python으로 필터링 수행
+          try {
+            addLog("INFO", "Pyodide를 사용하여 Python으로 데이터 필터링 수행 중...");
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { filterDataPython } = pyodideModule;
+
+            const result = await filterDataPython(
+              inputData.rows || [],
+              filter_type,
+              conditions,
+              logical_operator,
+              60000 // 타임아웃: 60초
+            );
+
+            newOutputData = {
+              type: "DataPreview",
+              columns: result.columns,
+              totalRowCount: result.rows.length,
+              rows: result.rows,
+            };
+
+            addLog("SUCCESS", "Python으로 데이터 필터링 완료");
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python DataFiltering 실패: ${errorMessage}`);
+            throw new Error(`데이터 필터링 실패: ${errorMessage}`);
+          }
+        } else if (module.type === ModuleType.ColumnPlot) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const { plot_type = "single", column1 = "", column2 = "" } = module.parameters;
+
+          if (!column1) {
+            throw new Error("Column 1 must be selected.");
+          }
+
+          if (plot_type === "double" && !column2) {
+            throw new Error("Column 2 must be selected for two-column plots.");
+          }
+
+          // 컬럼 타입 확인
+          const col1 = inputData.columns.find((c) => c.name === column1);
+          const col2 = column2
+            ? inputData.columns.find((c) => c.name === column2)
+            : undefined;
+
+          if (!col1) {
+            throw new Error(`Column '${column1}' not found in input data.`);
+          }
+
+          const column1Type: "number" | "string" =
+            col1.type === "number" ? "number" : "string";
+          const column2Type: "number" | "string" | undefined = col2
+            ? col2.type === "number"
+              ? "number"
+              : "string"
+            : undefined;
+
+          // 사용 가능한 차트 타입 결정
+          const getAvailableCharts = (
+            plot_type: "single" | "double",
+            column1Type: "number" | "string",
+            column2Type?: "number" | "string"
+          ): string[] => {
+            if (plot_type === "single") {
+              if (column1Type === "number") {
+                return [
+                  "Histogram",
+                  "KDE Plot",
+                  "Boxplot",
+                  "Violin Plot",
+                  "ECDF Plot",
+                  "QQ-Plot",
+                  "Line Plot",
+                  "Area Plot",
+                ];
+              } else {
+                return ["Bar Plot", "Count Plot", "Pie Chart", "Frequency Table"];
+              }
+            } else {
+              if (column1Type === "number" && column2Type === "number") {
+                return [
+                  "Scatter Plot",
+                  "Hexbin Plot",
+                  "Joint Plot",
+                  "Line Plot",
+                  "Regression Plot",
+                  "Heatmap",
+                ];
+              } else if (
+                (column1Type === "number" && column2Type === "string") ||
+                (column1Type === "string" && column2Type === "number")
+              ) {
+                return [
+                  "Box Plot",
+                  "Violin Plot",
+                  "Bar Plot",
+                  "Strip Plot",
+                  "Swarm Plot",
+                ];
+              } else {
+                return ["Grouped Bar Plot", "Heatmap", "Mosaic Plot"];
+              }
+            }
+          };
+
+          const availableCharts = getAvailableCharts(
+            plot_type as "single" | "double",
+            column1Type,
+            column2Type
+          );
+
+          // ColumnPlotOutput 생성 (실제 차트는 View Details에서 생성)
+          newOutputData = {
+            type: "ColumnPlotOutput",
+            plot_type: plot_type as "single" | "double",
+            column1,
+            column2: column2 || undefined,
+            column1Type,
+            column2Type,
+            availableCharts,
+          };
+
+          addLog("SUCCESS", "Column Plot 설정 완료");
         } else if (module.type === ModuleType.HandleMissingValues) {
           const inputData = getSingleInputData(module.id) as DataPreview;
           if (!inputData) throw new Error("Input data not available.");
@@ -8162,6 +8304,15 @@ ${header}
       {viewingPredictModel && (
         <PredictModelPreviewModal
           module={viewingPredictModel}
+          projectName={projectName}
+          onClose={handleCloseModal}
+          modules={modules}
+          connections={connections}
+        />
+      )}
+      {viewingColumnPlot && (
+        <ColumnPlotPreviewModal
+          module={viewingColumnPlot}
           projectName={projectName}
           onClose={handleCloseModal}
           modules={modules}

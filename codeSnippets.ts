@@ -100,6 +100,210 @@ selected_columns = [col for col, sel in column_selections.items() if sel.get('se
 # Execution
 # selected_data = select_data(dataframe, selected_columns)
 `,
+    DataFiltering: `
+import pandas as pd
+import numpy as np
+
+def filter_data(df: pd.DataFrame, filter_type: str, conditions: list, logical_operator: str = "AND"):
+    """
+    데이터프레임을 필터링합니다.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        필터링할 데이터프레임
+    filter_type : str
+        필터링 타입: "row" (행 필터링) 또는 "column" (열 필터링)
+    conditions : list
+        필터링 조건 리스트: [{"column": str, "operator": str, "value": any}, ...]
+    logical_operator : str
+        조건 간 논리 연산자: "AND" 또는 "OR"
+    
+    Returns:
+    --------
+    pd.DataFrame
+        필터링된 데이터프레임
+    """
+    print(f"필터링 타입: {filter_type}")
+    print(f"조건 개수: {len(conditions)}")
+    print(f"논리 연산자: {logical_operator}")
+    
+    if filter_type == "row":
+        # 행 필터링
+        if not conditions or len(conditions) == 0:
+            print("경고: 조건이 없어 원본 데이터를 반환합니다.")
+            return df.copy()
+        
+        # 각 조건에 대한 마스크 생성
+        masks = []
+        for i, condition in enumerate(conditions):
+            column = condition.get("column", "")
+            operator = condition.get("operator", "==")
+            value = condition.get("value", "")
+            
+            if not column or column not in df.columns:
+                print(f"경고: 조건 {i+1}의 컬럼 '{column}'이 데이터프레임에 없습니다. 건너뜁니다.")
+                continue
+            
+            try:
+                # 값 타입 변환 시도
+                col_type = df[column].dtype
+                if col_type in [np.int64, np.float64] and value != "":
+                    try:
+                        if "." in str(value):
+                            value = float(value)
+                        else:
+                            value = int(value)
+                    except:
+                        pass  # 문자열로 유지
+                
+                # 연산자에 따라 마스크 생성
+                if operator == "==":
+                    mask = df[column] == value
+                elif operator == "!=":
+                    mask = df[column] != value
+                elif operator == ">":
+                    mask = df[column] > value
+                elif operator == "<":
+                    mask = df[column] < value
+                elif operator == ">=":
+                    mask = df[column] >= value
+                elif operator == "<=":
+                    mask = df[column] <= value
+                elif operator == "contains":
+                    mask = df[column].astype(str).str.contains(str(value), na=False, case=False)
+                elif operator == "not_contains":
+                    mask = ~df[column].astype(str).str.contains(str(value), na=False, case=False)
+                elif operator == "is_null":
+                    mask = df[column].isnull()
+                elif operator == "is_not_null":
+                    mask = df[column].notnull()
+                else:
+                    print(f"경고: 알 수 없는 연산자 '{operator}'. 건너뜁니다.")
+                    continue
+                
+                masks.append(mask)
+                print(f"조건 {i+1}: {column} {operator} {value} - {mask.sum()}개 행 일치")
+            except Exception as e:
+                print(f"경고: 조건 {i+1} 처리 중 오류 발생: {e}. 건너뜁니다.")
+                continue
+        
+        if not masks:
+            print("경고: 유효한 조건이 없어 원본 데이터를 반환합니다.")
+            return df.copy()
+        
+        # 논리 연산자에 따라 마스크 결합
+        if logical_operator == "AND":
+            final_mask = masks[0]
+            for mask in masks[1:]:
+                final_mask = final_mask & mask
+        else:  # OR
+            final_mask = masks[0]
+            for mask in masks[1:]:
+                final_mask = final_mask | mask
+        
+        filtered_df = df[final_mask].copy()
+        print(f"필터링 완료. {len(df)} -> {len(filtered_df)} 행")
+        return filtered_df
+    
+    elif filter_type == "column":
+        # 열 필터링 (조건에 맞는 열만 선택)
+        if not conditions or len(conditions) == 0:
+            print("경고: 조건이 없어 원본 데이터를 반환합니다.")
+            return df.copy()
+        
+        columns_to_keep = []
+        for i, condition in enumerate(conditions):
+            column = condition.get("column", "")
+            operator = condition.get("operator", "==")
+            value = condition.get("value", "")
+            
+            if not column:
+                continue
+            
+            # 열이 존재하는지 확인
+            if column not in df.columns:
+                print(f"경고: 조건 {i+1}의 컬럼 '{column}'이 데이터프레임에 없습니다. 건너뜁니다.")
+                continue
+            
+            try:
+                # 열의 값에 대한 조건 확인
+                col_values = df[column]
+                col_type = col_values.dtype
+                
+                # 값 타입 변환 시도
+                if col_type in [np.int64, np.float64] and value != "":
+                    try:
+                        if "." in str(value):
+                            value = float(value)
+                        else:
+                            value = int(value)
+                    except:
+                        pass
+                
+                # 연산자에 따라 조건 확인
+                if operator == "==":
+                    matches = (col_values == value).any()
+                elif operator == "!=":
+                    matches = (col_values != value).any()
+                elif operator == ">":
+                    matches = (col_values > value).any()
+                elif operator == "<":
+                    matches = (col_values < value).any()
+                elif operator == ">=":
+                    matches = (col_values >= value).any()
+                elif operator == "<=":
+                    matches = (col_values <= value).any()
+                elif operator == "contains":
+                    matches = col_values.astype(str).str.contains(str(value), na=False, case=False).any()
+                elif operator == "not_contains":
+                    matches = (~col_values.astype(str).str.contains(str(value), na=False, case=False)).any()
+                elif operator == "is_null":
+                    matches = col_values.isnull().any()
+                elif operator == "is_not_null":
+                    matches = col_values.notnull().any()
+                else:
+                    print(f"경고: 알 수 없는 연산자 '{operator}'. 건너뜁니다.")
+                    continue
+                
+                if matches:
+                    columns_to_keep.append(column)
+                    print(f"조건 {i+1}: {column} {operator} {value} - 일치하여 열 유지")
+            except Exception as e:
+                print(f"경고: 조건 {i+1} 처리 중 오류 발생: {e}. 건너뜁니다.")
+                continue
+        
+        if logical_operator == "AND":
+            # AND: 모든 조건을 만족하는 열만 유지
+            if len(columns_to_keep) == len(conditions):
+                filtered_df = df[columns_to_keep].copy()
+            else:
+                print("경고: 모든 조건을 만족하는 열이 없어 빈 데이터프레임을 반환합니다.")
+                filtered_df = pd.DataFrame()
+        else:  # OR
+            # OR: 하나라도 조건을 만족하는 열 유지
+            if columns_to_keep:
+                filtered_df = df[columns_to_keep].copy()
+            else:
+                print("경고: 조건을 만족하는 열이 없어 빈 데이터프레임을 반환합니다.")
+                filtered_df = pd.DataFrame()
+        
+        print(f"필터링 완료. {len(df.columns)} -> {len(filtered_df.columns)} 열")
+        return filtered_df
+    
+    else:
+        print(f"경고: 알 수 없는 필터 타입 '{filter_type}'. 원본 데이터를 반환합니다.")
+        return df.copy()
+
+# Assuming 'dataframe' is passed from the previous step
+# Parameters from UI
+p_filter_type = {filter_type}
+p_conditions = {conditions}
+p_logical_operator = {logical_operator}
+
+# Execution
+# filtered_data = filter_data(dataframe, p_filter_type, p_conditions, p_logical_operator)
+`,
     HandleMissingValues: `
 import pandas as pd
 import numpy as np

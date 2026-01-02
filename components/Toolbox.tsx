@@ -20,6 +20,8 @@ const preprocessTypes = [
   ModuleType.LoadData,
   ModuleType.Statistics,
   ModuleType.SelectData,
+  ModuleType.DataFiltering,
+  ModuleType.ColumnPlot,
   ModuleType.HandleMissingValues,
   ModuleType.TransformData,
   ModuleType.EncodeCategorical,

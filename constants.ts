@@ -45,6 +45,18 @@ export const TOOLBOX_MODULES = [
     description: "Selects or removes columns from the data.",
   },
   {
+    type: ModuleType.DataFiltering,
+    name: "Data Filtering",
+    icon: FilterIcon,
+    description: "Filters rows or columns based on specified conditions.",
+  },
+  {
+    type: ModuleType.ColumnPlot,
+    name: "Column Plot",
+    icon: BarChartIcon,
+    description: "Creates various plots for single or double columns.",
+  },
+  {
     type: ModuleType.TransitionData,
     name: "Transition Data",
     icon: ScaleIcon,
@@ -350,6 +362,28 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       parameters: { columnSelections: {} },
       inputs: [{ name: "data_in", type: "data" }],
       outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.DataFiltering,
+      status: ModuleStatus.Pending,
+      parameters: {
+        filter_type: "row", // "row" or "column"
+        conditions: [], // Array<{column: string, operator: string, value: any}>
+        logical_operator: "AND", // "AND" or "OR"
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.ColumnPlot,
+      status: ModuleStatus.Pending,
+      parameters: {
+        plot_type: "single", // "single" or "double"
+        column1: "",
+        column2: "",
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [],
     },
     {
       type: ModuleType.HandleMissingValues,

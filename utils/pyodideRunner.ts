@@ -5426,6 +5426,258 @@ result
 }
 
 /**
+ * DataFiltering을 Python으로 실행합니다
+ * 타임아웃: 60초
+ */
+export async function filterDataPython(
+  data: any[],
+  filter_type: string,
+  conditions: Array<{ column: string; operator: string; value: any }>,
+  logical_operator: string,
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_filter_type", filter_type);
+    py.globals.set("js_conditions", conditions);
+    py.globals.set("js_logical_operator", logical_operator);
+
+    const code = `
+import pandas as pd
+import numpy as np
+import traceback
+import sys
+
+try:
+    df = pd.DataFrame(js_data.to_py())
+    filter_type = str(js_filter_type)
+    conditions = js_conditions.to_py()
+    logical_operator = str(js_logical_operator)
+    
+    if filter_type == "row":
+        # 행 필터링
+        if not conditions or len(conditions) == 0:
+            filtered_df = df.copy()
+        else:
+            masks = []
+            for condition in conditions:
+                column = condition.get("column", "")
+                operator = condition.get("operator", "==")
+                value = condition.get("value", "")
+                
+                if not column or column not in df.columns:
+                    continue
+                
+                try:
+                    # 값 타입 변환 시도
+                    col_type = df[column].dtype
+                    if col_type in [np.int64, np.float64] and value != "":
+                        try:
+                            if "." in str(value):
+                                value = float(value)
+                            else:
+                                value = int(value)
+                        except:
+                            pass
+                    
+                    # 연산자에 따라 마스크 생성
+                    if operator == "==":
+                        mask = df[column] == value
+                    elif operator == "!=":
+                        mask = df[column] != value
+                    elif operator == ">":
+                        mask = df[column] > value
+                    elif operator == "<":
+                        mask = df[column] < value
+                    elif operator == ">=":
+                        mask = df[column] >= value
+                    elif operator == "<=":
+                        mask = df[column] <= value
+                    elif operator == "contains":
+                        mask = df[column].astype(str).str.contains(str(value), na=False, case=False)
+                    elif operator == "not_contains":
+                        mask = ~df[column].astype(str).str.contains(str(value), na=False, case=False)
+                    elif operator == "is_null":
+                        mask = df[column].isnull()
+                    elif operator == "is_not_null":
+                        mask = df[column].notnull()
+                    else:
+                        continue
+                    
+                    masks.append(mask)
+                except Exception as e:
+                    continue
+            
+            if not masks:
+                filtered_df = df.copy()
+            else:
+                # 논리 연산자에 따라 마스크 결합
+                if logical_operator == "AND":
+                    final_mask = masks[0]
+                    for mask in masks[1:]:
+                        final_mask = final_mask & mask
+                else:  # OR
+                    final_mask = masks[0]
+                    for mask in masks[1:]:
+                        final_mask = final_mask | mask
+                
+                filtered_df = df[final_mask].copy()
+    elif filter_type == "column":
+        # 열 필터링
+        if not conditions or len(conditions) == 0:
+            filtered_df = df.copy()
+        else:
+            columns_to_keep = []
+            for condition in conditions:
+                column = condition.get("column", "")
+                operator = condition.get("operator", "==")
+                value = condition.get("value", "")
+                
+                if not column or column not in df.columns:
+                    continue
+                
+                try:
+                    col_values = df[column]
+                    col_type = col_values.dtype
+                    
+                    # 값 타입 변환 시도
+                    if col_type in [np.int64, np.float64] and value != "":
+                        try:
+                            if "." in str(value):
+                                value = float(value)
+                            else:
+                                value = int(value)
+                        except:
+                            pass
+                    
+                    # 연산자에 따라 조건 확인
+                    if operator == "==":
+                        matches = (col_values == value).any()
+                    elif operator == "!=":
+                        matches = (col_values != value).any()
+                    elif operator == ">":
+                        matches = (col_values > value).any()
+                    elif operator == "<":
+                        matches = (col_values < value).any()
+                    elif operator == ">=":
+                        matches = (col_values >= value).any()
+                    elif operator == "<=":
+                        matches = (col_values <= value).any()
+                    elif operator == "contains":
+                        matches = col_values.astype(str).str.contains(str(value), na=False, case=False).any()
+                    elif operator == "not_contains":
+                        matches = (~col_values.astype(str).str.contains(str(value), na=False, case=False)).any()
+                    elif operator == "is_null":
+                        matches = col_values.isnull().any()
+                    elif operator == "is_not_null":
+                        matches = col_values.notnull().any()
+                    else:
+                        continue
+                    
+                    if matches:
+                        columns_to_keep.append(column)
+                except Exception as e:
+                    continue
+            
+            if logical_operator == "AND":
+                # AND: 모든 조건을 만족하는 열만 유지
+                if len(columns_to_keep) == len(conditions):
+                    filtered_df = df[columns_to_keep].copy() if columns_to_keep else pd.DataFrame()
+                else:
+                    filtered_df = pd.DataFrame()
+            else:  # OR
+                # OR: 하나라도 조건을 만족하는 열 유지
+                if columns_to_keep:
+                    filtered_df = df[columns_to_keep].copy()
+                else:
+                    filtered_df = pd.DataFrame()
+    else:
+        filtered_df = df.copy()
+    
+    result_rows = filtered_df.to_dict('records')
+    result_columns = [{'name': col, 'type': 'number' if pd.api.types.is_numeric_dtype(filtered_df[col]) else 'string'} for col in filtered_df.columns]
+    
+    result = {
+        'rows': result_rows,
+        'columns': result_columns
+    }
+    
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python DataFiltering 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+
+    if (!resultPyObj) {
+      throw new Error(
+        `Python DataFiltering error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result && result.__error__) {
+      throw new Error(
+        `Python DataFiltering error:\n${
+          result.error_traceback || result.error_message
+        }`
+      );
+    }
+
+    if (!result.rows || !result.columns) {
+      throw new Error(
+        `Python DataFiltering error: Missing rows or columns in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_filter_type");
+    py.globals.delete("js_conditions");
+    py.globals.delete("js_logical_operator");
+    py.globals.delete("js_result");
+
+    return {
+      rows: result.rows,
+      columns: result.columns,
+    };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_filter_type");
+        py.globals.delete("js_conditions");
+        py.globals.delete("js_logical_operator");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python DataFiltering error: ${errorMessage}`);
+  }
+}
+
+/**
  * EncodeCategorical를 Python으로 실행합니다 (인코딩 매핑 생성)
  * 타임아웃: 60초
  */
@@ -6142,5 +6394,359 @@ except Exception as e:
 
     const errorMessage = error.message || String(error);
     throw new Error(`Python Decision Tree Plot error: ${errorMessage}`);
+  }
+}
+
+/**
+ * ColumnPlot을 Python으로 실행합니다
+ * 타임아웃: 120초
+ */
+export async function createColumnPlotPython(
+  data: any[],
+  plot_type: string,
+  column1: string,
+  column2: string | null,
+  chart_type: string,
+  timeoutMs: number = 120000
+): Promise<string> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // matplotlib, scipy 패키지 로드 (seaborn은 Pyodide에서 지원하지 않음)
+    await withTimeout(
+      py.loadPackage(["matplotlib", "scipy"]),
+      90000,
+      "패키지 설치 타임아웃 (90초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_plot_type", plot_type);
+    py.globals.set("js_column1", column1);
+    py.globals.set("js_column2", column2 || "");
+    py.globals.set("js_chart_type", chart_type);
+
+    const code = `
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
+import matplotlib.pyplot as plt
+from scipy import stats
+import base64
+import io
+import traceback
+import sys
+
+try:
+    df = pd.DataFrame(js_data.to_py())
+    plot_type = str(js_plot_type)
+    column1 = str(js_column1)
+    column2 = str(js_column2) if js_column2 else None
+    chart_type = str(js_chart_type)
+    
+    if column1 not in df.columns:
+        raise ValueError(f"Column '{column1}' not found in DataFrame")
+    
+    if plot_type == "double" and column2 and column2 not in df.columns:
+        raise ValueError(f"Column '{column2}' not found in DataFrame")
+    
+    plt.figure(figsize=(10, 6))
+    
+    if plot_type == "single":
+        if chart_type == "Histogram":
+            plt.hist(df[column1].dropna(), bins=30, edgecolor='black')
+            plt.xlabel(column1)
+            plt.ylabel('Frequency')
+            plt.title(f'Histogram of {column1}')
+        elif chart_type == "KDE Plot":
+            df[column1].dropna().plot.kde()
+            plt.xlabel(column1)
+            plt.ylabel('Density')
+            plt.title(f'KDE Plot of {column1}')
+        elif chart_type == "Boxplot":
+            plt.boxplot(df[column1].dropna())
+            plt.ylabel(column1)
+            plt.title(f'Boxplot of {column1}')
+        elif chart_type == "Violin Plot":
+            # Violin plot 구현 (matplotlib의 violinplot 사용)
+            data = df[column1].dropna().values
+            parts = plt.violinplot([data], positions=[1], widths=0.6, showmeans=True, showmedians=True)
+            plt.ylabel(column1)
+            plt.xticks([1], [column1])
+            plt.title(f'Violin Plot of {column1}')
+        elif chart_type == "ECDF Plot":
+            sorted_data = np.sort(df[column1].dropna())
+            y = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
+            plt.plot(sorted_data, y, marker='o', markersize=2)
+            plt.xlabel(column1)
+            plt.ylabel('Cumulative Probability')
+            plt.title(f'ECDF Plot of {column1}')
+        elif chart_type == "QQ-Plot":
+            stats.probplot(df[column1].dropna(), dist="norm", plot=plt)
+            plt.title(f'Q-Q Plot of {column1}')
+        elif chart_type == "Line Plot":
+            plt.plot(df[column1].dropna())
+            plt.xlabel('Index')
+            plt.ylabel(column1)
+            plt.title(f'Line Plot of {column1}')
+        elif chart_type == "Area Plot":
+            plt.fill_between(range(len(df[column1].dropna())), df[column1].dropna(), alpha=0.5)
+            plt.xlabel('Index')
+            plt.ylabel(column1)
+            plt.title(f'Area Plot of {column1}')
+        elif chart_type == "Bar Plot":
+            value_counts = df[column1].value_counts()
+            plt.bar(range(len(value_counts)), value_counts.values)
+            plt.xticks(range(len(value_counts)), value_counts.index.astype(str), rotation=45, ha='right')
+            plt.xlabel(column1)
+            plt.ylabel('Count')
+            plt.title(f'Bar Plot of {column1}')
+        elif chart_type == "Count Plot":
+            value_counts = df[column1].value_counts()
+            plt.bar(range(len(value_counts)), value_counts.values)
+            plt.xticks(range(len(value_counts)), value_counts.index.astype(str), rotation=45, ha='right')
+            plt.xlabel(column1)
+            plt.ylabel('Count')
+            plt.title(f'Count Plot of {column1}')
+        elif chart_type == "Pie Chart":
+            value_counts = df[column1].value_counts()
+            plt.pie(value_counts.values, labels=value_counts.index.astype(str), autopct='%1.1f%%')
+            plt.title(f'Pie Chart of {column1}')
+        elif chart_type == "Frequency Table":
+            value_counts = df[column1].value_counts()
+            plt.axis('off')
+            table_text = f"Frequency Table of {column1}\\n\\n" + value_counts.to_string()
+            plt.text(0.5, 0.5, table_text, ha='center', va='center', fontsize=10, family='monospace', transform=plt.gca().transAxes)
+            plt.title(f'Frequency Table of {column1}')
+    else:
+        # 2개열 선택
+        if chart_type == "Scatter Plot":
+            plt.scatter(df[column1].dropna(), df[column2].dropna(), alpha=0.5)
+            plt.xlabel(column1)
+            plt.ylabel(column2)
+            plt.title(f'Scatter Plot: {column1} vs {column2}')
+        elif chart_type == "Hexbin Plot":
+            plt.hexbin(df[column1].dropna(), df[column2].dropna(), gridsize=20, cmap='Blues')
+            plt.xlabel(column1)
+            plt.ylabel(column2)
+            plt.title(f'Hexbin Plot: {column1} vs {column2}')
+            plt.colorbar()
+        elif chart_type == "Joint Plot":
+            plt.scatter(df[column1].dropna(), df[column2].dropna(), alpha=0.5)
+            plt.xlabel(column1)
+            plt.ylabel(column2)
+            plt.title(f'Joint Plot: {column1} vs {column2}')
+        elif chart_type == "Line Plot":
+            plt.plot(df[column1].dropna(), df[column2].dropna())
+            plt.xlabel(column1)
+            plt.ylabel(column2)
+            plt.title(f'Line Plot: {column1} vs {column2}')
+        elif chart_type == "Regression Plot":
+            x_data = df[column1].dropna()
+            y_data = df[column2].dropna()
+            # 공통 인덱스로 정렬
+            common_idx = x_data.index.intersection(y_data.index)
+            x_vals = x_data.loc[common_idx].values
+            y_vals = y_data.loc[common_idx].values
+            plt.scatter(x_vals, y_vals, alpha=0.5)
+            # 회귀선 추가
+            if len(x_vals) > 1:
+                z = np.polyfit(x_vals, y_vals, 1)
+                p = np.poly1d(z)
+                plt.plot(x_vals, p(x_vals), "r--", alpha=0.8, linewidth=2)
+            plt.xlabel(column1)
+            plt.ylabel(column2)
+            plt.title(f'Regression Plot: {column1} vs {column2}')
+        elif chart_type == "Heatmap" and pd.api.types.is_numeric_dtype(df[column1]) and pd.api.types.is_numeric_dtype(df[column2]):
+            corr = df[[column1, column2]].corr()
+            im = plt.imshow(corr.values, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
+            plt.colorbar(im)
+            plt.xticks(range(len(corr.columns)), corr.columns)
+            plt.yticks(range(len(corr.index)), corr.index)
+            # 상관계수 값 표시
+            for i in range(len(corr.index)):
+                for j in range(len(corr.columns)):
+                    text = plt.text(j, i, f'{corr.iloc[i, j]:.2f}', ha="center", va="center", color="black", fontweight='bold')
+            plt.title(f'Heatmap: {column1} vs {column2}')
+        elif chart_type == "Box Plot":
+            # 카테고리별로 그룹화하여 boxplot 생성
+            groups = df.groupby(column2)[column1].apply(list).to_dict()
+            data_to_plot = [groups[k] for k in groups.keys()]
+            labels = list(groups.keys())
+            plt.boxplot(data_to_plot, labels=labels)
+            plt.xlabel(column2)
+            plt.ylabel(column1)
+            plt.title(f'Box Plot: {column1} by {column2}')
+            plt.xticks(rotation=45, ha='right')
+        elif chart_type == "Violin Plot":
+            # Violin plot 구현 (matplotlib의 violinplot 사용)
+            groups = df.groupby(column2)[column1].apply(list).to_dict()
+            data_to_plot = [groups[k] for k in groups.keys()]
+            labels = list(groups.keys())
+            positions = range(1, len(labels) + 1)
+            parts = plt.violinplot(data_to_plot, positions=positions, widths=0.6, showmeans=True, showmedians=True)
+            plt.xticks(positions, labels, rotation=45, ha='right')
+            plt.xlabel(column2)
+            plt.ylabel(column1)
+            plt.title(f'Violin Plot: {column1} by {column2}')
+        elif chart_type == "Bar Plot":
+            # 카테고리별 평균 계산
+            grouped = df.groupby(column2)[column1].mean()
+            plt.bar(range(len(grouped)), grouped.values)
+            plt.xticks(range(len(grouped)), grouped.index.astype(str), rotation=45, ha='right')
+            plt.xlabel(column2)
+            plt.ylabel(column1)
+            plt.title(f'Bar Plot: {column1} by {column2}')
+        elif chart_type == "Strip Plot":
+            # 카테고리별로 scatter plot
+            groups = df.groupby(column2)[column1]
+            x_pos = 0
+            x_positions = []
+            y_values = []
+            labels = []
+            for name, group in groups:
+                y_vals = group.dropna().values
+                x_vals = [x_pos] * len(y_vals)
+                x_positions.extend(x_vals)
+                y_values.extend(y_vals)
+                labels.append(name)
+                x_pos += 1
+            plt.scatter(x_positions, y_values, alpha=0.5)
+            plt.xticks(range(len(labels)), labels, rotation=45, ha='right')
+            plt.xlabel(column2)
+            plt.ylabel(column1)
+            plt.title(f'Strip Plot: {column1} by {column2}')
+        elif chart_type == "Swarm Plot":
+            # Swarm plot을 strip plot으로 대체
+            groups = df.groupby(column2)[column1]
+            x_pos = 0
+            x_positions = []
+            y_values = []
+            labels = []
+            for name, group in groups:
+                y_vals = group.dropna().values
+                x_vals = [x_pos] * len(y_vals)
+                x_positions.extend(x_vals)
+                y_values.extend(y_vals)
+                labels.append(name)
+                x_pos += 1
+            plt.scatter(x_positions, y_values, alpha=0.5)
+            plt.xticks(range(len(labels)), labels, rotation=45, ha='right')
+            plt.xlabel(column2)
+            plt.ylabel(column1)
+            plt.title(f'Swarm Plot: {column1} by {column2} (using Strip Plot)')
+        elif chart_type == "Grouped Bar Plot":
+            crosstab = pd.crosstab(df[column1].dropna(), df[column2].dropna())
+            crosstab.plot(kind='bar', stacked=False)
+            plt.xlabel(column1)
+            plt.ylabel('Count')
+            plt.title(f'Grouped Bar Plot: {column1} by {column2}')
+            plt.legend(title=column2)
+            plt.xticks(rotation=45, ha='right')
+        elif chart_type == "Heatmap" and not (pd.api.types.is_numeric_dtype(df[column1]) and pd.api.types.is_numeric_dtype(df[column2])):
+            crosstab = pd.crosstab(df[column1].dropna(), df[column2].dropna())
+            im = plt.imshow(crosstab.values, cmap='Blues', aspect='auto')
+            plt.colorbar(im)
+            plt.xticks(range(len(crosstab.columns)), crosstab.columns, rotation=45, ha='right')
+            plt.yticks(range(len(crosstab.index)), crosstab.index)
+            # 값 표시
+            for i in range(len(crosstab.index)):
+                for j in range(len(crosstab.columns)):
+                    text = plt.text(j, i, int(crosstab.iloc[i, j]), ha="center", va="center", color="white", fontweight='bold')
+            plt.xlabel(column2)
+            plt.ylabel(column1)
+            plt.title(f'Heatmap: {column1} vs {column2}')
+        elif chart_type == "Mosaic Plot":
+            crosstab = pd.crosstab(df[column1].dropna(), df[column2].dropna())
+            im = plt.imshow(crosstab.values, cmap='viridis', aspect='auto')
+            plt.colorbar(im)
+            plt.xticks(range(len(crosstab.columns)), crosstab.columns, rotation=45, ha='right')
+            plt.yticks(range(len(crosstab.index)), crosstab.index)
+            # 값 표시
+            for i in range(len(crosstab.index)):
+                for j in range(len(crosstab.columns)):
+                    text = plt.text(j, i, int(crosstab.iloc[i, j]), ha="center", va="center", color="white", fontweight='bold')
+            plt.xlabel(column2)
+            plt.ylabel(column1)
+            plt.title(f'Mosaic Plot: {column1} vs {column2}')
+    
+    plt.tight_layout()
+    
+    # 이미지를 base64로 변환
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    plt.close()
+    
+    js_result = img_base64
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python ColumnPlot 실행 타임아웃 (120초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+
+    if (!resultPyObj) {
+      throw new Error(
+        `Python ColumnPlot error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result && result.__error__) {
+      throw new Error(
+        `Python ColumnPlot error:\n${
+          result.error_traceback || result.error_message
+        }`
+      );
+    }
+
+    if (typeof result !== "string") {
+      throw new Error(
+        `Python ColumnPlot error: Expected string (base64 image), got ${typeof result}.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_plot_type");
+    py.globals.delete("js_column1");
+    py.globals.delete("js_column2");
+    py.globals.delete("js_chart_type");
+    py.globals.delete("js_result");
+
+    return result;
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_plot_type");
+        py.globals.delete("js_column1");
+        py.globals.delete("js_column2");
+        py.globals.delete("js_chart_type");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python ColumnPlot error: ${errorMessage}`);
   }
 }

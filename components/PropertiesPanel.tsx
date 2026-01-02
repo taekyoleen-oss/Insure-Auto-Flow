@@ -793,6 +793,269 @@ const renderParameters = (
         </div>
       );
     }
+    case ModuleType.DataFiltering: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+      const { filter_type = "row", conditions = [], logical_operator = "AND" } = module.parameters;
+
+      const operators = [
+        { label: "Equals (==)", value: "==" },
+        { label: "Not Equals (!=)", value: "!=" },
+        { label: "Greater Than (>)", value: ">" },
+        { label: "Less Than (<)", value: "<" },
+        { label: "Greater or Equal (>=)", value: ">=" },
+        { label: "Less or Equal (<=)", value: "<=" },
+        { label: "Contains", value: "contains" },
+        { label: "Not Contains", value: "not_contains" },
+        { label: "Is Null", value: "is_null" },
+        { label: "Is Not Null", value: "is_not_null" },
+      ];
+
+      const handleAddCondition = () => {
+        const newConditions = [
+          ...conditions,
+          { column: inputColumns[0]?.name || "", operator: "==", value: "" },
+        ];
+        onParamChange("conditions", newConditions);
+      };
+
+      const handleRemoveCondition = (index: number) => {
+        const newConditions = conditions.filter((_: any, i: number) => i !== index);
+        onParamChange("conditions", newConditions);
+      };
+
+      const handleConditionChange = (
+        index: number,
+        key: "column" | "operator" | "value",
+        value: string
+      ) => {
+        const newConditions = [...conditions];
+        newConditions[index] = {
+          ...newConditions[index],
+          [key]: value,
+        };
+        onParamChange("conditions", newConditions);
+      };
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source module to configure filtering.
+          </p>
+        );
+      }
+
+      return (
+        <div className="space-y-4">
+          <PropertySelect
+            label="Filter Type"
+            value={filter_type}
+            onChange={(v) => onParamChange("filter_type", v)}
+            options={[
+              { label: "Filter Rows", value: "row" },
+              { label: "Filter Columns", value: "column" },
+            ]}
+          />
+
+          <div className="border-t border-gray-700 pt-4">
+            <div className="flex justify-between items-center mb-3">
+              <h5 className="text-xs text-gray-500 uppercase font-bold">
+                Conditions
+              </h5>
+              <button
+                onClick={handleAddCondition}
+                className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-white transition-colors"
+              >
+                + Add Condition
+              </button>
+            </div>
+
+            {conditions.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No conditions added. Click "Add Condition" to start filtering.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {conditions.map((condition: any, index: number) => (
+                  <div
+                    key={index}
+                    className="bg-gray-800 p-3 rounded-md border border-gray-700"
+                  >
+                    <div className="flex items-start gap-2 mb-2">
+                      <div className="flex-1 grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Column
+                          </label>
+                          <select
+                            value={condition.column || ""}
+                            onChange={(e) =>
+                              handleConditionChange(index, "column", e.target.value)
+                            }
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="">Select column...</option>
+                            {inputColumns.map((col) => (
+                              <option key={col.name} value={col.name}>
+                                {col.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Operator
+                          </label>
+                          <select
+                            value={condition.operator || "=="}
+                            onChange={(e) =>
+                              handleConditionChange(index, "operator", e.target.value)
+                            }
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            {operators.map((op) => (
+                              <option key={op.value} value={op.value}>
+                                {op.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Value
+                          </label>
+                          {condition.operator === "is_null" ||
+                          condition.operator === "is_not_null" ? (
+                            <input
+                              type="text"
+                              value="N/A"
+                              disabled
+                              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-500 cursor-not-allowed"
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={condition.value || ""}
+                              onChange={(e) =>
+                                handleConditionChange(index, "value", e.target.value)
+                              }
+                              placeholder="Enter value..."
+                              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveCondition(index)}
+                        className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded-md font-semibold text-white transition-colors mt-6"
+                        title="Remove condition"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {index < conditions.length - 1 && (
+                      <div className="text-center mt-2">
+                        <span className="text-xs text-gray-500 font-semibold">
+                          {logical_operator}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {conditions.length > 1 && (
+              <div className="mt-4 pt-4 border-t border-gray-700">
+                <PropertySelect
+                  label="Logical Operator"
+                  value={logical_operator}
+                  onChange={(v) => onParamChange("logical_operator", v)}
+                  options={[
+                    { label: "AND (all conditions must be true)", value: "AND" },
+                    { label: "OR (any condition can be true)", value: "OR" },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    case ModuleType.ColumnPlot: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+      const { plot_type = "single", column1 = "", column2 = "" } = module.parameters;
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source module to configure plotting.
+          </p>
+        );
+      }
+
+      return (
+        <div className="space-y-4">
+          <PropertySelect
+            label="Plot Type"
+            value={plot_type}
+            onChange={(v) => {
+              onParamChange("plot_type", v);
+              if (v === "single") {
+                onParamChange("column2", "");
+              }
+            }}
+            options={[
+              { label: "Single Column", value: "single" },
+              { label: "Two Columns", value: "double" },
+            ]}
+          />
+
+          <div className="border-t border-gray-700 pt-4 space-y-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">
+                {plot_type === "single" ? "Column" : "X-Axis Column"}
+              </label>
+              <select
+                value={column1}
+                onChange={(e) => onParamChange("column1", e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Select column...</option>
+                {inputColumns.map((col) => (
+                  <option key={col.name} value={col.name}>
+                    {col.name} ({col.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {plot_type === "double" && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">
+                  Y-Axis Column
+                </label>
+                <select
+                  value={column2}
+                  onChange={(e) => onParamChange("column2", e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">Select column...</option>
+                  {inputColumns
+                    .filter((col) => col.name !== column1)
+                    .map((col) => (
+                      <option key={col.name} value={col.name}>
+                        {col.name} ({col.type})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
     case ModuleType.HandleMissingValues: {
       const { method, strategy, n_neighbors, metric } = module.parameters;
 
@@ -2847,6 +3110,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     "MissingHandlerOutput",
     "EncoderOutput",
     "NormalizerOutput",
+    "ColumnPlotOutput",
   ];
 
   const canVisualize = () => {
@@ -2897,6 +3161,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       "MissingHandlerOutput",
       "EncoderOutput",
       "NormalizerOutput",
+      "ColumnPlotOutput",
     ];
 
     const canVisualize = () => {
