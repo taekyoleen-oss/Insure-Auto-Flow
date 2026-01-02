@@ -2,6 +2,40 @@
 
 ## 2025-01-XX XX:XX:XX
 
+### feat(modules): Update Random Forest module and fix Decision Tree visualization
+
+**Description:**
+- Random Forest 모듈 파라미터 레이블 변경 (N Estimators → n_estimators, Max Depth → max_depth)
+- Random Forest 모듈에 max_features 파라미터 추가 (기본값: None - 전체 특징 사용)
+- PropertiesPanel에 max_features UI 추가 (None, auto, sqrt, log2, 커스텀 숫자 입력 옵션)
+- data_analysis_modules.py의 create_random_forest 함수에 max_features 파라미터 지원 추가
+- Decision Tree View Details 시각화 수정: TrainedModelOutput 인터페이스에 trainingData와 modelParameters 필드 추가
+
+**Files Affected:**
+- `types.ts` - TrainedModelOutput 인터페이스에 trainingData와 modelParameters 필드 추가
+- `constants.ts` - Random Forest 모듈에 max_features 파라미터 추가
+- `components/PropertiesPanel.tsx` - Random Forest 파라미터 레이블 변경 및 max_features UI 추가
+- `data_analysis_modules.py` - create_random_forest 함수에 max_features 파라미터 추가
+
+**Reason:**
+- Random Forest 모듈 파라미터 이름을 Python 스타일로 통일
+- max_features 파라미터를 통해 각 트리에서 고려할 특징 수를 제어할 수 있도록 기능 확장
+- Decision Tree 모듈의 View Details에서 트리 시각화가 정상적으로 표시되도록 수정
+
+**Commit Hash:** b5fdcfe
+
+**Recovery Command:**
+```bash
+# Backup and recover
+git stash push -u -m "백업"
+git reset --hard b5fdcfe
+
+# Or direct recovery
+git reset --hard b5fdcfe
+```
+
+## 2025-01-XX XX:XX:XX
+
 ### feat(modules): Add Column Plot module with comprehensive chart visualization
 
 **Description:**
