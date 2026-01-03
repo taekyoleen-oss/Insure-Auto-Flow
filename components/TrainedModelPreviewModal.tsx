@@ -305,22 +305,25 @@ export const TrainedModelPreviewModal: React.FC<TrainedModelPreviewModalProps> =
     const [aiInterpretation, setAiInterpretation] = useState<string | null>(null);
     const [plotTreeImage, setPlotTreeImage] = useState<string | null>(null);
     const [isLoadingPlot, setIsLoadingPlot] = useState(false);
+    const [treeText, setTreeText] = useState<string | null>(null);
+    const [isLoadingText, setIsLoadingText] = useState(false);
+    const [showTreeImage, setShowTreeImage] = useState(false);
 
     const output = module.outputData as TrainedModelOutput;
     if (!output || output.type !== 'TrainedModelOutput') return null;
 
     const { modelType, coefficients, intercept, metrics, featureColumns, labelColumn, tuningSummary, trainingData, modelParameters } = output;
     
-    // Decision Tree인 경우 plot_tree 생성
+    // Decision Tree인 경우 export_text 생성 (기본 표시)
     useEffect(() => {
         if (modelType === ModuleType.DecisionTree && trainingData && modelParameters && featureColumns && labelColumn) {
-            setIsLoadingPlot(true);
-            const generatePlot = async () => {
+            setIsLoadingText(true);
+            const generateText = async () => {
                 try {
                     const pyodideModule = await import('../utils/pyodideRunner');
-                    const { generateDecisionTreePlot } = pyodideModule;
+                    const { generateDecisionTreeText } = pyodideModule;
                     
-                    const imageBase64 = await generateDecisionTreePlot(
+                    const text = await generateDecisionTreeText(
                         trainingData,
                         featureColumns,
                         labelColumn,
@@ -332,18 +335,55 @@ export const TrainedModelPreviewModal: React.FC<TrainedModelPreviewModalProps> =
                         modelParameters.classWeight || null
                     );
                     
-                    setPlotTreeImage(`data:image/png;base64,${imageBase64}`);
-                } catch (error) {
-                    console.error("Failed to generate Decision Tree plot:", error);
-                    setPlotTreeImage(null);
+                    setTreeText(text);
+                } catch (error: any) {
+                    console.error("Failed to generate Decision Tree text:", error);
+                    console.error("Error details:", error?.message, error?.stack);
+                    setTreeText(null);
                 } finally {
-                    setIsLoadingPlot(false);
+                    setIsLoadingText(false);
                 }
             };
             
-            generatePlot();
+            generateText();
         }
     }, [modelType, trainingData, modelParameters, featureColumns, labelColumn, output.modelPurpose]);
+
+    // Decision Tree 이미지 생성 (버튼 클릭 시)
+    const handleShowTreeImage = async () => {
+        if (plotTreeImage) {
+            setShowTreeImage(true);
+            return;
+        }
+
+        if (modelType === ModuleType.DecisionTree && trainingData && modelParameters && featureColumns && labelColumn) {
+            setIsLoadingPlot(true);
+            try {
+                const pyodideModule = await import('../utils/pyodideRunner');
+                const { generateDecisionTreePlot } = pyodideModule;
+                
+                const imageBase64 = await generateDecisionTreePlot(
+                    trainingData,
+                    featureColumns,
+                    labelColumn,
+                    output.modelPurpose || "classification",
+                    modelParameters.criterion || "gini",
+                    modelParameters.maxDepth || null,
+                    modelParameters.minSamplesSplit || 2,
+                    modelParameters.minSamplesLeaf || 1,
+                    modelParameters.classWeight || null
+                );
+                
+                setPlotTreeImage(`data:image/png;base64,${imageBase64}`);
+                setShowTreeImage(true);
+            } catch (error) {
+                console.error("Failed to generate Decision Tree plot:", error);
+                setPlotTreeImage(null);
+            } finally {
+                setIsLoadingPlot(false);
+            }
+        }
+    };
 
     const handleInterpret = async () => {
         setIsInterpreting(true);
@@ -547,25 +587,66 @@ ${topFeatures}
                     {formulaParts.length === 0 && complexModels.includes(modelType) && modelType !== ModuleType.NeuralNetwork && (
                         <div>
                             <h4 className="text-md font-semibold text-gray-700 mb-2">Model Information</h4>
-                            {modelType === ModuleType.DecisionTree && plotTreeImage ? (
-                                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                    {isLoadingPlot ? (
-                                        <div className="text-center p-8 text-gray-600">
-                                            <p>Decision Tree 시각화 생성 중...</p>
+                            {modelType === ModuleType.DecisionTree ? (
+                                <div className="space-y-3">
+                                    {showTreeImage && plotTreeImage ? (
+                                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                            {isLoadingPlot ? (
+                                                <div className="text-center p-8 text-gray-600">
+                                                    <p>Decision Tree 시각화 생성 중...</p>
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-sm text-gray-600">Decision Tree 시각화</span>
+                                                        <button
+                                                            onClick={() => setShowTreeImage(false)}
+                                                            className="text-sm text-blue-600 hover:text-blue-800"
+                                                        >
+                                                            텍스트 보기
+                                                        </button>
+                                                    </div>
+                                                    <img 
+                                                        src={plotTreeImage} 
+                                                        alt="Decision Tree" 
+                                                        className="w-full h-auto"
+                                                        style={{ maxHeight: '600px', objectFit: 'contain' }}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
-                                        <img 
-                                            src={plotTreeImage} 
-                                            alt="Decision Tree" 
-                                            className="w-full h-auto"
-                                            style={{ maxHeight: '600px', objectFit: 'contain' }}
-                                        />
+                                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-sm font-semibold text-gray-700">Decision Tree 구조</span>
+                                                <button
+                                                    onClick={handleShowTreeImage}
+                                                    disabled={isLoadingPlot}
+                                                    className="px-3 py-1 text-sm font-semibold text-white bg-blue-600 rounded hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait transition-colors"
+                                                >
+                                                    {isLoadingPlot ? '생성 중...' : '시각화 보기'}
+                                                </button>
+                                            </div>
+                                            {isLoadingText ? (
+                                                <div className="text-center p-8 text-gray-600">
+                                                    <p>Decision Tree 텍스트 생성 중...</p>
+                                                </div>
+                                            ) : treeText ? (
+                                                <pre className="text-xs font-mono text-gray-800 whitespace-pre-wrap overflow-x-auto bg-white p-3 rounded border border-gray-200 max-h-96 overflow-y-auto">
+                                                    {treeText}
+                                                </pre>
+                                            ) : (
+                                                <div className="text-center p-4 text-gray-500">
+                                                    <p>Decision Tree 텍스트를 생성할 수 없습니다.</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             ) : (
                                 <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800 border border-blue-200">
                                     <p className="font-sans">
-                                        {modelType === ModuleType.DecisionTree || modelType === ModuleType.RandomForest
+                                        {modelType === ModuleType.RandomForest
                                             ? "Decision Tree 기반 모델은 트리 구조로 예측을 수행하므로 선형 방정식으로 표현할 수 없습니다. 대신 Feature Importance를 통해 각 변수의 중요도를 확인할 수 있습니다."
                                             : "이 모델 타입은 선형 방정식으로 표현할 수 없습니다. Feature Importance를 통해 각 변수의 중요도를 확인할 수 있습니다."}
                                     </p>

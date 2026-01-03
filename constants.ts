@@ -57,6 +57,24 @@ export const TOOLBOX_MODULES = [
     description: "Creates various plots for single or double columns.",
   },
   {
+    type: ModuleType.OutlierDetector,
+    name: "Outlier Detector",
+    icon: ShieldCheckIcon,
+    description: "Detects outliers using multiple methods (IQR, Z-score, Isolation Forest, Boxplot).",
+  },
+  {
+    type: ModuleType.HypothesisTesting,
+    name: "Hypothesis Testing",
+    icon: CalculatorIcon,
+    description: "Performs various hypothesis tests (t-test, chi-square, ANOVA, KS-test, Shapiro-Wilk, Levene).",
+  },
+  {
+    type: ModuleType.Correlation,
+    name: "Correlation",
+    icon: BarChartIcon,
+    description: "Analyzes correlations between variables (Pearson/Spearman/Kendall, Cramér's V, Heatmap, Pairplot).",
+  },
+  {
     type: ModuleType.TransitionData,
     name: "Transition Data",
     icon: ScaleIcon,
@@ -381,6 +399,33 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
         plot_type: "single", // "single" or "double"
         column1: "",
         column2: "",
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [],
+    },
+    {
+      type: ModuleType.OutlierDetector,
+      status: ModuleStatus.Pending,
+      parameters: {
+        columns: [],
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [],
+    },
+    {
+      type: ModuleType.HypothesisTesting,
+      status: ModuleStatus.Pending,
+      parameters: {
+        tests: [],
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [],
+    },
+    {
+      type: ModuleType.Correlation,
+      status: ModuleStatus.Pending,
+      parameters: {
+        columns: [],
       },
       inputs: [{ name: "data_in", type: "data" }],
       outputs: [],

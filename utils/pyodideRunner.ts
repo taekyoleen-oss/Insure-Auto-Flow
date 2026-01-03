@@ -6398,6 +6398,514 @@ except Exception as e:
 }
 
 /**
+ * Decision Tree 모델의 export_text를 생성하여 텍스트로 반환합니다
+ * 타임아웃: 60초
+ */
+export async function generateDecisionTreeText(
+  trainingData: any[],
+  featureColumns: string[],
+  labelColumn: string,
+  modelPurpose: "classification" | "regression",
+  criterion: string,
+  maxDepth: number | null,
+  minSamplesSplit: number,
+  minSamplesLeaf: number,
+  classWeight: string | null,
+  timeoutMs: number = 60000
+): Promise<string> {
+  try {
+    // Pyodide 로드 (타임아웃: 30초)
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // 데이터를 Python에 전달
+    py.globals.set("js_training_data", trainingData);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_model_purpose", modelPurpose);
+    py.globals.set("js_criterion", criterion);
+    py.globals.set("js_max_depth", maxDepth);
+    py.globals.set("js_min_samples_split", minSamplesSplit);
+    py.globals.set("js_min_samples_leaf", minSamplesLeaf);
+    py.globals.set("js_class_weight", classWeight);
+
+    // Python 코드 실행
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, export_text
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_training_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+    p_model_purpose = str(js_model_purpose)
+    
+    # 데이터 검증
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+    
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+    
+    # 모델 파라미터
+    p_criterion = str(js_criterion)
+    p_max_depth = js_max_depth if js_max_depth is not None else None
+    p_min_samples_split = int(js_min_samples_split)
+    p_min_samples_leaf = int(js_min_samples_leaf)
+    p_class_weight = str(js_class_weight) if js_class_weight is not None else None
+    
+    # 모델 생성 및 훈련
+    if p_model_purpose == 'classification':
+        model = DecisionTreeClassifier(
+            criterion=p_criterion.lower(),
+            max_depth=p_max_depth,
+            min_samples_split=p_min_samples_split,
+            min_samples_leaf=p_min_samples_leaf,
+            class_weight=p_class_weight,
+            random_state=42
+        )
+    else:
+        criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
+        model = DecisionTreeRegressor(
+            criterion=criterion_reg,
+            max_depth=p_max_depth,
+            min_samples_split=p_min_samples_split,
+            min_samples_leaf=p_min_samples_leaf,
+            random_state=42
+        )
+    
+    # 모델 훈련
+    model.fit(X_train, y_train)
+    
+    # export_text 생성
+    tree_text = export_text(model, feature_names=list(X_train.columns))
+    
+    # 결과 검증
+    if tree_text is None:
+        raise ValueError("export_text returned None")
+    
+    tree_text_str = str(tree_text)
+    if len(tree_text_str) == 0:
+        raise ValueError("export_text returned empty string")
+    
+    result = {
+        'tree_text': tree_text_str
+    }
+    
+    # 전역 변수에 저장
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    # 전역 변수에 저장
+    js_result = error_result
+`;
+
+    // Python 코드 실행
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Decision Tree Text 생성 타임아웃 (60초 초과)"
+    );
+
+    // 전역 변수에서 결과 가져오기
+    const resultPyObj = py.globals.get("js_result");
+
+    // 결과 객체 검증
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Decision Tree Text error: Python code returned None or undefined.`
+      );
+    }
+
+    // Python 딕셔너리를 JavaScript 객체로 변환
+    const result = fromPython(resultPyObj);
+
+    // 디버깅: 결과 확인
+    console.log("Decision Tree Text result:", result);
+
+    // 에러가 발생한 경우 처리
+    if (result && result.__error__) {
+      const errorMsg = result.error_traceback || result.error_message || "Unknown error";
+      console.error("Decision Tree Text Python error:", errorMsg);
+      throw new Error(
+        `Python Decision Tree Text error:\n${errorMsg}`
+      );
+    }
+
+    // 필수 속성 검증
+    if (!result || !result.tree_text || typeof result.tree_text !== "string") {
+      console.error("Decision Tree Text invalid result:", result);
+      throw new Error(
+        `Python Decision Tree Text error: Missing or invalid 'tree_text' in result. Result: ${JSON.stringify(result)}`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_training_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_model_purpose");
+    py.globals.delete("js_criterion");
+    py.globals.delete("js_max_depth");
+    py.globals.delete("js_min_samples_split");
+    py.globals.delete("js_min_samples_leaf");
+    py.globals.delete("js_class_weight");
+    py.globals.delete("js_result");
+
+    return result.tree_text;
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_training_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_model_purpose");
+        py.globals.delete("js_criterion");
+        py.globals.delete("js_max_depth");
+        py.globals.delete("js_min_samples_split");
+        py.globals.delete("js_min_samples_leaf");
+        py.globals.delete("js_class_weight");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Decision Tree Text error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * 이상치 탐지를 수행합니다 (IQR, Z-score, Isolation Forest, Boxplot)
+ * 타임아웃: 120초
+ */
+export async function detectOutliers(
+  data: any[],
+  column: string,
+  methods: ("IQR" | "ZScore" | "IsolationForest" | "Boxplot")[] = ["IQR", "ZScore", "IsolationForest", "Boxplot"],
+  iqrMultiplier: number = 1.5,
+  zScoreThreshold: number = 3,
+  isolationForestContamination: number = 0.1,
+  timeoutMs: number = 120000
+): Promise<{
+  results: Array<{
+    method: "IQR" | "ZScore" | "IsolationForest" | "Boxplot";
+    outlierIndices: number[];
+    outlierCount: number;
+    outlierPercentage: number;
+    details?: Record<string, any>;
+  }>;
+  totalOutliers: number;
+  outlierIndices: number[];
+}> {
+  try {
+    // Pyodide 로드 (타임아웃: 30초)
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    // 필요한 패키지 설치
+    await withTimeout(
+      py.loadPackage(["scikit-learn"]),
+      60000,
+      "scikit-learn 패키지 설치 타임아웃 (60초 초과)"
+    );
+
+    // 데이터를 Python에 전달
+    py.globals.set("js_data", data);
+    py.globals.set("js_column", column);
+    py.globals.set("js_methods", methods);
+    py.globals.set("js_iqr_multiplier", iqrMultiplier);
+    py.globals.set("js_zscore_threshold", zScoreThreshold);
+    py.globals.set("js_contamination", isolationForestContamination);
+
+    // Python 코드 실행
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.ensemble import IsolationForest
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_data.to_py())
+    column_name = str(js_column)
+    methods = js_methods.to_py()
+    iqr_multiplier = float(js_iqr_multiplier)
+    zscore_threshold = float(js_zscore_threshold)
+    contamination = float(js_contamination)
+    
+    # 데이터 검증
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if column_name not in dataframe.columns:
+        raise ValueError(f"Column '{column_name}' not found in DataFrame")
+    
+    # 숫자형 컬럼인지 확인
+    if not pd.api.types.is_numeric_dtype(dataframe[column_name]):
+        raise ValueError(f"Column '{column_name}' is not numeric")
+    
+    values = dataframe[column_name].dropna().values
+    if len(values) == 0:
+        raise ValueError(f"Column '{column_name}' has no valid values")
+    
+    results = []
+    all_outlier_indices = set()
+    
+    # IQR 기반 탐지
+    if 'IQR' in methods:
+        Q1 = np.percentile(values, 25)
+        Q3 = np.percentile(values, 75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - iqr_multiplier * IQR
+        upper_bound = Q3 + iqr_multiplier * IQR
+        
+        iqr_outliers = []
+        for idx, val in enumerate(values):
+            if val < lower_bound or val > upper_bound:
+                iqr_outliers.append(idx)
+                all_outlier_indices.add(idx)
+        
+        results.append({
+            'method': 'IQR',
+            'outlier_indices': iqr_outliers,
+            'outlier_count': len(iqr_outliers),
+            'outlier_percentage': len(iqr_outliers) / len(values) * 100,
+            'details': {
+                'Q1': float(Q1),
+                'Q3': float(Q3),
+                'IQR': float(IQR),
+                'lower_bound': float(lower_bound),
+                'upper_bound': float(upper_bound)
+            }
+        })
+    
+    # Z-score 기반 탐지
+    if 'ZScore' in methods:
+        mean = np.mean(values)
+        std = np.std(values)
+        
+        if std > 0:
+            z_scores = np.abs((values - mean) / std)
+            zscore_outliers = []
+            for idx, z_score in enumerate(z_scores):
+                if z_score > zscore_threshold:
+                    zscore_outliers.append(idx)
+                    all_outlier_indices.add(idx)
+            
+            results.append({
+                'method': 'ZScore',
+                'outlier_indices': zscore_outliers,
+                'outlier_count': len(zscore_outliers),
+                'outlier_percentage': len(zscore_outliers) / len(values) * 100,
+                'details': {
+                    'mean': float(mean),
+                    'std': float(std),
+                    'threshold': zscore_threshold
+                }
+            })
+        else:
+            results.append({
+                'method': 'ZScore',
+                'outlier_indices': [],
+                'outlier_count': 0,
+                'outlier_percentage': 0.0,
+                'details': {
+                    'mean': float(mean),
+                    'std': float(std),
+                    'threshold': zscore_threshold,
+                    'error': 'Standard deviation is zero'
+                }
+            })
+    
+    # Isolation Forest 기반 탐지
+    if 'IsolationForest' in methods:
+        try:
+            # 2D 배열로 변환
+            X = values.reshape(-1, 1)
+            
+            # Isolation Forest 모델 생성 및 학습
+            iso_forest = IsolationForest(contamination=contamination, random_state=42)
+            predictions = iso_forest.fit_predict(X)
+            
+            # -1이 이상치
+            iso_outliers = []
+            for idx, pred in enumerate(predictions):
+                if pred == -1:
+                    iso_outliers.append(idx)
+                    all_outlier_indices.add(idx)
+            
+            results.append({
+                'method': 'IsolationForest',
+                'outlier_indices': iso_outliers,
+                'outlier_count': len(iso_outliers),
+                'outlier_percentage': len(iso_outliers) / len(values) * 100,
+                'details': {
+                    'contamination': contamination,
+                    'n_estimators': 100
+                }
+            })
+        except Exception as e:
+            results.append({
+                'method': 'IsolationForest',
+                'outlier_indices': [],
+                'outlier_count': 0,
+                'outlier_percentage': 0.0,
+                'details': {
+                    'error': str(e)
+                }
+            })
+    
+    # Boxplot 기반 탐지 (IQR와 유사하지만 시각화 기준)
+    if 'Boxplot' in methods:
+        Q1 = np.percentile(values, 25)
+        Q3 = np.percentile(values, 75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        
+        boxplot_outliers = []
+        for idx, val in enumerate(values):
+            if val < lower_bound or val > upper_bound:
+                boxplot_outliers.append(idx)
+                all_outlier_indices.add(idx)
+        
+        results.append({
+            'method': 'Boxplot',
+            'outlier_indices': boxplot_outliers,
+            'outlier_count': len(boxplot_outliers),
+            'outlier_percentage': len(boxplot_outliers) / len(values) * 100,
+            'details': {
+                'Q1': float(Q1),
+                'Q3': float(Q3),
+                'IQR': float(IQR),
+                'lower_bound': float(lower_bound),
+                'upper_bound': float(upper_bound)
+            }
+        })
+    
+    # 결과 반환
+    result = {
+        'results': results,
+        'total_outliers': len(all_outlier_indices),
+        'outlier_indices': sorted(list(all_outlier_indices))
+    }
+    
+    # 전역 변수에 저장
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    # 전역 변수에 저장
+    js_result = error_result
+`;
+
+    // Python 코드 실행
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Outlier Detection 타임아웃 (120초 초과)"
+    );
+
+    // 전역 변수에서 결과 가져오기
+    const resultPyObj = py.globals.get("js_result");
+
+    // 결과 객체 검증
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Outlier Detection error: Python code returned None or undefined.`
+      );
+    }
+
+    // Python 딕셔너리를 JavaScript 객체로 변환
+    const result = fromPython(resultPyObj);
+
+    // 에러가 발생한 경우 처리
+    if (result && result.__error__) {
+      const errorMsg = result.error_traceback || result.error_message || "Unknown error";
+      console.error("Outlier Detection Python error:", errorMsg);
+      throw new Error(
+        `Python Outlier Detection error:\n${errorMsg}`
+      );
+    }
+
+    // 필수 속성 검증
+    if (!result.results || !Array.isArray(result.results)) {
+      console.error("Outlier Detection invalid result:", result);
+      throw new Error(
+        `Python Outlier Detection error: Missing or invalid 'results' in result. Result: ${JSON.stringify(result)}`
+      );
+    }
+
+    // 정리
+    py.globals.delete("js_data");
+    py.globals.delete("js_column");
+    py.globals.delete("js_methods");
+    py.globals.delete("js_iqr_multiplier");
+    py.globals.delete("js_zscore_threshold");
+    py.globals.delete("js_contamination");
+    py.globals.delete("js_result");
+
+    return {
+      results: result.results.map((r: any) => ({
+        method: r.method,
+        outlierIndices: r.outlier_indices,
+        outlierCount: r.outlier_count,
+        outlierPercentage: r.outlier_percentage,
+        details: r.details
+      })),
+      totalOutliers: result.total_outliers,
+      outlierIndices: result.outlier_indices
+    };
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_column");
+        py.globals.delete("js_methods");
+        py.globals.delete("js_iqr_multiplier");
+        py.globals.delete("js_zscore_threshold");
+        py.globals.delete("js_contamination");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Outlier Detection error:\n${errorMessage}`);
+  }
+}
+
+/**
  * ColumnPlot을 Python으로 실행합니다
  * 타임아웃: 120초
  */
@@ -6748,5 +7256,681 @@ except Exception as e:
 
     const errorMessage = error.message || String(error);
     throw new Error(`Python ColumnPlot error: ${errorMessage}`);
+  }
+}
+
+/**
+ * 가설 검정을 수행합니다
+ */
+export async function performHypothesisTests(
+  data: any[],
+  tests: Array<{
+    testType: "t_test_one_sample" | "t_test_independent" | "t_test_paired" | "chi_square" | "anova" | "ks_test" | "shapiro_wilk" | "levene";
+    columns: string[];
+    options?: Record<string, any>;
+  }>,
+  timeoutMs: number = 120000
+): Promise<Array<{
+  testType: string;
+  testName: string;
+  columns: string[];
+  statistic?: number;
+  pValue?: number;
+  degreesOfFreedom?: number | number[];
+  criticalValue?: number;
+  conclusion?: string;
+  interpretation?: string;
+  details?: Record<string, any>;
+}>> {
+  const py = await loadPyodide();
+
+  try {
+    // 데이터를 Python으로 전달
+    py.globals.set("js_data", data);
+    py.globals.set("js_tests", tests);
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from scipy import stats
+from scipy.stats import chi2_contingency, f_oneway, levene, shapiro, kstest, ttest_1samp, ttest_ind, ttest_rel
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_data.to_py())
+    tests_config = js_tests.to_py()
+    
+    results = []
+    
+    for test_config in tests_config:
+        test_type = str(test_config['testType'])
+        columns = test_config['columns']
+        options = test_config.get('options', {})
+        
+        result = {
+            'testType': test_type,
+            'testName': '',
+            'columns': columns,
+            'statistic': None,
+            'pValue': None,
+            'degreesOfFreedom': None,
+            'criticalValue': None,
+            'conclusion': None,
+            'interpretation': None,
+            'details': {}
+        }
+        
+        try:
+            if test_type == 't_test_one_sample':
+                # 단일 표본 t-검정
+                if len(columns) < 1:
+                    raise ValueError("t_test_one_sample requires 1 column")
+                col = columns[0]
+                sample = dataframe[col].dropna()
+                popmean = options.get('popmean', 0)
+                alternative = options.get('alternative', 'two-sided')
+                
+                statistic, p_value = ttest_1samp(sample, popmean, alternative=alternative)
+                
+                result['testName'] = 'One-Sample t-test'
+                result['statistic'] = float(statistic)
+                result['pValue'] = float(p_value)
+                result['degreesOfFreedom'] = int(len(sample) - 1)
+                result['conclusion'] = 'Reject H0' if p_value < 0.05 else 'Fail to reject H0'
+                result['interpretation'] = f"t-statistic: {statistic:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'sample_size': int(len(sample)),
+                    'sample_mean': float(sample.mean()),
+                    'popmean': float(popmean),
+                    'alternative': alternative
+                }
+                
+            elif test_type == 't_test_independent':
+                # 독립 표본 t-검정
+                if len(columns) < 2:
+                    raise ValueError("t_test_independent requires 2 columns")
+                col1 = columns[0]
+                col2 = columns[1]
+                group_col = options.get('group_column')
+                
+                if group_col:
+                    # 그룹 열이 있는 경우
+                    groups = dataframe[group_col].unique()
+                    if len(groups) != 2:
+                        raise ValueError("group_column must have exactly 2 groups")
+                    group1_data = dataframe[dataframe[group_col] == groups[0]][col1].dropna()
+                    group2_data = dataframe[dataframe[group_col] == groups[1]][col1].dropna()
+                else:
+                    # 두 개의 숫자 열
+                    group1_data = dataframe[col1].dropna()
+                    group2_data = dataframe[col2].dropna()
+                
+                equal_var = options.get('equal_var', True)
+                alternative = options.get('alternative', 'two-sided')
+                
+                statistic, p_value = ttest_ind(group1_data, group2_data, equal_var=equal_var, alternative=alternative)
+                
+                result['testName'] = 'Independent Samples t-test'
+                result['statistic'] = float(statistic)
+                result['pValue'] = float(p_value)
+                result['degreesOfFreedom'] = int(len(group1_data) + len(group2_data) - 2)
+                result['conclusion'] = 'Reject H0' if p_value < 0.05 else 'Fail to reject H0'
+                result['interpretation'] = f"t-statistic: {statistic:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'group1_size': int(len(group1_data)),
+                    'group1_mean': float(group1_data.mean()),
+                    'group2_size': int(len(group2_data)),
+                    'group2_mean': float(group2_data.mean()),
+                    'equal_var': equal_var,
+                    'alternative': alternative
+                }
+                
+            elif test_type == 't_test_paired':
+                # 대응 표본 t-검정
+                if len(columns) < 2:
+                    raise ValueError("t_test_paired requires 2 columns")
+                col1 = columns[0]
+                col2 = columns[1]
+                
+                # 결측치가 있는 행 제거
+                paired_data = dataframe[[col1, col2]].dropna()
+                group1_data = paired_data[col1]
+                group2_data = paired_data[col2]
+                
+                alternative = options.get('alternative', 'two-sided')
+                
+                statistic, p_value = ttest_rel(group1_data, group2_data, alternative=alternative)
+                
+                result['testName'] = 'Paired Samples t-test'
+                result['statistic'] = float(statistic)
+                result['pValue'] = float(p_value)
+                result['degreesOfFreedom'] = int(len(paired_data) - 1)
+                result['conclusion'] = 'Reject H0' if p_value < 0.05 else 'Fail to reject H0'
+                result['interpretation'] = f"t-statistic: {statistic:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'sample_size': int(len(paired_data)),
+                    'group1_mean': float(group1_data.mean()),
+                    'group2_mean': float(group2_data.mean()),
+                    'alternative': alternative
+                }
+                
+            elif test_type == 'chi_square':
+                # 카이제곱 검정
+                if len(columns) < 2:
+                    raise ValueError("chi_square requires 2 categorical columns")
+                col1 = columns[0]
+                col2 = columns[1]
+                
+                contingency_table = pd.crosstab(dataframe[col1], dataframe[col2])
+                chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+                
+                result['testName'] = 'Chi-square Test'
+                result['statistic'] = float(chi2)
+                result['pValue'] = float(p_value)
+                result['degreesOfFreedom'] = int(dof)
+                result['conclusion'] = 'Reject H0' if p_value < 0.05 else 'Fail to reject H0'
+                result['interpretation'] = f"Chi-square: {chi2:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'contingency_table': contingency_table.to_dict(),
+                    'expected_frequencies': expected.tolist() if hasattr(expected, 'tolist') else expected
+                }
+                
+            elif test_type == 'anova':
+                # ANOVA
+                if len(columns) < 2:
+                    raise ValueError("anova requires at least 2 columns (1 numeric, 1 categorical)")
+                numeric_col = columns[0]
+                group_col = columns[1] if len(columns) > 1 else None
+                
+                if group_col:
+                    groups = dataframe[group_col].unique()
+                    group_data = [dataframe[dataframe[group_col] == g][numeric_col].dropna() for g in groups]
+                else:
+                    # 여러 숫자 열
+                    group_data = [dataframe[col].dropna() for col in columns]
+                
+                if len(group_data) < 2:
+                    raise ValueError("anova requires at least 2 groups")
+                
+                statistic, p_value = f_oneway(*group_data)
+                
+                result['testName'] = 'One-way ANOVA'
+                result['statistic'] = float(statistic)
+                result['pValue'] = float(p_value)
+                result['degreesOfFreedom'] = [int(len(group_data) - 1), int(sum(len(g) for g in group_data) - len(group_data))]
+                result['conclusion'] = 'Reject H0' if p_value < 0.05 else 'Fail to reject H0'
+                result['interpretation'] = f"F-statistic: {statistic:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'num_groups': int(len(group_data)),
+                    'group_sizes': [int(len(g)) for g in group_data],
+                    'group_means': [float(g.mean()) for g in group_data]
+                }
+                
+            elif test_type == 'ks_test':
+                # Kolmogorov-Smirnov 검정
+                if len(columns) < 1:
+                    raise ValueError("ks_test requires at least 1 column")
+                
+                col = columns[0]
+                sample = dataframe[col].dropna()
+                
+                # 분포 비교 (기본값: 정규분포)
+                dist = options.get('distribution', 'norm')
+                if dist == 'norm':
+                    # 정규분포와 비교
+                    sample_mean = sample.mean()
+                    sample_std = sample.std()
+                    statistic, p_value = kstest(sample, 'norm', args=(sample_mean, sample_std))
+                elif dist == 'uniform':
+                    statistic, p_value = kstest(sample, 'uniform')
+                else:
+                    # 두 표본 비교
+                    if len(columns) < 2:
+                        raise ValueError("ks_test with two samples requires 2 columns")
+                    sample2 = dataframe[columns[1]].dropna()
+                    statistic, p_value = kstest(sample, sample2)
+                
+                result['testName'] = 'Kolmogorov-Smirnov Test'
+                result['statistic'] = float(statistic)
+                result['pValue'] = float(p_value)
+                result['conclusion'] = 'Reject H0' if p_value < 0.05 else 'Fail to reject H0'
+                result['interpretation'] = f"KS-statistic: {statistic:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'sample_size': int(len(sample)),
+                    'distribution': dist
+                }
+                
+            elif test_type == 'shapiro_wilk':
+                # Shapiro-Wilk 정규성 검정
+                if len(columns) < 1:
+                    raise ValueError("shapiro_wilk requires 1 column")
+                col = columns[0]
+                sample = dataframe[col].dropna()
+                
+                if len(sample) < 3:
+                    raise ValueError("shapiro_wilk requires at least 3 samples")
+                if len(sample) > 5000:
+                    # 샘플 크기가 너무 크면 일부만 사용
+                    sample = sample.sample(5000)
+                
+                statistic, p_value = shapiro(sample)
+                
+                result['testName'] = 'Shapiro-Wilk Test'
+                result['statistic'] = float(statistic)
+                result['pValue'] = float(p_value)
+                result['conclusion'] = 'Reject H0 (not normal)' if p_value < 0.05 else 'Fail to reject H0 (normal)'
+                result['interpretation'] = f"W-statistic: {statistic:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'sample_size': int(len(sample))
+                }
+                
+            elif test_type == 'levene':
+                # Levene 등분산성 검정
+                if len(columns) < 2:
+                    raise ValueError("levene requires at least 2 columns (1 numeric, 1 categorical)")
+                numeric_col = columns[0]
+                group_col = columns[1] if len(columns) > 1 else None
+                
+                if group_col:
+                    groups = dataframe[group_col].unique()
+                    group_data = [dataframe[dataframe[group_col] == g][numeric_col].dropna() for g in groups]
+                else:
+                    # 여러 숫자 열
+                    group_data = [dataframe[col].dropna() for col in columns]
+                
+                if len(group_data) < 2:
+                    raise ValueError("levene requires at least 2 groups")
+                
+                center = options.get('center', 'median')
+                statistic, p_value = levene(*group_data, center=center)
+                
+                result['testName'] = 'Levene Test'
+                result['statistic'] = float(statistic)
+                result['pValue'] = float(p_value)
+                result['degreesOfFreedom'] = [int(len(group_data) - 1), int(sum(len(g) for g in group_data) - len(group_data))]
+                result['conclusion'] = 'Reject H0 (unequal variances)' if p_value < 0.05 else 'Fail to reject H0 (equal variances)'
+                result['interpretation'] = f"W-statistic: {statistic:.4f}, p-value: {p_value:.4f}"
+                result['details'] = {
+                    'num_groups': int(len(group_data)),
+                    'group_sizes': [int(len(g)) for g in group_data],
+                    'group_variances': [float(g.var()) for g in group_data],
+                    'center': center
+                }
+            else:
+                raise ValueError(f"Unknown test type: {test_type}")
+                
+        except Exception as e:
+            result['testName'] = f"Error: {str(e)}"
+            result['details'] = {'error': str(e)}
+        
+        results.append(result)
+    
+    js_result = results
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Hypothesis Testing 실행 타임아웃 (120초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Hypothesis Testing error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = resultPyObj.toJs({ dict_converter: Object.fromEntries });
+
+    // 에러 체크
+    if (result && typeof result === "object" && "__error__" in result) {
+      const errorMessage = result.error_message || "Unknown error";
+      const errorTraceback = result.error_traceback || "";
+      throw new Error(
+        `Python Hypothesis Testing error: ${errorMessage}\n${errorTraceback}`
+      );
+    }
+
+    // 결과 반환
+    return result as Array<{
+      testType: string;
+      testName: string;
+      columns: string[];
+      statistic?: number;
+      pValue?: number;
+      degreesOfFreedom?: number | number[];
+      criticalValue?: number;
+      conclusion?: string;
+      interpretation?: string;
+      details?: Record<string, any>;
+    }>;
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = await loadPyodide();
+      if (py && py.globals) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_tests");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Hypothesis Testing error: ${errorMessage}`);
+  }
+}
+
+/**
+ * 상관분석을 수행합니다 (Pearson, Spearman, Kendall, Cramér's V)
+ */
+export async function performCorrelationAnalysis(
+  data: any[],
+  columns: string[],
+  numericColumns: string[],
+  categoricalColumns: string[],
+  timeoutMs: number = 120000
+): Promise<{
+  correlationMatrices: Array<{
+    method: "pearson" | "spearman" | "kendall" | "cramers_v";
+    matrix: Record<string, Record<string, number>>;
+    columns: string[];
+  }>;
+  heatmapImage?: string;
+  pairplotImage?: string;
+  summary?: Record<string, any>;
+}> {
+  const py = await loadPyodide();
+
+  try {
+    // matplotlib 패키지 로드 (seaborn은 Pyodide에서 지원하지 않음)
+    await withTimeout(
+      py.loadPackage(["matplotlib"]),
+      90000,
+      "matplotlib 패키지 설치 타임아웃 (90초 초과)"
+    );
+
+    // 데이터를 Python으로 전달
+    py.globals.set("js_data", data);
+    py.globals.set("js_columns", columns);
+    py.globals.set("js_numeric_columns", numericColumns);
+    py.globals.set("js_categorical_columns", categoricalColumns);
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+import io
+import base64
+from scipy import stats
+from scipy.stats import chi2_contingency
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+try:
+    # 데이터 준비
+    dataframe = pd.DataFrame(js_data.to_py())
+    columns = js_columns.to_py() if js_columns is not None else []
+    numeric_columns = js_numeric_columns.to_py() if js_numeric_columns is not None else []
+    categorical_columns = js_categorical_columns.to_py() if js_categorical_columns is not None else []
+    
+    # 리스트로 변환 보장
+    if not isinstance(columns, list):
+        columns = list(columns) if columns else []
+    if not isinstance(numeric_columns, list):
+        numeric_columns = list(numeric_columns) if numeric_columns else []
+    if not isinstance(categorical_columns, list):
+        categorical_columns = list(categorical_columns) if categorical_columns else []
+    
+    correlation_matrices = []
+    heatmap_image = None
+    pairplot_image = None
+    summary = {}
+    
+    # 숫자형 열이 2개 이상인 경우 상관계수 계산
+    if len(numeric_columns) >= 2:
+        numeric_data = dataframe[numeric_columns].dropna()
+        
+        # Pearson 상관계수
+        pearson_matrix = numeric_data.corr(method='pearson')
+        correlation_matrices.append({
+            'method': 'pearson',
+            'matrix': pearson_matrix.to_dict(),
+            'columns': numeric_columns
+        })
+        
+        # Spearman 상관계수
+        spearman_matrix = numeric_data.corr(method='spearman')
+        correlation_matrices.append({
+            'method': 'spearman',
+            'matrix': spearman_matrix.to_dict(),
+            'columns': numeric_columns
+        })
+        
+        # Kendall 상관계수
+        kendall_matrix = numeric_data.corr(method='kendall')
+        correlation_matrices.append({
+            'method': 'kendall',
+            'matrix': kendall_matrix.to_dict(),
+            'columns': numeric_columns
+        })
+        
+        # Heatmap 생성 (matplotlib로 구현)
+        plt.figure(figsize=(10, 8))
+        im = plt.imshow(pearson_matrix.values, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
+        plt.colorbar(im)
+        plt.xticks(range(len(pearson_matrix.columns)), pearson_matrix.columns, rotation=45, ha='right')
+        plt.yticks(range(len(pearson_matrix.index)), pearson_matrix.index)
+        # 상관계수 값 표시
+        for i in range(len(pearson_matrix.index)):
+            for j in range(len(pearson_matrix.columns)):
+                text = plt.text(j, i, f'{pearson_matrix.iloc[i, j]:.2f}',
+                             ha="center", va="center", color="black", fontsize=8)
+        plt.title('Correlation Heatmap (Pearson)', fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+        buffer.seek(0)
+        heatmap_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        plt.close()
+        
+        # Pairplot 생성 (열이 5개 이하인 경우만) - matplotlib로 구현
+        if len(numeric_columns) <= 5:
+            n_cols = len(numeric_columns)
+            fig, axes = plt.subplots(n_cols, n_cols, figsize=(12, 10))
+            if n_cols == 1:
+                axes = [[axes]]
+            else:
+                axes = axes.reshape(n_cols, n_cols)
+            
+            for i, col1 in enumerate(numeric_columns):
+                for j, col2 in enumerate(numeric_columns):
+                    ax = axes[i][j]
+                    if i == j:
+                        # 대각선: 히스토그램
+                        ax.hist(numeric_data[col1].dropna(), bins=20, alpha=0.6, edgecolor='black')
+                        ax.set_ylabel(col1 if j == 0 else '')
+                        ax.set_xlabel(col1 if i == n_cols - 1 else '')
+                    else:
+                        # 비대각선: 산점도
+                        ax.scatter(numeric_data[col2], numeric_data[col1], alpha=0.6, s=10)
+                        ax.set_ylabel(col1 if j == 0 else '')
+                        ax.set_xlabel(col2 if i == n_cols - 1 else '')
+            
+            plt.suptitle('Pairplot', fontsize=14, fontweight='bold', y=1.02)
+            plt.tight_layout()
+            
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+            buffer.seek(0)
+            pairplot_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            plt.close()
+        
+        # 요약 통계
+        summary['numeric_correlation_summary'] = {
+            'pearson_mean': float(pearson_matrix.values[np.triu_indices_from(pearson_matrix.values, k=1)].mean()),
+            'spearman_mean': float(spearman_matrix.values[np.triu_indices_from(spearman_matrix.values, k=1)].mean()),
+            'kendall_mean': float(kendall_matrix.values[np.triu_indices_from(kendall_matrix.values, k=1)].mean()),
+            'num_pairs': int(len(numeric_columns) * (len(numeric_columns) - 1) / 2)
+        }
+    
+    # 범주형 열이 2개 이상인 경우 Cramér's V 계산
+    if len(categorical_columns) >= 2:
+        cramers_v_matrix = {}
+        for col1 in categorical_columns:
+            cramers_v_matrix[col1] = {}
+            for col2 in categorical_columns:
+                if col1 == col2:
+                    cramers_v_matrix[col1][col2] = 1.0
+                else:
+                    # 교차표 생성
+                    contingency_table = pd.crosstab(dataframe[col1], dataframe[col2])
+                    chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+                    
+                    # Cramér's V 계산
+                    n = contingency_table.sum().sum()
+                    cramers_v = np.sqrt(chi2 / (n * (min(contingency_table.shape) - 1))) if n > 0 and min(contingency_table.shape) > 1 else 0.0
+                    cramers_v_matrix[col1][col2] = float(cramers_v)
+        
+        correlation_matrices.append({
+            'method': 'cramers_v',
+            'matrix': cramers_v_matrix,
+            'columns': categorical_columns
+        })
+        
+        # Cramér's V Heatmap 생성 (matplotlib로 구현)
+        if len(categorical_columns) >= 2:
+            cramers_v_df = pd.DataFrame(cramers_v_matrix)
+            plt.figure(figsize=(10, 8))
+            im = plt.imshow(cramers_v_df.values, cmap='coolwarm', aspect='auto', vmin=0, vmax=1)
+            plt.colorbar(im)
+            plt.xticks(range(len(cramers_v_df.columns)), cramers_v_df.columns, rotation=45, ha='right')
+            plt.yticks(range(len(cramers_v_df.index)), cramers_v_df.index)
+            # Cramér's V 값 표시
+            for i in range(len(cramers_v_df.index)):
+                for j in range(len(cramers_v_df.columns)):
+                    text = plt.text(j, i, f'{cramers_v_df.iloc[i, j]:.2f}',
+                                 ha="center", va="center", color="black", fontsize=8)
+            plt.title("Cramér's V Heatmap", fontsize=14, fontweight='bold')
+            plt.tight_layout()
+            
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+            buffer.seek(0)
+            if heatmap_image is None:
+                heatmap_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            plt.close()
+        
+        # 요약 통계
+        if 'categorical_correlation_summary' not in summary:
+            summary['categorical_correlation_summary'] = {}
+        cramers_v_values = [v for row in cramers_v_matrix.values() for k, v in row.items() if k != list(cramers_v_matrix.keys())[list(cramers_v_matrix.values()).index(row)]]
+        summary['categorical_correlation_summary'] = {
+            'cramers_v_mean': float(np.mean([v for row in cramers_v_matrix.values() for k, v in row.items() if k != list(cramers_v_matrix.keys())[list(cramers_v_matrix.values()).index(row)]])) if len(cramers_v_matrix) > 1 else 0.0,
+            'num_pairs': int(len(categorical_columns) * (len(categorical_columns) - 1) / 2)
+        }
+    
+    result = {
+        'correlation_matrices': correlation_matrices,
+        'heatmap_image': heatmap_image,
+        'pairplot_image': pairplot_image,
+        'summary': summary
+    }
+    
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    error_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+    js_result = error_result
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Correlation Analysis 실행 타임아웃 (120초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Correlation Analysis error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = resultPyObj.toJs({ dict_converter: Object.fromEntries });
+
+    // 에러 체크
+    if (result && typeof result === "object" && "__error__" in result) {
+      const errorMessage = result.error_message || "Unknown error";
+      const errorTraceback = result.error_traceback || "";
+      throw new Error(
+        `Python Correlation Analysis error: ${errorMessage}\n${errorTraceback}`
+      );
+    }
+
+    // 결과 검증 및 기본값 설정
+    if (!result || typeof result !== "object") {
+      throw new Error("Python Correlation Analysis returned invalid result");
+    }
+
+    const correlationMatrices = result.correlation_matrices || result.correlationMatrices || [];
+    const heatmapImage = result.heatmap_image || result.heatmapImage;
+    const pairplotImage = result.pairplot_image || result.pairplotImage;
+    const summary = result.summary || {};
+
+    // 결과 반환
+    return {
+      correlationMatrices: Array.isArray(correlationMatrices) ? correlationMatrices : [],
+      heatmapImage: heatmapImage || undefined,
+      pairplotImage: pairplotImage || undefined,
+      summary: summary || {},
+    } as {
+      correlationMatrices: Array<{
+        method: "pearson" | "spearman" | "kendall" | "cramers_v";
+        matrix: Record<string, Record<string, number>>;
+        columns: string[];
+      }>;
+      heatmapImage?: string;
+      pairplotImage?: string;
+      summary?: Record<string, any>;
+    };
+  } catch (error: any) {
+    // 정리
+    try {
+      const py = await loadPyodide();
+      if (py && py.globals) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_columns");
+        py.globals.delete("js_numeric_columns");
+        py.globals.delete("js_categorical_columns");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Correlation Analysis error: ${errorMessage}`);
   }
 }

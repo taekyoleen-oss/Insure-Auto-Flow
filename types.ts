@@ -5,6 +5,9 @@ export enum ModuleType {
   SelectData = "SelectData",
   DataFiltering = "DataFiltering",
   ColumnPlot = "ColumnPlot",
+  OutlierDetector = "OutlierDetector",
+  HypothesisTesting = "HypothesisTesting",
+  Correlation = "Correlation",
   HandleMissingValues = "HandleMissingValues",
   TransformData = "TransformData",
   EncodeCategorical = "EncodeCategorical",
@@ -349,6 +352,76 @@ export interface ColumnPlotOutput {
   imageBase64?: string; // 차트 이미지 (base64)
 }
 
+export interface OutlierResult {
+  method: "IQR" | "ZScore" | "IsolationForest" | "Boxplot";
+  outlierIndices: number[]; // 이상치로 탐지된 행 인덱스
+  outlierCount: number;
+  outlierPercentage: number;
+  details?: Record<string, any>; // 방법별 상세 정보
+}
+
+export interface ColumnOutlierResult {
+  column: string;
+  results: OutlierResult[]; // 각 방법별 결과
+  totalOutliers: number; // 모든 방법에서 탐지된 총 이상치 수 (중복 제거)
+  outlierIndices: number[]; // 모든 방법에서 탐지된 이상치 인덱스 (중복 제거)
+}
+
+export interface OutlierDetectorOutput {
+  type: "OutlierDetectorOutput";
+  columns: string[]; // 분석된 열 목록
+  columnResults: ColumnOutlierResult[]; // 각 열별 결과
+  totalOutliers: number; // 모든 열에서 탐지된 총 이상치 수 (중복 제거)
+  allOutlierIndices: number[]; // 모든 열에서 탐지된 이상치 인덱스 (중복 제거)
+  cleanedData?: Record<string, any>[]; // 이상치 제거된 데이터 (선택적)
+  originalData?: Record<string, any>[]; // 원본 데이터 (제거 작업을 위해 필요)
+}
+
+export type HypothesisTestType = 
+  | "t_test_one_sample" 
+  | "t_test_independent" 
+  | "t_test_paired"
+  | "chi_square"
+  | "anova"
+  | "ks_test"
+  | "shapiro_wilk"
+  | "levene";
+
+export interface HypothesisTestResult {
+  testType: HypothesisTestType;
+  testName: string;
+  columns: string[]; // 사용된 열
+  statistic?: number; // 검정 통계량
+  pValue?: number; // p-value
+  degreesOfFreedom?: number | number[]; // 자유도
+  criticalValue?: number; // 임계값
+  conclusion?: string; // 결론 (예: "Reject H0", "Fail to reject H0")
+  interpretation?: string; // 해석
+  details?: Record<string, any>; // 검정별 상세 정보
+}
+
+export interface HypothesisTestingOutput {
+  type: "HypothesisTestingOutput";
+  results: HypothesisTestResult[]; // 각 검정별 결과
+}
+
+export interface CorrelationMatrix {
+  method: "pearson" | "spearman" | "kendall" | "cramers_v";
+  matrix: Record<string, Record<string, number>>; // 상관계수 행렬
+  columns: string[]; // 분석된 열 목록
+}
+
+export interface CorrelationOutput {
+  type: "CorrelationOutput";
+  columns: string[]; // 분석된 열 목록
+  numericColumns: string[]; // 숫자형 열
+  categoricalColumns: string[]; // 범주형 열
+  correlationMatrices: CorrelationMatrix[]; // 각 방법별 상관계수 행렬
+  heatmapImage?: string; // Heatmap 이미지 (base64)
+  pairplotImage?: string; // Pairplot 이미지 (base64)
+  summary?: Record<string, any>; // 요약 통계
+}
+
 export interface CanvasModule {
   id: string;
   name: string;
@@ -378,7 +451,10 @@ export interface CanvasModule {
     | MissingHandlerOutput
     | EncoderOutput
     | NormalizerOutput
-    | ColumnPlotOutput;
+    | ColumnPlotOutput
+    | OutlierDetectorOutput
+    | HypothesisTestingOutput
+    | CorrelationOutput;
   // Shape-specific properties
   shapeData?: {
     // For TextBox

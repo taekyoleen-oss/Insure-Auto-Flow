@@ -21,13 +21,19 @@ const preprocessTypes = [
   ModuleType.Statistics,
   ModuleType.SelectData,
   ModuleType.DataFiltering,
-  ModuleType.ColumnPlot,
   ModuleType.HandleMissingValues,
   ModuleType.TransformData,
   ModuleType.EncodeCategorical,
   ModuleType.NormalizeData,
   ModuleType.TransitionData,
   ModuleType.ResampleData,
+];
+
+const statLabTypes = [
+  ModuleType.ColumnPlot,
+  ModuleType.OutlierDetector,
+  ModuleType.HypothesisTesting,
+  ModuleType.Correlation,
 ];
 
 const analysisOpTypes = [
@@ -73,6 +79,10 @@ const categorizedModules = [
   {
     name: "Data Preprocess",
     modules: TOOLBOX_MODULES.filter((m) => preprocessTypes.includes(m.type)),
+  },
+  {
+    name: "Stat Lab",
+    modules: TOOLBOX_MODULES.filter((m) => statLabTypes.includes(m.type)),
   },
   {
     name: "Data Analysis",
@@ -151,6 +161,7 @@ export const Toolbox: React.FC<ToolboxProps> = ({
     Record<string, boolean>
   >({
     "Data Preprocess": true,
+    "Stat Lab": true,
     "Data Analysis": true,
     "Tradition Analysis": true,
     Operations: true,

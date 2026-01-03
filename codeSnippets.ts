@@ -1325,6 +1325,56 @@ p_metric = {metric}
 # The actual training happens when this model is connected to a 'Train Model' module.
 print(f"sklearn.neighbors.KNeighbors{'Classifier' if p_model_purpose == 'classification' else 'Regressor'} model configured.")
 `,
+
+    OutlierDetector: `
+# Outlier Detector 모듈
+# 이 모듈은 여러 방법을 사용하여 이상치를 탐지합니다:
+# - IQR (Interquartile Range) 기반 탐지
+# - Z-score 기반 탐지
+# - Isolation Forest (고급)
+# - Boxplot 기반 탐지
+
+# Parameters from UI
+p_column = {column}
+
+# Note: 실제 이상치 탐지는 Pyodide를 통해 JavaScript에서 실행됩니다.
+# 이 모듈은 설정만 저장하며, 실행은 App.tsx에서 처리됩니다.
+print(f"Outlier Detector configured for column: {p_column}")
+`,
+
+    HypothesisTesting: `
+# Hypothesis Testing 모듈
+# 이 모듈은 다양한 가설 검정을 수행합니다:
+# - t-test (단일/독립/대응)
+# - 카이제곱 검정 (범주형)
+# - ANOVA (집단 간 평균 비교)
+# - KS-test (분포 비교)
+# - Shapiro-Wilk (정규성 검정)
+# - Levene test (등분산성 검정)
+
+# Parameters from UI
+p_tests = {tests}
+
+# Note: 실제 가설 검정은 Pyodide를 통해 JavaScript에서 실행됩니다.
+# 이 모듈은 설정만 저장하며, 실행은 App.tsx에서 처리됩니다.
+print(f"Hypothesis Testing configured for tests: {p_tests}")
+`,
+
+    Correlation: `
+# Correlation 모듈
+# 이 모듈은 변수 간 상관관계를 분석합니다:
+# - Pearson/Spearman/Kendall 상관계수
+# - 범주형 연관성 (Cramér's V)
+# - Heatmap 자동 생성
+# - Pairplot 및 다양한 plot
+
+# Parameters from UI
+p_columns = {columns}
+
+# Note: 실제 상관분석은 Pyodide를 통해 JavaScript에서 실행됩니다.
+# 이 모듈은 설정만 저장하며, 실행은 App.tsx에서 처리됩니다.
+print(f"Correlation configured for columns: {p_columns}")
+`,
 };
 
 export const getModuleCode = (

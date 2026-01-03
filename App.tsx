@@ -39,6 +39,10 @@ import {
   DiversionCheckerOutput,
   EvaluateStatOutput,
   StatsModelFamily,
+  OutlierDetectorOutput,
+  HypothesisTestingOutput,
+  HypothesisTestType,
+  CorrelationOutput,
 } from "./types";
 import { DEFAULT_MODULES, TOOLBOX_MODULES, SAMPLE_MODELS } from "./constants";
 import { SAVED_SAMPLES } from "./savedSamples";
@@ -83,6 +87,9 @@ import { FinalXolPricePreviewModal } from "./components/FinalXolPricePreviewModa
 import { PredictModelPreviewModal } from "./components/PredictModelPreviewModal";
 import { EvaluationPreviewModal } from "./components/EvaluationPreviewModal";
 import { ColumnPlotPreviewModal } from "./components/ColumnPlotPreviewModal";
+import { OutlierDetectorPreviewModal } from "./components/OutlierDetectorPreviewModal";
+import { HypothesisTestingPreviewModal } from "./components/HypothesisTestingPreviewModal";
+import { CorrelationPreviewModal } from "./components/CorrelationPreviewModal";
 import { AIPipelineFromGoalModal } from "./components/AIPipelineFromGoalModal";
 import { AIPipelineFromDataModal } from "./components/AIPipelineFromDataModal";
 import { AIPlanDisplayModal } from "./components/AIPlanDisplayModal";
@@ -178,6 +185,12 @@ const App: React.FC = () => {
   const [viewingPredictModel, setViewingPredictModel] =
     useState<CanvasModule | null>(null);
   const [viewingColumnPlot, setViewingColumnPlot] =
+    useState<CanvasModule | null>(null);
+  const [viewingOutlierDetector, setViewingOutlierDetector] =
+    useState<CanvasModule | null>(null);
+  const [viewingHypothesisTesting, setViewingHypothesisTesting] =
+    useState<CanvasModule | null>(null);
+  const [viewingCorrelation, setViewingCorrelation] =
     useState<CanvasModule | null>(null);
 
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -2090,6 +2103,24 @@ ${header}
         setViewingDataForModule(module);
       } else if (module.type === ModuleType.ColumnPlot && module.outputData.type === "ColumnPlotOutput") {
         setViewingColumnPlot(module);
+      } else if (module.type === ModuleType.OutlierDetector) {
+        // OutlierDetector 모듈의 경우, outputData가 DataPreview여도 View Details를 위해 별도 처리
+        if (module.outputData.type === "OutlierDetectorOutput") {
+          setViewingOutlierDetector(module);
+        } else if (module.outputData.type === "DataPreview" && module.parameters._outlierOutput) {
+          // parameters에 저장된 OutlierDetectorOutput 정보 사용
+          const moduleWithOutlierOutput = {
+            ...module,
+            outputData: module.parameters._outlierOutput as OutlierDetectorOutput,
+          };
+          setViewingOutlierDetector(moduleWithOutlierOutput);
+        } else {
+          setViewingOutlierDetector(module);
+        }
+      } else if (module.outputData.type === "HypothesisTestingOutput") {
+        setViewingHypothesisTesting(module);
+      } else if (module.outputData.type === "CorrelationOutput") {
+        setViewingCorrelation(module);
       } else {
         setViewingDataForModule(module);
       }
@@ -2108,6 +2139,9 @@ ${header}
     setViewingEvaluation(null);
     setViewingPredictModel(null);
     setViewingColumnPlot(null);
+    setViewingOutlierDetector(null);
+    setViewingHypothesisTesting(null);
+    setViewingCorrelation(null);
   };
 
   // Model definition modules that should not be executed directly in Run All
@@ -2706,6 +2740,251 @@ ${header}
           };
 
           addLog("SUCCESS", "Column Plot 설정 완료");
+        } else if (module.type === ModuleType.OutlierDetector) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const { columns = [] } = module.parameters;
+
+          if (!Array.isArray(columns) || columns.length === 0) {
+            throw new Error("At least one column must be selected for outlier detection.");
+          }
+
+          if (columns.length > 5) {
+            throw new Error("Maximum 5 columns can be selected for outlier detection.");
+          }
+
+          // 컬럼 확인
+          const invalidColumns: string[] = [];
+          const numericColumns: string[] = [];
+          columns.forEach((colName: string) => {
+            const col = inputData.columns.find((c) => c.name === colName);
+            if (!col) {
+              invalidColumns.push(colName);
+            } else if (col.type !== "number") {
+              invalidColumns.push(colName);
+            } else {
+              numericColumns.push(colName);
+            }
+          });
+
+          if (invalidColumns.length > 0) {
+            throw new Error(`Invalid columns: ${invalidColumns.join(", ")}. All columns must be numeric.`);
+          }
+
+          // Pyodide를 사용하여 Python으로 각 열에 대해 이상치 탐지
+          try {
+            addLog(
+              "INFO",
+              `Pyodide를 사용하여 Python으로 이상치 탐지 중... (Columns: ${columns.join(", ")})`
+            );
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { detectOutliers } = pyodideModule;
+
+            const columnResults: Array<{
+              column: string;
+              results: Array<{
+                method: "IQR" | "ZScore" | "IsolationForest" | "Boxplot";
+                outlierIndices: number[];
+                outlierCount: number;
+                outlierPercentage: number;
+                details?: Record<string, any>;
+              }>;
+              totalOutliers: number;
+              outlierIndices: number[];
+            }> = [];
+
+            // 모든 열에 대해 이상치 탐지 수행
+            for (const column of columns) {
+              const result = await detectOutliers(
+                inputData.rows || [],
+                column,
+                ["IQR", "ZScore", "IsolationForest", "Boxplot"], // 모든 방법 사용
+                1.5, // IQR multiplier
+                3, // Z-score threshold
+                0.1, // Isolation Forest contamination
+                120000 // 타임아웃: 120초
+              );
+
+              columnResults.push({
+                column,
+                results: result.results,
+                totalOutliers: result.totalOutliers,
+                outlierIndices: result.outlierIndices,
+              });
+            }
+
+            // 모든 열에서 탐지된 이상치 인덱스 합집합
+            const allOutlierIndicesSet = new Set<number>();
+            columnResults.forEach((cr) => {
+              cr.outlierIndices.forEach((idx) => allOutlierIndicesSet.add(idx));
+            });
+            const allOutlierIndices = Array.from(allOutlierIndicesSet).sort((a, b) => a - b);
+
+            // 원본 데이터 저장 (제거 작업을 위해 필요)
+            const originalRows = inputData.rows || [];
+
+            newOutputData = {
+              type: "OutlierDetectorOutput",
+              columns,
+              columnResults,
+              totalOutliers: allOutlierIndices.length,
+              allOutlierIndices,
+              originalData: originalRows,
+              // 초기에는 cleanedData를 생성하지 않음 (사용자가 제거할 때 생성)
+            };
+
+            addLog("SUCCESS", `Python으로 이상치 탐지 완료: ${columns.length}개 열에서 총 ${allOutlierIndices.length}개 이상치 행 발견`);
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python Outlier Detection 실패: ${errorMessage}`);
+            throw new Error(`이상치 탐지 실패: ${errorMessage}`);
+          }
+        } else if (module.type === ModuleType.HypothesisTesting) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const { tests = [] } = module.parameters;
+
+          if (!Array.isArray(tests) || tests.length === 0) {
+            throw new Error("At least one test must be selected for hypothesis testing.");
+          }
+
+          // 각 테스트에 대해 열이 선택되었는지 확인
+          const invalidTests: string[] = [];
+          tests.forEach((test: any, index: number) => {
+            if (!test.testType) {
+              invalidTests.push(`Test ${index + 1}: missing testType`);
+            } else if (!Array.isArray(test.columns) || test.columns.length === 0) {
+              invalidTests.push(`Test ${index + 1} (${test.testType}): no columns selected`);
+            }
+          });
+
+          if (invalidTests.length > 0) {
+            throw new Error(`Invalid test configuration:\n${invalidTests.join("\n")}`);
+          }
+
+          // Pyodide를 사용하여 Python으로 가설 검정 수행
+          try {
+            addLog(
+              "INFO",
+              `Pyodide를 사용하여 Python으로 가설 검정 수행 중... (${tests.length}개 테스트)`
+            );
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { performHypothesisTests } = pyodideModule;
+
+            const results = await performHypothesisTests(
+              inputData.rows || [],
+              tests,
+              120000 // 타임아웃: 120초
+            );
+
+            newOutputData = {
+              type: "HypothesisTestingOutput",
+              results: results.map((r) => ({
+                testType: r.testType as HypothesisTestType,
+                testName: r.testName,
+                columns: r.columns,
+                statistic: r.statistic,
+                pValue: r.pValue,
+                degreesOfFreedom: r.degreesOfFreedom,
+                criticalValue: r.criticalValue,
+                conclusion: r.conclusion,
+                interpretation: r.interpretation,
+                details: r.details,
+              })),
+            };
+
+            const successCount = results.filter(r => r.pValue !== undefined && !r.testName.startsWith('Error:')).length;
+            addLog("SUCCESS", `Python으로 가설 검정 완료: ${successCount}/${results.length}개 테스트 성공`);
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python Hypothesis Testing 실패: ${errorMessage}`);
+            throw new Error(`가설 검정 실패: ${errorMessage}`);
+          }
+        } else if (module.type === ModuleType.Correlation) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const { columns = [] } = module.parameters;
+
+          if (!Array.isArray(columns) || columns.length === 0) {
+            throw new Error("At least one column must be selected for correlation analysis.");
+          }
+
+          // 선택된 열이 입력 데이터에 있는지 확인
+          const invalidColumns: string[] = [];
+          columns.forEach((colName: string) => {
+            const col = inputData.columns.find((c) => c.name === colName);
+            if (!col) {
+              invalidColumns.push(colName);
+            }
+          });
+
+          if (invalidColumns.length > 0) {
+            throw new Error(`Invalid columns: ${invalidColumns.join(", ")}`);
+          }
+
+          // 숫자형과 범주형 열 분리
+          const numericColumns: string[] = [];
+          const categoricalColumns: string[] = [];
+          columns.forEach((colName: string) => {
+            const col = inputData.columns.find((c) => c.name === colName);
+            if (col) {
+              if (col.type === "number") {
+                numericColumns.push(colName);
+              } else if (col.type === "string") {
+                categoricalColumns.push(colName);
+              }
+            }
+          });
+
+          // Pyodide를 사용하여 Python으로 상관분석 수행
+          try {
+            addLog(
+              "INFO",
+              `Pyodide를 사용하여 Python으로 상관분석 수행 중... (${columns.length}개 열)`
+            );
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { performCorrelationAnalysis } = pyodideModule;
+
+            const result = await performCorrelationAnalysis(
+              inputData.rows || [],
+              columns,
+              numericColumns,
+              categoricalColumns,
+              120000 // 타임아웃: 120초
+            );
+
+            // 결과 검증
+            if (!result) {
+              throw new Error("Correlation analysis returned no result");
+            }
+            if (!result.correlationMatrices || !Array.isArray(result.correlationMatrices)) {
+              throw new Error("Correlation analysis returned invalid correlationMatrices");
+            }
+
+            newOutputData = {
+              type: "CorrelationOutput",
+              columns,
+              numericColumns,
+              categoricalColumns,
+              correlationMatrices: result.correlationMatrices || [],
+              heatmapImage: result.heatmapImage,
+              pairplotImage: result.pairplotImage,
+              summary: result.summary || {},
+            };
+
+            const methodCount = result.correlationMatrices?.length || 0;
+            addLog("SUCCESS", `Python으로 상관분석 완료: ${methodCount}개 방법, ${numericColumns.length}개 숫자형, ${categoricalColumns.length}개 범주형 열 분석`);
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python Correlation Analysis 실패: ${errorMessage}`);
+            throw new Error(`상관분석 실패: ${errorMessage}`);
+          }
         } else if (module.type === ModuleType.HandleMissingValues) {
           const inputData = getSingleInputData(module.id) as DataPreview;
           if (!inputData) throw new Error("Input data not available.");
@@ -8317,6 +8596,134 @@ ${header}
           onClose={handleCloseModal}
           modules={modules}
           connections={connections}
+        />
+      )}
+      {viewingOutlierDetector && (() => {
+        const currentModule = modules.find(m => m.id === viewingOutlierDetector.id);
+        if (!currentModule) return null;
+        
+        return (
+          <OutlierDetectorPreviewModal
+            module={currentModule}
+            projectName={projectName}
+            onClose={handleCloseModal}
+            onRemoveOutliers={(column: string, indices: number[]) => {
+              // 이상치 제거 처리
+              const module = modules.find(m => m.id === viewingOutlierDetector.id);
+              if (!module || !module.outputData || module.outputData.type !== "OutlierDetectorOutput") return;
+
+              const output = module.outputData;
+              const outlierIndicesSet = new Set(indices);
+              
+              // 해당 열의 이상치 인덱스 업데이트
+              const updatedColumnResults = output.columnResults.map(cr => {
+                if (cr.column === column) {
+                  const newOutlierIndices = cr.outlierIndices.filter(idx => !outlierIndicesSet.has(idx));
+                  // 각 방법별 결과도 업데이트
+                  const updatedResults = cr.results.map(r => {
+                    const filteredIndices = r.outlierIndices.filter(idx => !outlierIndicesSet.has(idx));
+                    return {
+                      ...r,
+                      outlierIndices: filteredIndices,
+                      outlierCount: filteredIndices.length,
+                      outlierPercentage: output.originalData 
+                        ? (filteredIndices.length / output.originalData.length * 100)
+                        : 0,
+                    };
+                  });
+                  return {
+                    ...cr,
+                    results: updatedResults,
+                    totalOutliers: newOutlierIndices.length,
+                    outlierIndices: newOutlierIndices,
+                  };
+                }
+                return cr;
+              });
+
+              // 모든 열에서 제거된 이상치를 제외한 전체 이상치 인덱스 재계산
+              const newAllOutlierIndicesSet = new Set<number>();
+              updatedColumnResults.forEach(cr => {
+                cr.outlierIndices.forEach(idx => newAllOutlierIndicesSet.add(idx));
+              });
+              const newAllOutlierIndices = Array.from(newAllOutlierIndicesSet).sort((a, b) => a - b);
+
+              // 제거된 행을 제외한 전체 테이블 생성
+              const originalRows = output.originalData || [];
+              const cleanedRows = originalRows.filter(
+                (_, idx) => !outlierIndicesSet.has(idx)
+              );
+
+              // 원본 데이터에서 입력 데이터 구조 가져오기
+              const inputData = getSingleInputData(viewingOutlierDetector.id) as DataPreview;
+              if (!inputData) return;
+
+              // OutlierDetectorOutput 업데이트 (View Details용)
+              const updatedOutput: OutlierDetectorOutput = {
+                ...output,
+                columnResults: updatedColumnResults,
+                totalOutliers: newAllOutlierIndices.length,
+                allOutlierIndices: newAllOutlierIndices,
+                cleanedData: cleanedRows,
+                originalData: originalRows, // 원본 데이터 유지
+              };
+
+              // 모듈의 출력을 DataPreview로 변경하여 다음 모듈로 전달 가능하도록
+              const newOutputDataPreview: DataPreview = {
+                type: "DataPreview",
+                columns: inputData.columns,
+                totalRowCount: cleanedRows.length,
+                rows: cleanedRows,
+              };
+
+              // 모듈 업데이트 - outputData를 DataPreview로 설정하여 다음 모듈로 전달
+              // View Details를 위해 parameters에 OutlierDetectorOutput 정보도 저장
+              updateModule(viewingOutlierDetector.id, {
+                ...module,
+                outputData: newOutputDataPreview,
+                parameters: {
+                  ...module.parameters,
+                  _outlierOutput: updatedOutput, // View Details를 위해 저장
+                },
+              });
+
+              addLog("SUCCESS", `이상치 ${indices.length}개 행 제거 완료. 출력 테이블 업데이트됨 (${cleanedRows.length}행).`);
+            }}
+            onUpdateData={(data: Record<string, any>[]) => {
+              // 데이터 업데이트
+              const module = modules.find(m => m.id === viewingOutlierDetector.id);
+              if (!module) return;
+
+              const inputData = getSingleInputData(viewingOutlierDetector.id) as DataPreview;
+              if (inputData) {
+                const newOutputDataPreview: DataPreview = {
+                  type: "DataPreview",
+                  columns: inputData.columns,
+                  totalRowCount: data.length,
+                  rows: data,
+                };
+
+                updateModule(viewingOutlierDetector.id, {
+                  ...module,
+                  outputData: newOutputDataPreview,
+                });
+              }
+            }}
+          />
+        );
+      })()}
+      {viewingHypothesisTesting && (
+        <HypothesisTestingPreviewModal
+          module={viewingHypothesisTesting}
+          projectName={projectName}
+          onClose={handleCloseModal}
+        />
+      )}
+      {viewingCorrelation && (
+        <CorrelationPreviewModal
+          module={viewingCorrelation}
+          projectName={projectName}
+          onClose={handleCloseModal}
         />
       )}
       {viewingEvaluation &&

@@ -24,6 +24,7 @@ import {
   MissingHandlerOutput,
   EncoderOutput,
   NormalizerOutput,
+  OutlierDetectorOutput,
 } from "../types";
 import {
   PlayIcon,
@@ -1052,6 +1053,410 @@ const renderParameters = (
                 </select>
               </div>
             )}
+          </div>
+        </div>
+      );
+    }
+    case ModuleType.OutlierDetector: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+      const { columns = [] } = module.parameters;
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source module to configure outlier detection.
+          </p>
+        );
+      }
+
+      // 숫자형 컬럼만 필터링
+      const numericColumns = inputColumns.filter(col => col.type === "number");
+
+      const handleColumnToggle = (columnName: string) => {
+        const currentColumns = Array.isArray(columns) ? columns : [];
+        if (currentColumns.includes(columnName)) {
+          onParamChange("columns", currentColumns.filter((c: string) => c !== columnName));
+        } else {
+          if (currentColumns.length >= 5) {
+            alert("최대 5개까지 열을 선택할 수 있습니다.");
+            return;
+          }
+          onParamChange("columns", [...currentColumns, columnName]);
+        }
+      };
+
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              Columns (최대 5개 선택)
+            </label>
+            <div className="bg-gray-700 border border-gray-600 rounded px-2 py-2 max-h-60 overflow-y-auto">
+              {numericColumns.length === 0 ? (
+                <p className="text-xs text-yellow-500">
+                  No numeric columns available. Outlier detection requires numeric data.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {numericColumns.map((col) => {
+                    const isSelected = Array.isArray(columns) && columns.includes(col.name);
+                    return (
+                      <label
+                        key={col.name}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-gray-600 p-1 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleColumnToggle(col.name)}
+                          className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
+                          disabled={!isSelected && Array.isArray(columns) && columns.length >= 5}
+                        />
+                        <span className="text-sm text-gray-300">{col.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {Array.isArray(columns) && columns.length > 0 && (
+              <p className="text-xs text-gray-400 mt-2">
+                선택된 열: {columns.length}개 / 5개
+              </p>
+            )}
+          </div>
+          <div className="border-t border-gray-700 pt-4">
+            <p className="text-xs text-gray-500">
+              This module will detect outliers using multiple methods:
+              <br />• IQR (Interquartile Range)
+              <br />• Z-score
+              <br />• Isolation Forest
+              <br />• Boxplot
+            </p>
+          </div>
+        </div>
+      );
+    }
+    case ModuleType.HypothesisTesting: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+      const { tests = [] } = module.parameters;
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source module to configure hypothesis testing.
+          </p>
+        );
+      }
+
+      // 숫자형과 범주형 컬럼 분리
+      const numericColumns = inputColumns.filter(col => col.type === "number");
+      const categoricalColumns = inputColumns.filter(col => col.type === "string");
+
+      const testTypes = [
+        { value: "t_test_one_sample", label: "One-Sample t-test", requiresNumeric: 1, requiresCategorical: 0 },
+        { value: "t_test_independent", label: "Independent Samples t-test", requiresNumeric: 1, requiresCategorical: 0 },
+        { value: "t_test_paired", label: "Paired Samples t-test", requiresNumeric: 2, requiresCategorical: 0 },
+        { value: "chi_square", label: "Chi-square Test", requiresNumeric: 0, requiresCategorical: 2 },
+        { value: "anova", label: "ANOVA", requiresNumeric: 1, requiresCategorical: 0 },
+        { value: "ks_test", label: "KS-test", requiresNumeric: 1, requiresCategorical: 0 },
+        { value: "shapiro_wilk", label: "Shapiro-Wilk Test", requiresNumeric: 1, requiresCategorical: 0 },
+        { value: "levene", label: "Levene Test", requiresNumeric: 1, requiresCategorical: 0 },
+      ];
+
+      const handleTestToggle = (testType: string) => {
+        const currentTests = Array.isArray(tests) ? tests : [];
+        const testIndex = currentTests.findIndex((t: any) => t.testType === testType);
+        
+        if (testIndex >= 0) {
+          // 테스트 제거
+          onParamChange("tests", currentTests.filter((_: any, i: number) => i !== testIndex));
+        } else {
+          // 테스트 추가
+          onParamChange("tests", [...currentTests, { testType, columns: [], options: {} }]);
+        }
+      };
+
+      const handleTestColumnChange = (testIndex: number, columns: string[]) => {
+        const currentTests = Array.isArray(tests) ? [...tests] : [];
+        if (currentTests[testIndex]) {
+          currentTests[testIndex] = { ...currentTests[testIndex], columns };
+          onParamChange("tests", currentTests);
+        }
+      };
+
+      const getAvailableColumns = (testType: string) => {
+        const testDef = testTypes.find(t => t.value === testType);
+        if (!testDef) return { numeric: [], categorical: [] };
+        
+        if (testDef.requiresCategorical > 0) {
+          return { numeric: [], categorical: categoricalColumns };
+        }
+        return { numeric: numericColumns, categorical: [] };
+      };
+
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              Select Tests
+            </label>
+            <div className="bg-gray-700 border border-gray-600 rounded px-2 py-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2">
+                {testTypes.map((test) => {
+                  const isSelected = Array.isArray(tests) && tests.some((t: any) => t.testType === test.value);
+                  const availableCols = getAvailableColumns(test.value);
+                  const canSelect = (test.requiresNumeric === 0 || availableCols.numeric.length >= test.requiresNumeric) &&
+                                   (test.requiresCategorical === 0 || availableCols.categorical.length >= test.requiresCategorical);
+                  
+                  return (
+                    <label
+                      key={test.value}
+                      className={`flex items-center gap-2 p-2 rounded ${
+                        canSelect ? 'cursor-pointer hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => canSelect && handleTestToggle(test.value)}
+                        disabled={!canSelect}
+                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm text-gray-300">{test.label}</span>
+                        {!canSelect && (
+                          <div className="text-xs text-yellow-500 mt-1">
+                            {test.requiresNumeric > 0 && availableCols.numeric.length < test.requiresNumeric && 
+                              `Requires ${test.requiresNumeric} numeric column(s)`}
+                            {test.requiresCategorical > 0 && availableCols.categorical.length < test.requiresCategorical && 
+                              `Requires ${test.requiresCategorical} categorical column(s)`}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 선택된 테스트별 열 선택 */}
+          {Array.isArray(tests) && tests.length > 0 && (
+            <div className="space-y-4 border-t border-gray-700 pt-4">
+              <label className="block text-sm text-gray-400 mb-2">
+                Configure Columns for Each Test
+              </label>
+              {tests.map((test: any, testIndex: number) => {
+                const testDef = testTypes.find(t => t.value === test.testType);
+                const availableCols = getAvailableColumns(test.testType);
+                const selectedColumns = Array.isArray(test.columns) ? test.columns : [];
+
+                return (
+                  <div key={testIndex} className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+                    <div className="text-sm font-semibold text-gray-300 mb-2">
+                      {testDef?.label || test.testType}
+                    </div>
+                    <div className="space-y-2">
+                      {testDef?.requiresNumeric > 0 && (
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Numeric Columns ({testDef.requiresNumeric} required)
+                          </label>
+                          <div className="bg-gray-700 border border-gray-600 rounded px-2 py-2 max-h-32 overflow-y-auto">
+                            {availableCols.numeric.length === 0 ? (
+                              <p className="text-xs text-yellow-500">No numeric columns available</p>
+                            ) : (
+                              <div className="space-y-1">
+                                {availableCols.numeric.map((col) => {
+                                  const isSelected = selectedColumns.includes(col.name);
+                                  const maxSelections = testDef?.requiresNumeric || 1;
+                                  const canSelect = isSelected || selectedColumns.length < maxSelections;
+
+                                  return (
+                                    <label
+                                      key={col.name}
+                                      className={`flex items-center gap-2 p-1 rounded ${
+                                        canSelect ? 'cursor-pointer hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => {
+                                          if (!canSelect && !isSelected) return;
+                                          const newColumns = isSelected
+                                            ? selectedColumns.filter((c: string) => c !== col.name)
+                                            : [...selectedColumns, col.name].slice(0, maxSelections);
+                                          handleTestColumnChange(testIndex, newColumns);
+                                        }}
+                                        disabled={!canSelect && !isSelected}
+                                        className="w-3 h-3 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
+                                      />
+                                      <span className="text-xs text-gray-300">{col.name}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {testDef?.requiresCategorical > 0 && (
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Categorical Columns ({testDef.requiresCategorical} required)
+                          </label>
+                          <div className="bg-gray-700 border border-gray-600 rounded px-2 py-2 max-h-32 overflow-y-auto">
+                            {availableCols.categorical.length === 0 ? (
+                              <p className="text-xs text-yellow-500">No categorical columns available</p>
+                            ) : (
+                              <div className="space-y-1">
+                                {availableCols.categorical.map((col) => {
+                                  const isSelected = selectedColumns.includes(col.name);
+                                  const maxSelections = testDef?.requiresCategorical || 1;
+                                  const canSelect = isSelected || selectedColumns.length < maxSelections;
+
+                                  return (
+                                    <label
+                                      key={col.name}
+                                      className={`flex items-center gap-2 p-1 rounded ${
+                                        canSelect ? 'cursor-pointer hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => {
+                                          if (!canSelect && !isSelected) return;
+                                          const newColumns = isSelected
+                                            ? selectedColumns.filter((c: string) => c !== col.name)
+                                            : [...selectedColumns, col.name].slice(0, maxSelections);
+                                          handleTestColumnChange(testIndex, newColumns);
+                                        }}
+                                        disabled={!canSelect && !isSelected}
+                                        className="w-3 h-3 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
+                                      />
+                                      <span className="text-xs text-gray-300">{col.name}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="border-t border-gray-700 pt-4">
+            <p className="text-xs text-gray-500">
+              Select tests and configure columns for each test. Column types (numeric/categorical) are automatically filtered based on test requirements.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    case ModuleType.Correlation: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+      const { columns = [] } = module.parameters;
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source module to configure correlation analysis.
+          </p>
+        );
+      }
+
+      const handleColumnToggle = (columnName: string) => {
+        const currentColumns = Array.isArray(columns) ? columns : [];
+        if (currentColumns.includes(columnName)) {
+          onParamChange("columns", currentColumns.filter((c: string) => c !== columnName));
+        } else {
+          onParamChange("columns", [...currentColumns, columnName]);
+        }
+      };
+
+      const handleSelectAll = () => {
+        const allColumnNames = inputColumns.map(col => col.name);
+        onParamChange("columns", allColumnNames);
+      };
+
+      const handleDeselectAll = () => {
+        onParamChange("columns", []);
+      };
+
+      const currentColumns = Array.isArray(columns) ? columns : [];
+      const allSelected = inputColumns.length > 0 && currentColumns.length === inputColumns.length;
+      const someSelected = currentColumns.length > 0 && currentColumns.length < inputColumns.length;
+
+      return (
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm text-gray-400">
+                Select Columns
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSelectAll}
+                  className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={handleDeselectAll}
+                  className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="bg-gray-700 border border-gray-600 rounded px-2 py-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2">
+                {inputColumns.map((col) => {
+                  const isSelected = Array.isArray(columns) && columns.includes(col.name);
+                  return (
+                    <label
+                      key={col.name}
+                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-600 p-1 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleColumnToggle(col.name)}
+                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-300">
+                        {col.name}
+                        <span className="text-xs text-gray-500 ml-2">
+                          ({col.type === "number" ? "numeric" : "categorical"})
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Selected: {currentColumns.length} / {inputColumns.length} column(s)
+            </p>
+          </div>
+          <div className="border-t border-gray-700 pt-4">
+            <p className="text-xs text-gray-500">
+              Select columns to analyze correlations. The module will automatically:
+              <br />• Calculate Pearson/Spearman/Kendall correlations for numeric columns
+              <br />• Calculate Cramér's V for categorical columns
+              <br />• Generate heatmap and pairplot visualizations
+            </p>
           </div>
         </div>
       );
@@ -3148,6 +3553,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     "EncoderOutput",
     "NormalizerOutput",
     "ColumnPlotOutput",
+    "OutlierDetectorOutput",
   ];
 
   const canVisualize = () => {
@@ -3199,6 +3605,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       "EncoderOutput",
       "NormalizerOutput",
       "ColumnPlotOutput",
+      "OutlierDetectorOutput",
     ];
 
     const canVisualize = () => {
@@ -3303,6 +3710,52 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 columns={originalData?.columns || []}
                 highlights={highlights}
               />
+            );
+          }
+          break;
+        case ModuleType.Correlation:
+          if (outputData.type === "CorrelationOutput") {
+            const correlationOutput = outputData as CorrelationOutput;
+            return (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                    Correlation Analysis Summary
+                  </h4>
+                  <div className="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Total Columns:</span>
+                      <span className="font-mono text-gray-200 font-medium">{correlationOutput.columns.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Numeric Columns:</span>
+                      <span className="font-mono text-gray-200 font-medium">{correlationOutput.numericColumns.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Categorical Columns:</span>
+                      <span className="font-mono text-gray-200 font-medium">{correlationOutput.categoricalColumns.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Methods:</span>
+                      <span className="font-mono text-gray-200 font-medium text-xs">
+                        {correlationOutput.correlationMatrices.map(m => m.method).join(", ")}
+                      </span>
+                    </div>
+                    {correlationOutput.heatmapImage && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">Heatmap:</span>
+                        <span className="font-mono text-green-400 font-medium">Available</span>
+                      </div>
+                    )}
+                    {correlationOutput.pairplotImage && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">Pairplot:</span>
+                        <span className="font-mono text-green-400 font-medium">Available</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             );
           }
           break;
@@ -3512,6 +3965,92 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            );
+          }
+          break;
+        case ModuleType.OutlierDetector:
+          if (outputData.type === "OutlierDetectorOutput") {
+            const outlierOutput = outputData as OutlierDetectorOutput;
+            return (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                    Outlier Detection Summary
+                  </h4>
+                  <div className="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Columns Analyzed:</span>
+                      <span className="font-mono text-gray-200 font-medium">{outlierOutput.columns.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Total Outliers (All Columns):</span>
+                      <span className="font-mono text-gray-200 font-medium">{outlierOutput.totalOutliers}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Unique Outlier Rows:</span>
+                      <span className="font-mono text-gray-200 font-medium">{outlierOutput.allOutlierIndices.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Columns:</span>
+                      <span className="font-mono text-gray-200 font-medium text-xs">
+                        {outlierOutput.columns.join(", ")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                    Column Results
+                  </h4>
+                  <div className="bg-gray-900/50 rounded-lg p-3 space-y-3 max-h-60 overflow-y-auto">
+                    {outlierOutput.columnResults.map((colResult) => (
+                      <div key={colResult.column} className="border-b border-gray-700 pb-2 last:border-0">
+                        <div className="flex justify-between items-center text-sm mb-1">
+                          <span className="text-gray-300 font-semibold">{colResult.column}</span>
+                          <span className="font-mono text-gray-200">
+                            {colResult.totalOutliers} outliers
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-400 ml-2">
+                          Methods: {colResult.results.map(r => r.method).join(", ")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          // DataPreview인 경우 (이상치 제거 후)
+          if (outputData.type === "DataPreview" && module.parameters._outlierOutput) {
+            const outlierOutput = module.parameters._outlierOutput as OutlierDetectorOutput;
+            return (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                    Outlier Detection Summary
+                  </h4>
+                  <div className="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Columns Analyzed:</span>
+                      <span className="font-mono text-gray-200 font-medium">{outlierOutput.columns.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Total Outliers (All Columns):</span>
+                      <span className="font-mono text-gray-200 font-medium">{outlierOutput.totalOutliers}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">Output Rows (After Removal):</span>
+                      <span className="font-mono text-gray-200 font-medium">{outputData.totalRowCount}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-green-900/30 p-3 rounded-lg border border-green-700/50">
+                  <p className="text-xs text-green-300">
+                    이상치가 제거된 데이터가 출력됩니다. View Details에서 상세 정보를 확인할 수 있습니다.
+                  </p>
                 </div>
               </div>
             );
