@@ -1,5 +1,52 @@
-// 공통 아이콘 라이브러리에서 re-export
-export * from "../../shared/icons";
-
-// Heroicons에서 추가 아이콘 import
-export { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+// Heroicons에서 모든 아이콘 import
+export {
+  CircleStackIcon as DatabaseIcon,
+  TableCellsIcon,
+  ScaleIcon,
+  ChartBarIcon as BarChartIcon,
+  ShareIcon,
+  CogIcon,
+  CheckBadgeIcon,
+  CalculatorIcon,
+  ChartBarIcon as BellCurveIcon, // BellCurveIcon 대체
+  PresentationChartLineIcon as ChartCurveIcon, // ChartCurveIcon 대체
+  TagIcon as PriceTagIcon,
+  FunnelIcon as FilterIcon,
+  DocumentTextIcon,
+  UsersIcon,
+  BeakerIcon,
+  HashtagIcon,
+  PresentationChartLineIcon,
+  CircleStackIcon,
+  ShieldCheckIcon,
+  ChartPieIcon,
+  FingerPrintIcon,
+  XCircleIcon,
+  CheckIcon,
+  SparklesIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  ArrowDownTrayIcon,
+  CheckCircleIcon,
+  PlayIcon,
+  XMarkIcon,
+  CodeBracketIcon,
+  ClipboardIcon,
+  FolderOpenIcon,
+  Bars3Icon,
+  LinkIcon,
+  RectangleStackIcon,
+  ArrowsPointingOutIcon as FontSizeIncreaseIcon, // FontSizeIncreaseIcon 대체
+  ArrowsPointingInIcon as FontSizeDecreaseIcon, // FontSizeDecreaseIcon 대체
+  InformationCircleIcon,
+  CommandLineIcon,
+  SparklesIcon as LogoIcon, // LogoIcon 대체
+  PlusIcon,
+  MinusIcon,
+  Squares2X2Icon,
+  StarIcon,
+  ArrowUturnLeftIcon,
+  ArrowUturnRightIcon,
+  ArrowsPointingOutIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
